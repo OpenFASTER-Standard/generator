@@ -7,9 +7,26 @@ across the whole corpus so gaps stay visible instead of silent.
 Real heuristics, chosen because they're checkable without a
 translation-quality oracle: non-empty, a length-ratio bound generous
 enough for real DE/EN sentence-structure differences but tight enough
-to catch truncation or a wrong-row attachment, and a shared-token check
+to catch truncation or a wrong-row attachment, a shared-token check
 for the numeric/legal-reference tokens (paragraph numbers, acronyms)
-real administrative prose repeats verbatim across languages.
+real administrative prose repeats verbatim across languages, and a
+structural-artifact check for literal PDF section-heading vocabulary
+that should never appear in real translated prose.
+
+The structural-artifact check is defense-in-depth, not a replacement
+for fixing extraction bugs at the source: it exists so that some
+*future*, still-undiscovered gap in extraction.annex_pdf's own
+heading-boundary detection (the same species of bug fixed there for
+"simpleType" -- see that module's own heading-detection comment) still
+gets caught here even if the root cause isn't fixed in time. The token
+set below is grounded in real corrupted text observed live during this
+module's own development, when a "simpleType" heading-detection gap in
+extraction.annex_pdf let several real simpleType sections' own heading
+lines and documentation silently concatenate onto a neighboring name's
+English text -- e.g. real (pre-fix) corrupted text for "Ergebnis"
+started "Return value for verifying this person. simpleType
+AuslandSteuerNr Namespace http://www.itzbund.de/... Type restriction
+ofstd:NameType Attributes ...".
 """
 from __future__ import annotations
 
@@ -23,6 +40,16 @@ XSDO = Namespace("https://purl.openfaster.org/xsdo/")
 _MIN_LENGTH_RATIO = 0.3
 _MAX_LENGTH_RATIO = 3.0
 _TOKEN_PATTERN = re.compile(r"\b[A-Z]{2,}[0-9]*\b|\b\d+[a-zA-Z]?\b")
+
+# Literal PDF section-heading/table vocabulary that leaks into English
+# documentation text only when a heading-boundary gap somewhere in
+# extraction.annex_pdf lets one section's own structural markup fall
+# through into a neighboring name's accumulated text -- confirmed real
+# via the "simpleType" gap fixed in that module (see its own
+# heading-detection comment). None of these ever appear in genuine
+# translated administrative prose, so a literal, case-sensitive
+# substring match is deliberately used instead of a fuzzier check.
+_STRUCTURAL_ARTIFACT_TOKENS = ("simpleType", "complexType", "Namespace", "restriction of")
 
 
 @dataclass(frozen=True)
@@ -79,6 +106,15 @@ def check_translation_plausibility(graph: Graph) -> list[PlausibilityIssue]:
                 PlausibilityIssue(
                     "missing_shared_token", name,
                     f"tokens in German but not English: {sorted(missing)}",
+                )
+            )
+
+        found_artifacts = [t for t in _STRUCTURAL_ARTIFACT_TOKENS if t in english_text]
+        if found_artifacts:
+            issues.append(
+                PlausibilityIssue(
+                    "structural_artifact", name,
+                    f"English text contains PDF structural markup: {found_artifacts}",
                 )
             )
 

@@ -75,6 +75,44 @@ def test_real_stray_fragment_found_during_this_plan_is_flagged():
     assert any(i.subject_name == "Test" for i in issues)
 
 
+def test_structural_pdf_artifact_leaking_into_english_text_is_flagged():
+    # Real, confirmed-live text (pre-fix) for the real name "Ergebnis": a
+    # "simpleType" heading-detection gap in extraction.annex_pdf let a
+    # neighboring simpleType section's own heading/documentation lines
+    # silently concatenate onto this name's correct English sentence. This
+    # test grounds the structural-artifact check's token choices in that
+    # real corrupted text rather than a synthetic guess, and exists as
+    # defense-in-depth: it must still catch this shape of corruption even
+    # though the root cause is now fixed in extraction.annex_pdf.
+    graph = Graph()
+    _documented(
+        graph, EX.StructuralLeak,
+        "Rückgabewert zur Prüfung dieser Person.",
+        "Return value for verifying this person. simpleType AuslandSteuerNr "
+        "Namespace http://www.itzbund.de/MiKaDiv/FMStd/1.02 Type restriction "
+        "ofstd:NameType Attributes PersonNatAuslandStNrType/@AuslandIdNr The "
+        "person's tax identification number assigned by the country of "
+        "residence.",
+    )
+
+    issues = check_translation_plausibility(graph)
+
+    assert any(i.kind == "structural_artifact" and i.subject_name == "Test" for i in issues)
+
+
+def test_genuine_prose_is_not_flagged_as_a_structural_artifact():
+    graph = Graph()
+    _documented(
+        graph, EX.GenuineProse,
+        "Die Namensangabe des Wertpapiers muss eindeutig sein.",
+        "The name specification of the security must be unambiguous.",
+    )
+
+    issues = check_translation_plausibility(graph)
+
+    assert not any(i.kind == "structural_artifact" for i in issues)
+
+
 def test_coverage_report_counts_every_real_documented_subject():
     graph = Graph()
     matched = EX.Matched
