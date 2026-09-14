@@ -46,7 +46,7 @@ committed to `ontologies/mikadiv-fm/sources/` this session) found:
 | `abstract="true"` | 13, all on `xs:complexType` | in scope — tightly coupled with the extension pattern (concrete types extend abstract base types) |
 | facets: `enumeration`(29) `pattern`(21) `maxLength`(19) `length`(12) `minLength`(11) `maxInclusive`(8) `minInclusive`(7) `totalDigits`(4) `fractionDigits`(4) `whiteSpace`(1) `minExclusive`(1) | — | in scope, plus `maxExclusive` even though unobserved (see below) |
 | `xs:union` | 1 (`GeburtsdatumType`, the birth-date type — unions `Datum0Type`/`Datum1880Type`/`Datum0000Type`, full-date/year-only/unknown-date variants; a real business rule expressed in the type system) | in scope |
-| identity constraints: `xs:unique`(7) `xs:field`(9) `xs:selector`(7) | — | in scope. `xs:key`/`xs:keyref` don't appear in FM specifically, but do in KaFE (16 real occurrences, confirmed earlier this session) — the extractor is generic across modules, so all three stay in scope |
+| identity constraints: `xs:unique`(7) `xs:field`(9) `xs:selector`(7) | — | in scope. **Correction after re-verification**: an earlier pass in this session claimed `xs:key`/`xs:keyref` were "confirmed real in KaFE (16 occurrences)" — re-checked directly against every real XSD file on disk (`grep -rln "<xs:key\b\|xs:keyref"` across all of `/work`, excluding vendored XSD 1.0/1.1 meta-schema library files, which define the vocabulary itself, not real usage) and found **zero** real occurrences anywhere, in FM or KaFE. Only `xs:unique` is confirmed real. `xs:key`/`xs:keyref` stay in scope anyway, for the same reason `maxExclusive` does despite not being observed either: they're part of the same small, closed, standard XSD identity-constraint kind set as the confirmed-real `xs:unique`, and the whole closed set is the principled choice — but unlike `xs:unique`, they're tested via a clearly-labeled synthetic fixture, not a real one, since no real occurrence has actually been found |
 | `default`/`fixed` (elements or attributes) | 8 | in scope |
 | `xs:documentation` | 410 | in scope — real field descriptions, a direct input to future concept curation. **Correction after re-verification: all 410 in FM are bare `<xs:documentation>` with no `xml:lang` attribute at all, German-only** (re-checked: no schema-level default language either) — not the EN/DE-tagged pattern this design first assumed. That pattern is real, just not for FM: confirmed MiKaDiv-VIB (510 occurrences) and KaFE (2,000+ occurrences) both use `xml:lang="en"`/`"de"`-tagged pairs exclusively. Extraction must handle both forms generically, since it serves all three modules |
 | `xs:appinfo` | 2, both in `din-norm-91379-datatypes.xsd` only | **checked, not extracted, with reason**: holds XÖV (German public-sector XML standardization) governance display-name metadata (`nameLang`/`nameKurz`) for the shared datatype library, not semantic field documentation, and doesn't appear in any MiKaDiv-FM-specific file — different kind of metadata than `xs:documentation`, not a smaller version of the same thing |
@@ -284,10 +284,11 @@ For each `xs:key`/`xs:unique`/`xs:keyref` on a complex type:
 `xsdo:hasIdentityConstraint` → a node typed `xsdo:Key`/`xsdo:Unique`/
 `xsdo:KeyRef`, with `xsdo:selector`, one or more `xsdo:field` values,
 and (for `KeyRef`) `xsdo:refer`. FM itself only exercises `xs:unique`
-(7 real occurrences) — `xs:key`/`xs:keyref` are confirmed real in
-KaFE instead (16 occurrences, established earlier this session), and
-this extractor is generic across modules, so all three stay fully
-supported, not narrowed to only what FM itself happens to use.
+(7 real occurrences, confirmed). `xs:key`/`xs:keyref` have **not**
+been confirmed real anywhere on disk, in FM or elsewhere (see the
+corrected census table entry above) — they stay supported anyway as
+part of the same closed, standard identity-constraint kind set as
+`xs:unique`, tested via a synthetic fixture rather than a real one.
 
 ### URI minting
 
@@ -328,6 +329,12 @@ the actual XSD file content:
   `@Kontonummer`) — use the latter specifically to prove multi-field
   `xsdo:field` extraction against real data, not just a synthetic
   composite-key example.
+- `xs:key`/`xs:keyref`, confirmed absent from every real file examined
+  (see the corrected census table entry) — hand-construct a small
+  synthetic XSD exercising both, assert `xsdo:Key`/`xsdo:KeyRef` are
+  extracted correctly including `xsdo:refer`, clearly labeled as
+  synthetic since (unlike `xs:unique`, `xs:all`, or the standard
+  facets) no real occurrence has actually been found to test against.
 - A real attribute with `use="required"` and one with
   `use="optional"` — assert both are extracted as
   `xsdo:AttributeDeclaration` with correct `xsdo:hasAttributeUse`/
