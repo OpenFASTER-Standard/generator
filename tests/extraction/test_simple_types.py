@@ -72,7 +72,9 @@ def test_type_with_no_facets_still_gets_the_definition_triple():
 
 def test_anonymous_union_members_get_distinct_uris_per_index():
     schema = _schema()
-    # xs:namespaceList is a real built-in XSD type with 2 anonymous union members
+    # xs:namespaceList is a real built-in XSD type with 2 anonymous union members:
+    # Member0 (XsdAtomicRestriction) has enumeration=['##any', '##other']
+    # Member1 (XsdList) has whiteSpace='collapse'
     xsd_type = schema.maps.types["{http://www.w3.org/2001/XMLSchema}namespaceList"]
     uri = EX.namespaceList
     graph = Graph()
@@ -92,3 +94,19 @@ def test_anonymous_union_members_get_distinct_uris_per_index():
         "https://example.org/test/namespaceList.Member1",
     }
     assert member_uris == expected_uris
+
+    # Verify facets are independently extracted (not lost to URI collision):
+    # Member0 should have enumeration facet with values ##any, ##other
+    member0_uri = URIRef("https://example.org/test/namespaceList.Member0")
+    member0_enum_values = {
+        str(graph.value(v, XSDO.literalValue))
+        for v in graph.objects(member0_uri, XSDO.hasEnumerationValue)
+    }
+    assert member0_enum_values == {"##any", "##other"}, \
+        f"Member0 enumeration values mismatch: {member0_enum_values}"
+
+    # Member1 should have whiteSpace facet with value 'collapse'
+    member1_uri = URIRef("https://example.org/test/namespaceList.Member1")
+    member1_whitespace = str(graph.value(member1_uri, XSDO.whiteSpace))
+    assert member1_whitespace == "collapse", \
+        f"Member1 whiteSpace value mismatch: {member1_whitespace}"
