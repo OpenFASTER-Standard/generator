@@ -45,10 +45,10 @@ committed to `ontologies/mikadiv-fm/sources/` this session) found:
 | `xs:extension` / `xs:complexContent` | 53 / 53 | in scope — pervasive, not an edge case |
 | `abstract="true"` | 13, all on `xs:complexType` | in scope — tightly coupled with the extension pattern (concrete types extend abstract base types) |
 | facets: `enumeration`(29) `pattern`(21) `maxLength`(19) `length`(12) `minLength`(11) `maxInclusive`(8) `minInclusive`(7) `totalDigits`(4) `fractionDigits`(4) `whiteSpace`(1) `minExclusive`(1) | — | in scope, plus `maxExclusive` even though unobserved (see below) |
-| `xs:union` | 1 (a date type unioning full-date/year-only/unknown-date variants — a real business rule) | in scope |
+| `xs:union` | 1 (`GeburtsdatumType`, the birth-date type — unions `Datum0Type`/`Datum1880Type`/`Datum0000Type`, full-date/year-only/unknown-date variants; a real business rule expressed in the type system) | in scope |
 | identity constraints: `xs:unique`(7) `xs:field`(9) `xs:selector`(7) | — | in scope. `xs:key`/`xs:keyref` don't appear in FM specifically, but do in KaFE (16 real occurrences, confirmed earlier this session) — the extractor is generic across modules, so all three stay in scope |
 | `default`/`fixed` (elements or attributes) | 8 | in scope |
-| `xs:documentation` | 410 | in scope — real EN/DE dual-language field descriptions; a real, direct input to future concept curation, not just structural metadata |
+| `xs:documentation` | 410 | in scope — real field descriptions, a direct input to future concept curation. **Correction after re-verification: all 410 in FM are bare `<xs:documentation>` with no `xml:lang` attribute at all, German-only** (re-checked: no schema-level default language either) — not the EN/DE-tagged pattern this design first assumed. That pattern is real, just not for FM: confirmed MiKaDiv-VIB (510 occurrences) and KaFE (2,000+ occurrences) both use `xml:lang="en"`/`"de"`-tagged pairs exclusively. Extraction must handle both forms generically, since it serves all three modules |
 | `xs:appinfo` | 2, both in `din-norm-91379-datatypes.xsd` only | **checked, not extracted, with reason**: holds XÖV (German public-sector XML standardization) governance display-name metadata (`nameLang`/`nameKurz`) for the shared datatype library, not semantic field documentation, and doesn't appear in any MiKaDiv-FM-specific file — different kind of metadata than `xs:documentation`, not a smaller version of the same thing |
 | `xs:all` | 0 | **confirmed absent** — not implemented, but the walk raises a named error if ever encountered, not silent mishandling |
 | `substitutionGroup` | 0 | **confirmed absent** — not implemented |
@@ -116,9 +116,12 @@ and had to be fixed after the fact):
    an element particle's `minOccurs`/`maxOccurs` (XSD's own Schema
    Component Model calls this "Attribute Use", not a particle).
 4. How `xmlschema` exposes `xs:union`'s member types.
-5. How `xmlschema` exposes `xs:documentation` content and its
-   `xml:lang` attribute (for the real EN/DE dual-language pattern
-   already seen elsewhere in this project).
+5. How `xmlschema` exposes `xs:documentation` content, and how it
+   reports the absence of an `xml:lang` attribute (real for every one
+   of FM's 410 blocks) versus its presence (real for MiKaDiv-VIB and
+   KaFE instead) — the extraction logic needs one consistent way to
+   represent both a language-tagged and an untagged documentation
+   string, not an assumption that every module tags its language.
 
 ### Core extraction function
 
@@ -170,11 +173,17 @@ For each `xsdo:ComplexTypeDefinition`:
 For each `xsdo:ElementDeclaration`/`xsdo:AttributeDeclaration`:
 - `xsdo:name`, `xsdo:type` (as before).
 - `xsdo:defaultValue`/`xsdo:fixedValue`, if the real declaration has
-  one (confirmed real, if uncommon: 8 occurrences total).
-- `xsdo:documentation` — the real `xs:documentation` text, with a
-  language tag (`@en`/`@de`) matching the real EN/DE dual-language
-  pattern already used elsewhere in this project's XSDs. Real,
-  valuable input to future concept curation, not optional polish.
+  one (confirmed real: 8 occurrences, all 8 on `xs:attribute` in this
+  specific family — none on `xs:element` — but both stay supported at
+  either level, since that's standard XSD capability the real data
+  simply doesn't happen to exercise on elements here).
+- `xsdo:documentation` — the real `xs:documentation` text. **Two real
+  forms confirmed, both need supporting**: FM's own 410 blocks are
+  untagged (no `xml:lang`, German-only) — extract as a single string
+  with no language tag; MiKaDiv-VIB's and KaFE's real documentation is
+  `xml:lang="en"`/`"de"`-tagged instead — extract as separate
+  per-language strings. A real, direct input to future concept
+  curation, not optional polish.
 
 ### Simple type and facet extraction
 
@@ -189,10 +198,11 @@ small, closed, and standard (no reason a future file wouldn't use
 `maxExclusive` just because this one census didn't happen to hit it).
 
 **`xs:union`**: a simple type can be defined as the union of several
-member simple types (real, confirmed: a date type unioning full-date/
-year-only/fully-unknown variants — an actual business rule expressed
-in the type system, not incidental). Extract as `xsdo:hasUnionMember`
-→ each member type's own minted URI, rather than facets directly on
+member simple types (real, confirmed: `GeburtsdatumType` unions
+`Datum0Type`/`Datum1880Type`/`Datum0000Type` — full-date/year-only/
+unknown-date variants, an actual business rule expressed in the type
+system, not incidental). Extract as `xsdo:hasUnionMember` → each
+member type's own minted URI, rather than facets directly on
 the union type itself.
 
 ### Identity constraints
@@ -234,10 +244,17 @@ the actual XSD file content:
 - A real type with a representative facet set spanning multiple facet
   kinds (at minimum enumeration + length) — assert exact match against
   the real XSD's declared values.
-- The real date type using `xs:union` — assert `xsdo:hasUnionMember`
-  correctly lists its three real member types.
-- A real type with a real identity constraint (`Meldeart13.xsd`'s
-  `xs:unique` on `Verwahrkette`) — assert selector/field(s) match.
+- `GeburtsdatumType`, the real type using `xs:union` — assert
+  `xsdo:hasUnionMember` correctly lists its three real member types
+  (`Datum0Type`, `Datum1880Type`, `Datum0000Type`).
+- A real type with a real identity constraint — `Meldeart13.xsd` has
+  two: `KnotenpositionInVerwahrketteEindeutig` (single-field: selector
+  `fmfach:Verwahrstelle | fmfach:DepotfuehrendeStelle`, field
+  `@Position`) and `EindeutigesKonto` (a real **composite**, 2-field
+  key: selector `fmma13:Konto`, fields `@ArtDesDepotkontos` and
+  `@Kontonummer`) — use the latter specifically to prove multi-field
+  `xsdo:field` extraction against real data, not just a synthetic
+  composite-key example.
 - A real attribute with `use="required"` and one with
   `use="optional"` — assert both are extracted as
   `xsdo:AttributeDeclaration` with correct `xsdo:hasAttributeUse`/
