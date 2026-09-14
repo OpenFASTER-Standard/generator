@@ -122,13 +122,30 @@ and had to be fixed after the fact):
    KaFE instead) — the extraction logic needs one consistent way to
    represent both a language-tagged and an untagged documentation
    string, not an assumption that every module tags its language.
-6. How `pdfplumber` (or whichever library this turns out to be, if
-   `pdfplumber` proves unsuitable) represents an extracted table's
-   rows/cells for the real Annex PDF specifically — in particular how
-   it handles a "Documentation" cell whose text visually wraps across
-   several lines within the PDF (confirmed real in the actual file),
-   so multi-line descriptions get joined as one string, not split into
-   several spurious rows.
+6. How to reliably recover the real Annex PDF's per-attribute/
+   per-element rows. **Verified directly, not assumed — and the
+   straightforward approach doesn't work**: `pdfplumber`'s own
+   `page.extract_tables()` (the dedicated table-detection API) was
+   tried against the real page containing `NachrichtUUID` and
+   garbles the nested Attributes sub-table, merging the Name/Type/
+   Use/Documentation columns of a row into one blob string (e.g.
+   `'Attributes', 'Name Type Use Default Documentation\nNachrichtUUID
+   std:UUIDType M\nUnique\nidentifier for\nthe\nmessage.'`) even
+   though the page genuinely has ruling lines (confirmed: 83 real
+   `rects`, 332 real `edges` via `page.rects`/`page.edges`) — the
+   sub-table nested inside the page's outer key-value layout defeats
+   `extract_tables()`'s default row/column splitting. The real,
+   verified fix: use `page.extract_words()` directly and cluster by
+   position — group words into visual rows by `top` (y-position)
+   proximity, then classify each row as either a new attribute/
+   element record (a word falls in the Name column's `x0` range) or a
+   continuation of the previous record's Documentation text (words
+   only fall in the Documentation column's `x0` range, confirmed real:
+   `NachrichtUUID`'s wrapped documentation "Unique identifier for the
+   message." appears as four separate visual rows, each a single word
+   or two at the same `x0≈478.7`) — joining continuation rows into the
+   prior record's documentation string. Confirmed working end-to-end
+   against the real page.
 
 ### Core extraction function
 
@@ -234,12 +251,12 @@ the real XSD — e.g. `MiKaDivFMRoot`'s real XSD documentation
   XSDs already carry native English `xml:lang="en"` text directly, so
   it may simply not be needed there.
 
-A new dependency is needed for PDF table extraction — `pdfplumber` is
-the natural candidate (real, dedicated table-detection API, distinct
-from just extracting flat text), but its exact API needs the same
-empirical verification as `xmlschema`'s (Step 0), including how it
-handles a table cell whose text wraps across multiple visual lines,
-before extraction code depends on it.
+A new dependency is needed — `pdfplumber` (confirmed installed and
+working: `pdfplumber-0.11.10`). Per Step 0 item 6's finding, extraction
+uses `pdfplumber`'s word-position API (`page.extract_words()` +
+row/column clustering), not its `extract_tables()` table-detection API,
+which was verified directly against the real PDF and found to garble
+this document's nested sub-tables.
 
 ### Simple type and facet extraction
 
