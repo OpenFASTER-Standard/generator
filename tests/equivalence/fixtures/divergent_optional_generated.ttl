@@ -1,0 +1,27 @@
+@prefix xsdo: <https://purl.openfaster.org/xsdo/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix ex: <https://example.org/test/> .
+
+ex:PersonType a xsdo:ComplexTypeDefinition ;
+    xsdo:targetNamespace "urn:example:test:v1"^^xsd:anyURI ;
+    xsdo:contentModel [
+        a xsdo:Sequence ;
+        xsdo:hasParticle [
+            xsdo:particlePosition 1 ;
+            xsdo:minOccurs 0 ;
+            xsdo:maxOccurs 1 ;
+            xsdo:term ex:Vorname
+        ]
+    ] .
+
+ex:Person a xsdo:ElementDeclaration ;
+    xsdo:name "Person" ;
+    xsdo:type ex:PersonType .
+
+ex:Vorname a xsdo:ElementDeclaration ;
+    xsdo:name "Vorname" ;
+    xsdo:type ex:VornameType .
+
+ex:VornameType a xsdo:SimpleTypeDefinition ;
+    xsdo:minLength 1 ;
+    xsdo:maxLength 60 .

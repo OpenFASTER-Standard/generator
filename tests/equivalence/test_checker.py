@@ -21,13 +21,14 @@ def test_truly_equivalent_schemas_produce_no_divergences():
         official_xsd_path=str(FIXTURES / "equivalent_official.xsd"),
         generated_xsd_path=str(FIXTURES / "equivalent_generated.xsd"),
         official_graph=_load("equivalent_official.ttl"),
-        generated_graph=_load("equivalent_official.ttl"),
+        generated_graph=_load("equivalent_generated.ttl"),
     )
 
     assert report.divergences == []
     assert report.unmatched_official == []
     assert report.unmatched_generated == []
     assert report.confidence_note  # must always be set, never blank
+    assert "not a completeness proof" in report.confidence_note
 
 
 def test_divergent_max_length_is_caught_with_a_concrete_counterexample():
@@ -42,6 +43,45 @@ def test_divergent_max_length_is_caught_with_a_concrete_counterexample():
     divergence = report.divergences[0]
     assert divergence.xml_document  # the literal generated document is included
     assert divergence.official_verdict != divergence.generated_verdict
+
+
+def test_divergent_facet_on_an_optional_leaf_is_still_caught():
+    """Regression test: the leaf-boundary pass used to reuse one shared
+    baseline structural case (always the "every optional particle
+    absent" case) for every leaf, so an optional leaf's own candidate
+    values were always built into a document that omitted the leaf
+    entirely -- the same document every time, meaning a real facet
+    divergence on an optional leaf (e.g. this maxLength mismatch) could
+    never be detected. Before the fix, this produced zero divergences."""
+    report = check_equivalence(
+        official_xsd_path=str(FIXTURES / "divergent_optional_official.xsd"),
+        generated_xsd_path=str(FIXTURES / "divergent_optional_generated.xsd"),
+        official_graph=_load("divergent_optional_official.ttl"),
+        generated_graph=_load("divergent_optional_generated.ttl"),
+    )
+
+    assert len(report.divergences) >= 1
+    divergence = report.divergences[0]
+    assert divergence.xml_document
+    assert divergence.official_verdict != divergence.generated_verdict
+
+
+def test_non_root_capable_matched_element_is_reported_as_not_checked():
+    """Both schemas declare `Adresse` only as a local (nested, non-global)
+    element -- it can never validly stand as a document root, so every
+    document check_equivalence builds for it is rejected by BOTH schemas
+    for the same "not an element of the schema" reason. That must be
+    surfaced as "we couldn't check this", not silently folded into
+    "checked and found equivalent" (zero divergences)."""
+    report = check_equivalence(
+        official_xsd_path=str(FIXTURES / "not_root_capable_official.xsd"),
+        generated_xsd_path=str(FIXTURES / "not_root_capable_generated.xsd"),
+        official_graph=_load("not_root_capable_official.ttl"),
+        generated_graph=_load("not_root_capable_generated.ttl"),
+    )
+
+    assert report.divergences == []
+    assert "Adresse" in report.not_checked
 
 
 def test_unmatched_type_is_reported_not_silently_skipped():
