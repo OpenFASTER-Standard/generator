@@ -15,15 +15,18 @@ def test_subpackages_have_no_cross_imports_yet():
     import ast
     import pathlib
 
+    repo_root = pathlib.Path(__file__).parent.parent
+
     for module_name in ("extraction", "generation", "equivalence", "ingestion"):
-        init_path = pathlib.Path(module_name) / "__init__.py"
+        init_path = repo_root / module_name / "__init__.py"
         tree = ast.parse(init_path.read_text())
-        imported_names = {
-            alias.name
-            for node in ast.walk(tree)
-            if isinstance(node, (ast.Import, ast.ImportFrom))
-            for alias in node.names
-        }
+        imported_names = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                imported_names.update(alias.name for alias in node.names)
+            elif isinstance(node, ast.ImportFrom):
+                if node.module:
+                    imported_names.add(node.module.split(".")[0])
         other_pipeline_modules = {"extraction", "generation", "equivalence", "ingestion"} - {module_name}
         assert not (imported_names & other_pipeline_modules), (
             f"{module_name} imports {imported_names & other_pipeline_modules} "
