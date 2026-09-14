@@ -53,6 +53,44 @@ _SECTION_KEYWORDS = {
     "element", "complexType",
 }
 
+# The 5 real column keywords of a real Attributes table header ("Name Type
+# Use Default Documentation"). Real, confirmed real-PDF rendering artifact,
+# same species as the already-known "Documentation"->"Documentatio"+"n"
+# split but hitting different words on different pages, at varying
+# truncation depths: "Use"->"Us"+"e", "Default"->"Defa"/"Defaul"+"ult"/"t",
+# "Documentation"->"Documentat"/"Documentati"/"Documentatio"+"ion"/"on"/"n"
+# -- confirmed on at least 17 real pages (170, 172, 187, 191, 202, 218, 226,
+# 240, 242, 245, 257, 258, 259 among them). A bare "Type"+"Use" literal
+# check is defeated by this the same way a bare "Documentation" literal
+# check would be -- see _complete_split_header_words, which reconstructs
+# these column words generally rather than special-casing each observed
+# split point.
+_ATTRIBUTES_HEADER_KEYWORDS = ("Name", "Type", "Use", "Default", "Documentation")
+
+
+def _complete_split_header_words(
+    columns: list[tuple[float, str]], candidate_line: list[dict]
+) -> tuple[list[tuple[float, str]], bool]:
+    """Try to complete this header's own column words against a nearby
+    line's words at the exact same x0 column position. Only ever completes
+    a column into one of the 5 real Attributes-header keywords -- a
+    genuine first attribute row happens to share the Name column's own x0
+    (that's how the table's columns line up), but its own real text never
+    happens to *equal* one of these 5 keywords once concatenated, so this
+    can't misread a real row as more header text.
+    """
+    completed = False
+    new_columns = list(columns)
+    for word in candidate_line:
+        for i, (col_x0, col_text) in enumerate(new_columns):
+            if abs(word["x0"] - col_x0) >= _COLUMN_X_TOLERANCE:
+                continue
+            candidate_full = col_text + word["text"]
+            if candidate_full != col_text and candidate_full in _ATTRIBUTES_HEADER_KEYWORDS:
+                new_columns[i] = (col_x0, candidate_full)
+                completed = True
+    return new_columns, completed
+
 
 @dataclass(frozen=True)
 class AttachmentReport:
@@ -132,24 +170,44 @@ def extract_name_occurrences(pdf_path: str) -> dict[str, list[str]]:
                     state = "USED_BY"
                     idx += 1
                     continue
-                # Must also require "Type" and "Use": a real Identity-constraints
-                # table has its own, differently-shaped header line ("Name Refer
-                # Selector Field(s) Documentation" -- confirmed real on pages
-                # 163/177/213) that otherwise satisfies a bare "Name" + "Documentation"
-                # check just as well as a real Attributes table header does, and
-                # would wrongly flip state into ATTRIBUTES for that unrelated table.
-                if (
-                    texts[0] == "Name"
-                    and "Type" in texts
-                    and "Use" in texts
-                    and "Documentation" in texts
-                ):
-                    flush_row()
-                    name_x = line[0]["x0"]
-                    doc_x = next(w["x0"] for w in line if w["text"] == "Documentation")
-                    state = "ATTRIBUTES"
-                    idx += 1
-                    continue
+                if texts[0] == "Name":
+                    # Reconstruct this candidate header's own column words
+                    # before checking them: a real Attributes table header
+                    # ("Name Type Use Default Documentation") can have any of
+                    # its later column words split across the very next
+                    # visual line by this PDF's own rendering (see
+                    # _complete_split_header_words); a real Identity-
+                    # constraints table header ("Name Refer Selector
+                    # Field(s) Documentation" -- confirmed real on pages
+                    # 15/163/177/213) never reconstructs into the 5 real
+                    # Attributes keywords no matter what follows it, so it's
+                    # correctly excluded regardless.
+                    columns = [(w["x0"], w["text"]) for w in line]
+                    consumed = 0
+                    peek = idx + 1
+                    if peek < len(tops) and [w["text"] for w in lines[tops[peek]]] == [
+                        "Attributes"
+                    ]:
+                        consumed += 1
+                        peek += 1
+                    if peek < len(tops):
+                        columns, completed = _complete_split_header_words(
+                            columns, lines[tops[peek]]
+                        )
+                        if completed:
+                            consumed += 1
+                    header_texts = [text for _, text in columns]
+                    if (
+                        "Type" in header_texts
+                        and "Use" in header_texts
+                        and "Documentation" in header_texts
+                    ):
+                        flush_row()
+                        name_x = columns[0][0]
+                        doc_x = next(x0 for x0, text in columns if text == "Documentation")
+                        state = "ATTRIBUTES"
+                        idx += 1 + consumed
+                        continue
                 if joined in ("Documentation", "Documentatio"):
                     flush_row()
                     state = "TRAILING_DOC"
@@ -162,7 +220,30 @@ def extract_name_occurrences(pdf_path: str) -> dict[str, list[str]]:
                     )
                     doc_words = [w for w in line if w["x0"] >= doc_x - _COLUMN_X_TOLERANCE]
                     doc_text = " ".join(w["text"] for w in doc_words)
-                    if name_word is not None:
+                    # Real artifact, confirmed on pages 173/226/243 (real
+                    # attribute "HinterlegungsscheineGesamtzahl"): a row's own
+                    # Name (and Type) column value can itself be split across
+                    # two lines, same species of bug as the header-word splits
+                    # above -- "HinterlegungsscheineGesamtz" + "ahl". A
+                    # lowercase-starting fragment landing in the Name column
+                    # before any documentation has started for the row
+                    # currently being built can only be this artifact: every
+                    # real name in this corpus starts uppercase except the one
+                    # confirmed exception, "eMail" -- which never triggers this,
+                    # since at each of its 7 real occurrences the preceding
+                    # row's own documentation has already started (row_doc_parts
+                    # is never still empty by the time "eMail" appears).
+                    is_split_name_continuation = (
+                        name_word is not None
+                        and current_row_name is not None
+                        and not row_doc_parts
+                        and name_word["text"][:1].islower()
+                    )
+                    if is_split_name_continuation:
+                        current_row_name += name_word["text"]
+                        if doc_text:
+                            row_doc_parts.append(doc_text)
+                    elif name_word is not None:
                         flush_row()
                         current_row_name = name_word["text"]
                         if doc_text:

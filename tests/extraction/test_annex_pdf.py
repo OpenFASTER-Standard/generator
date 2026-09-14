@@ -120,3 +120,54 @@ def test_identity_constraints_table_header_is_not_misread_as_an_attributes_heade
         "Type for a list of up to 20 accounts.",
         "Type for a list of up to 20 accounts.",
     ]
+
+
+def test_attributes_header_is_still_recognized_when_use_and_default_are_split_across_lines():
+    # Real artifact confirmed on at least 17 real pages (170, 172, 187, 191,
+    # 202, 218, 226, 240, 242, 245, 257, 258, 259 among them): a real
+    # Attributes table header ("Name Type Use Default Documentation") can
+    # have "Use"/"Default"/"Documentation" truncated on the header's own
+    # line (e.g. "Us"/"Defa"/"Documentation", or "Us"/"Defaul"/"Documentati")
+    # with the missing suffix fragments ("e"/"ult", "t"/"on", etc.) landing
+    # on the very next visual line, past an intervening "Attributes" label
+    # line -- same species of rendering bug as the already-known
+    # "Documentatio"+"n" split, just hitting different words. Requiring the
+    # literal tokens "Type"/"Use" in the header line (the fix for the
+    # Identity-constraints false-positive) would otherwise never recognize
+    # these real Attributes headers at all, silently dropping every real
+    # attribute on those pages into AttachmentReport.unmatched. Both
+    # "HinterlegungsstelleMelder" (pages 172/226/242) and "Verhaeltnis"
+    # (page 226) are real attributes only reachable if this split header is
+    # still correctly recognized as a real Attributes table.
+    occurrences = extract_name_occurrences(ANNEX_PDF)
+
+    assert occurrences["HinterlegungsstelleMelder"] == [
+        'If "HinterlegungsstelleM elder" is true, the "Hinterlegungsstelle" '
+        'element must not be specified. If False, "Hinterlegungsstelle" must '
+        "be provided."
+    ] * 3
+    assert occurrences["Verhaeltnis"] == [
+        "The ratio of depositary receipts stipulated in the issue conditions "
+        "of the depositary receipt (page 1) to the domestic securities stored "
+        "by the German depositary (x-page must be specified here)."
+    ] * 3
+
+
+def test_a_real_attribute_row_split_across_two_lines_is_not_read_as_two_names():
+    # Real artifact confirmed on pages 173/226/243: a real attribute row's
+    # own Name (and Type) column value can itself be split across two
+    # lines, the same rendering bug as the header-word splits above, just
+    # hitting a row's own data instead: "HinterlegungsscheineGesamtz" +
+    # "ahl" -> "HinterlegungsscheineGesamtzahl". Before this fix, the
+    # lowercase continuation fragment "ahl" was misread as the *name* of a
+    # brand new row, silently discarding the real (truncated, still-doc-less)
+    # "HinterlegungsscheineGesamtz" row and instead filing the row's real
+    # documentation under the garbage key "ahl".
+    occurrences = extract_name_occurrences(ANNEX_PDF)
+
+    assert occurrences["HinterlegungsscheineGesamtzahl"] == [
+        "Total number of depositary receipts issued at the date of the "
+        "profit distribution resolution."
+    ] * 3
+    assert "ahl" not in occurrences
+    assert "HinterlegungsscheineGesamtz" not in occurrences
