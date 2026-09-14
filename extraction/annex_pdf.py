@@ -50,7 +50,7 @@ _COLUMN_X_TOLERANCE = 5.0
 _SECTION_KEYWORDS = {
     "Diagram", "Namespace", "Type", "Children", "Name", "Used",
     "Documentation", "Documentatio", "Attributes", "Identity",
-    "element", "complexType",
+    "element", "complexType", "simpleType",
 }
 
 # The 5 real column keywords of a real Attributes table header ("Name Type
@@ -148,7 +148,23 @@ def extract_name_occurrences(pdf_path: str) -> dict[str, list[str]]:
                 texts = [w["text"] for w in line]
                 joined = "".join(texts)
 
-                if texts[0] in ("element", "complexType") and line[0]["x0"] < _MARGIN_X:
+                # "simpleType" is a real, common heading-start keyword too (44
+                # real headings, pages 63-75/155-156/205/215/259-260) --
+                # omitting it here (found live via Task 8's own plausibility
+                # audit, see translation_plausibility.py) let a simpleType
+                # section's own heading+doc silently fall through into the
+                # TRAILING_DOC branch below and get appended onto the *prior*
+                # heading's documentation instead of starting fresh, corrupting
+                # names like "Ergebnis" and "Zugang" with several unrelated
+                # simpleType sections' worth of concatenated text. A simpleType
+                # section never has its own Attributes table in this PDF's own
+                # format, so no ATTRIBUTES-state handling is needed for it --
+                # it only ever needs its own trailing documentation, same as
+                # an element/complexType section without an Attributes table.
+                if (
+                    texts[0] in ("element", "complexType", "simpleType")
+                    and line[0]["x0"] < _MARGIN_X
+                ):
                     flush_row()
                     flush_heading_doc()
                     heading_texts = list(texts)

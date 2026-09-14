@@ -171,3 +171,44 @@ def test_a_real_attribute_row_split_across_two_lines_is_not_read_as_two_names():
     ] * 3
     assert "ahl" not in occurrences
     assert "HinterlegungsscheineGesamtz" not in occurrences
+
+
+def test_simpletype_headings_start_their_own_section_instead_of_being_swallowed():
+    # Real, confirmed-live corruption found by Task 8's own plausibility
+    # audit (translation_plausibility.py): the heading-detection branch only
+    # recognized "element"/"complexType" as heading-start tokens, never
+    # "simpleType" -- even though the real PDF has 44 real simpleType
+    # headings (pages 63-75, 155-156, 205, 215, 259-260). A simpleType
+    # heading that was never recognized as a section boundary fell through
+    # into the TRAILING_DOC branch and got silently appended onto the
+    # *prior* heading's own documentation instead of starting fresh.
+    #
+    # Two real, confirmed-corrupted names before this fix:
+    # - "Ergebnis" (a real simpleType, own real German doc is "Rückgabewert
+    #   zur Prüfung dieser Person.", 39 chars): its correct one-sentence
+    #   English text ("Return value for verifying this person.") had ~30
+    #   unrelated subsequent simpleType sections' headings and documentation
+    #   silently concatenated onto it, growing to 7951 chars.
+    # - "Zugang" (never itself a real simpleType/element/complexType heading
+    #   in this PDF -- the name never legitimately occurs in occurrences at
+    #   all): before this fix it wrongly picked up 741 chars of unrelated
+    #   text about KnotenpositionType/WertpapierArtType/WertpapierhandelArtType
+    #   that had spilled out of a neighboring, wrongly-unbounded accumulation.
+    occurrences = extract_name_occurrences(ANNEX_PDF)
+
+    assert occurrences["Ergebnis"] == ["Return value for verifying this person."]
+    assert "Zugang" not in occurrences
+
+    # The simpleType sections whose content used to leak into "Ergebnis" now
+    # each keep their own, correctly short, un-concatenated documentation.
+    assert occurrences["AuslandSteuerNr"][0] == (
+        "The person's tax identification number assigned by the country "
+        "of residence."
+    )
+    assert occurrences["KnotenpositionType"] == [
+        "Non-negative, numeric integer value for specifying positions "
+        "within a custody chain.."
+    ]
+    assert occurrences["WertpapierArtType"] == [
+        "Type used to define the type of securities."
+    ]
