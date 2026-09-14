@@ -1315,6 +1315,26 @@ def _validate(schema: xmlschema.XMLSchema, xml_document: bytes) -> tuple[bool, s
     return False, "invalid, but validate() raised no exception"
 
 
+def _check_one_document(
+    element_name: str,
+    xml_document: bytes,
+    official_schema: xmlschema.XMLSchema,
+    generated_schema: xmlschema.XMLSchema,
+) -> Divergence | None:
+    official_valid, official_error = _validate(official_schema, xml_document)
+    generated_valid, generated_error = _validate(generated_schema, xml_document)
+    if official_valid == generated_valid:
+        return None
+    return Divergence(
+        element_name=element_name,
+        xml_document=xml_document,
+        official_verdict=official_valid,
+        generated_verdict=generated_valid,
+        official_error=official_error,
+        generated_error=generated_error,
+    )
+
+
 def check_equivalence(
     official_xsd_path: str,
     generated_xsd_path: str,
@@ -1351,32 +1371,50 @@ def check_equivalence(
         leaf_terms = _leaf_children(official_graph, official_content_model)
         namespace = _target_namespace(official_graph, official_type)
 
-        for case in cases:
-            leaf_values: dict[URIRef, str] = {}
-            for leaf_term in leaf_terms:
-                leaf_type = official_graph.value(leaf_term, XSDO.type)
-                candidates = generate_leaf_values(official_graph, leaf_type)
-                valid_candidate = next(c for c in candidates if c.should_be_valid)
-                leaf_values[leaf_term] = valid_candidate.value
-
-            xml_document = build(
-                official_graph, official_element, namespace, case, leaf_values
+        # One-factor-at-a-time boundary testing, not a full cross-product
+        # of every structural case with every leaf's every candidate
+        # value (which would both explode combinatorially and, worse,
+        # would still risk under-testing if reduced naively). Two passes:
+        # (1) vary structural cases while every leaf sits at its own
+        # baseline (first should-be-valid) value; (2) vary each leaf's
+        # own full candidate set (including its rejection-boundary
+        # values) one leaf at a time, holding structure at a single
+        # baseline case. A leaf-value bug (e.g. a maxLength mismatch)
+        # would never surface if only ever tested at its baseline value
+        # -- this is what pass (2) exists to catch.
+        leaf_candidates: dict[URIRef, list] = {}
+        baseline_leaf_values: dict[URIRef, str] = {}
+        for leaf_term in leaf_terms:
+            leaf_type = official_graph.value(leaf_term, XSDO.type)
+            candidates = generate_leaf_values(official_graph, leaf_type)
+            leaf_candidates[leaf_term] = candidates
+            baseline_leaf_values[leaf_term] = next(
+                c.value for c in candidates if c.should_be_valid
             )
 
-            official_valid, official_error = _validate(official_schema, xml_document)
-            generated_valid, generated_error = _validate(generated_schema, xml_document)
+        for case in cases:
+            xml_document = build(
+                official_graph, official_element, namespace, case, baseline_leaf_values
+            )
+            divergence = _check_one_document(
+                element_name, xml_document, official_schema, generated_schema
+            )
+            if divergence is not None:
+                divergences.append(divergence)
 
-            if official_valid != generated_valid:
-                divergences.append(
-                    Divergence(
-                        element_name=element_name,
-                        xml_document=xml_document,
-                        official_verdict=official_valid,
-                        generated_verdict=generated_valid,
-                        official_error=official_error,
-                        generated_error=generated_error,
-                    )
+        baseline_case = next(c for c in cases if c.should_be_valid)
+        for leaf_term, candidates in leaf_candidates.items():
+            for candidate in candidates:
+                leaf_values = dict(baseline_leaf_values)
+                leaf_values[leaf_term] = candidate.value
+                xml_document = build(
+                    official_graph, official_element, namespace, baseline_case, leaf_values
                 )
+                divergence = _check_one_document(
+                    element_name, xml_document, official_schema, generated_schema
+                )
+                if divergence is not None:
+                    divergences.append(divergence)
 
     return Report(
         divergences=divergences,
