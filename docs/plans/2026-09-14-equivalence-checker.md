@@ -471,7 +471,7 @@ EX = Namespace("https://example.org/test/")
 def _make_particle(graph, particle, term, position, min_occurs, max_occurs, unbounded=False):
     graph.add((particle, XSDO.particlePosition, Literal(position)))
     graph.add((particle, XSDO.minOccurs, Literal(min_occurs)))
-    graph.add((particle, XSDO.term, term))
+    graph.add((particle, XSDO["term"], term))  # bracket access -- see note below
     if unbounded:
         graph.add((particle, XSDO.maxOccursUnbounded, Literal(True)))
     else:
@@ -600,20 +600,39 @@ class StructuralCase:
 
 
 def _occurrence_options(graph: Graph, particle: URIRef) -> list[tuple[int, bool]]:
-    min_occurs = int(graph.value(particle, XSDO.minOccurs) or 1)
+    """The occurrence-count boundary points this module actually tests:
+    minOccurs itself, minOccurs+1 (only when there's room below the max),
+    the effective max, and one past the effective max -- but never a
+    below-minimum count (that's a "particle omitted" case, validated
+    elsewhere, not this module's job), and never an over-max case for a
+    plain 0-or-1 particle or for a genuinely unbounded one (claiming "6
+    occurrences is invalid" when the schema permits unbounded repetition
+    would be a factually wrong test case, not just a redundant one).
+
+    Two rdflib gotchas to not reintroduce (both hit and root-caused
+    while building this function -- see this task's own report):
+    `graph.value(...)` returns `None`, never a falsy-but-present value
+    like `Literal(0)`, so check `is not None` explicitly rather than
+    `... or default` (which silently turns a real `minOccurs=0` into the
+    fallback default, since `bool(Literal(0))` is `False`).
+    """
+    min_occurs_literal = graph.value(particle, XSDO.minOccurs)
+    min_occurs = int(min_occurs_literal) if min_occurs_literal is not None else 1
+
     unbounded = graph.value(particle, XSDO.maxOccursUnbounded)
-    if unbounded is not None and str(unbounded).lower() == "true":
+    is_unbounded = unbounded is not None and str(unbounded).lower() == "true"
+    if is_unbounded:
         max_occurs = UNBOUNDED_CEILING
     else:
-        max_occurs = int(graph.value(particle, XSDO.maxOccurs) or 1)
+        max_occurs_literal = graph.value(particle, XSDO.maxOccurs)
+        max_occurs = int(max_occurs_literal) if max_occurs_literal is not None else 1
 
     options: dict[int, bool] = {min_occurs: True}
-    if min_occurs > 0:
-        options[min_occurs - 1] = False
     if max_occurs > min_occurs:
         options[min_occurs + 1] = True
     options[max_occurs] = True
-    options[max_occurs + 1] = False
+    if not is_unbounded and max_occurs > 1:
+        options[max_occurs + 1] = False
     return sorted(options.items())
 
 
@@ -629,7 +648,10 @@ def enumerate_cases(graph: Graph, content_model: URIRef) -> list[StructuralCase]
         graph.objects(content_model, XSDO.hasParticle),
         key=lambda p: int(graph.value(p, XSDO.particlePosition)),
     )
-    terms = [graph.value(p, XSDO.term) for p in particles]
+    # XSDO["term"], not XSDO.term: rdflib.Namespace has a real built-in
+    # .term() method, which attribute access resolves to instead of
+    # building a URIRef -- bracket access avoids it.
+    terms = [graph.value(p, XSDO["term"]) for p in particles]
     per_particle_options = [_occurrence_options(graph, p) for p in particles]
 
     total_combinations = 1
@@ -1295,7 +1317,11 @@ def _leaf_children(graph: Graph, content_model: URIRef) -> list[URIRef]:
     are themselves simple-typed (leaves, not nested complex types)."""
     leaves = []
     for particle in graph.objects(content_model, XSDO.hasParticle):
-        term = graph.value(particle, XSDO.term)
+        # XSDO["term"], not XSDO.term: rdflib.Namespace has a real
+        # built-in .term() method, which attribute access resolves to
+        # instead of building a URIRef -- a real bug Task 3 hit and
+        # documented (see its report). Bracket access avoids it.
+        term = graph.value(particle, XSDO["term"])
         term_type = graph.value(term, XSDO.type)
         if term_type is not None and (term_type, RDF.type, XSDO.SimpleTypeDefinition) in graph:
             leaves.append(term)
