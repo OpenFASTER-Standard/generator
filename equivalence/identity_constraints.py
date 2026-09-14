@@ -20,13 +20,15 @@ class IdentityConstraintMismatch:
     generated_selector: str | None
 
 
-def _constraints_by_kind(graph: Graph, type_uri: URIRef) -> dict[str, tuple[str, str]]:
+def _constraints_by_kind(graph: Graph, type_uri: URIRef) -> dict[str, list[tuple[str, str]]]:
     result = {}
     for constraint in graph.objects(type_uri, XSDO.hasIdentityConstraint):
         kind = str(graph.value(constraint, RDF.type))
         selector = str(graph.value(constraint, XSDO.selector))
         field_path = str(graph.value(constraint, XSDO.field))
-        result[kind] = (selector, field_path)
+        if kind not in result:
+            result[kind] = []
+        result[kind].append((selector, field_path))
     return result
 
 
@@ -42,14 +44,16 @@ def compare(
     mismatches = []
     all_kinds = set(official_constraints) | set(generated_constraints)
     for kind in all_kinds:
-        official_entry = official_constraints.get(kind)
-        generated_entry = generated_constraints.get(kind)
-        if official_entry != generated_entry:
+        official_set = set(official_constraints.get(kind, []))
+        generated_set = set(generated_constraints.get(kind, []))
+        if official_set != generated_set:
+            official_selectors = ", ".join(sorted(selector for selector, _ in official_set)) if official_set else None
+            generated_selectors = ", ".join(sorted(selector for selector, _ in generated_set)) if generated_set else None
             mismatches.append(
                 IdentityConstraintMismatch(
                     constraint_kind=kind,
-                    official_selector=official_entry[0] if official_entry else None,
-                    generated_selector=generated_entry[0] if generated_entry else None,
+                    official_selector=official_selectors,
+                    generated_selector=generated_selectors,
                 )
             )
     return mismatches

@@ -46,3 +46,19 @@ def test_constraint_present_only_on_official_side_is_a_mismatch():
 
     assert len(mismatches) == 1
     assert mismatches[0].generated_selector is None
+
+
+def test_multiple_constraints_of_same_kind_are_all_compared():
+    official = Graph()
+    _key(official, EX.OffType, EX.OffKey1, XSDO.Key, "./Row", "@id")
+    _key(official, EX.OffType, EX.OffKey2, XSDO.Key, "./Item", "business_key")
+    generated = Graph()
+    _key(generated, EX.GenType, EX.GenKey, XSDO.Key, "./Row", "@id")
+
+    mismatches = compare(official, generated, EX.OffType, EX.GenType)
+
+    assert len(mismatches) == 1
+    assert mismatches[0].constraint_kind == str(XSDO.Key)
+    assert "./Row" in mismatches[0].official_selector
+    assert "./Item" in mismatches[0].official_selector
+    assert mismatches[0].generated_selector == "./Row"
