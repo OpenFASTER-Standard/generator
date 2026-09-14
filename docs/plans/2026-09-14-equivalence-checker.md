@@ -834,7 +834,7 @@ git commit -m "feat: add XML fragment builder for structural cases"
 
 **Interfaces:**
 - Consumes: `XSDO` from Task 1.
-- Produces: `MatchResult` (frozen dataclass: `matched: list[tuple[URIRef, URIRef]]` — pairs of (official element, generated element); `official_only: list[URIRef]`; `generated_only: list[URIRef]`), `match(official_graph: Graph, generated_graph: Graph) -> MatchResult` — used by Task 6. Also `IdentityConstraintMismatch` (frozen dataclass: `constraint_kind: str`, `official_selector: str | None`, `generated_selector: str | None`), `compare(official_graph: Graph, generated_graph: Graph, official_type: URIRef, generated_type: URIRef) -> list[IdentityConstraintMismatch]` — empty list means the two types' identity constraints match exactly.
+- Produces: `MatchResult` (frozen dataclass: `matched: list[tuple[URIRef, URIRef]]` — pairs of (official element, generated element); `official_only: list[URIRef]`; `generated_only: list[URIRef]`), `match(official_graph: Graph, generated_graph: Graph) -> MatchResult` — used by Task 6. Also `IdentityConstraintMismatch` (frozen dataclass: `constraint_kind: str`, `official_selector: str | None`, `generated_selector: str | None`, `official_detail: str | None`, `generated_detail: str | None` — `*_detail` carries per-constraint field-list/`refer` info so a mismatch stays human-readable even when only fields or `refer` differ, not the selector), `compare(official_graph: Graph, generated_graph: Graph, official_type: URIRef, generated_type: URIRef) -> list[IdentityConstraintMismatch]` — empty list means the two types' identity constraints match exactly (all fields of every xs:key/xs:unique/xs:keyref of each kind, plus xs:keyref's `refer`, not just its selector).
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -905,6 +905,23 @@ def _key(graph, type_uri, constraint_uri, kind, selector, field):
     graph.add((constraint_uri, XSDO.field, Literal(field)))
 
 
+def _key_multi_field(graph, type_uri, constraint_uri, kind, selector, fields):
+    graph.add((type_uri, XSDO.hasIdentityConstraint, constraint_uri))
+    graph.add((constraint_uri, RDF.type, kind))
+    graph.add((constraint_uri, XSDO.selector, Literal(selector)))
+    for field in fields:
+        graph.add((constraint_uri, XSDO.field, Literal(field)))
+
+
+def _keyref(graph, type_uri, constraint_uri, selector, fields, refer):
+    graph.add((type_uri, XSDO.hasIdentityConstraint, constraint_uri))
+    graph.add((constraint_uri, RDF.type, XSDO.KeyRef))
+    graph.add((constraint_uri, XSDO.selector, Literal(selector)))
+    for field in fields:
+        graph.add((constraint_uri, XSDO.field, Literal(field)))
+    graph.add((constraint_uri, XSDO.refer, Literal(refer)))
+
+
 def test_identical_key_constraints_produce_no_mismatches():
     official = Graph()
     _key(official, EX.OffType, EX.OffKey, XSDO.Key, "./Row", "@id")
@@ -938,6 +955,85 @@ def test_constraint_present_only_on_official_side_is_a_mismatch():
 
     assert len(mismatches) == 1
     assert mismatches[0].generated_selector is None
+
+
+def test_multiple_constraints_of_same_kind_are_all_compared():
+    """A single-entry-per-kind model (the original bug fixed in commit
+    3553a2a) would let one matching constraint of a kind mask another,
+    unmatched one of the same kind on the same type -- e.g. two xs:key
+    declarations on the same complex type. Every constraint of a kind
+    must be compared as a set, not just "the" one."""
+    official = Graph()
+    _key(official, EX.OffType, EX.OffKey1, XSDO.Key, "./Row", "@id")
+    _key(official, EX.OffType, EX.OffKey2, XSDO.Key, "./Item", "business_key")
+    generated = Graph()
+    _key(generated, EX.GenType, EX.GenKey, XSDO.Key, "./Row", "@id")
+
+    mismatches = compare(official, generated, EX.OffType, EX.GenType)
+
+    assert len(mismatches) == 1
+    assert mismatches[0].constraint_kind == str(XSDO.Key)
+    assert "./Row" in mismatches[0].official_selector
+    assert "./Item" in mismatches[0].official_selector
+    assert mismatches[0].generated_selector == "./Row"
+
+
+def test_composite_key_missing_a_field_is_caught_as_a_mismatch():
+    """A real xs:key/xs:unique can have more than one xs:field child (a
+    composite key) -- collecting only the first field (graph.value
+    instead of graph.objects) would make a mismatch in the second-or-later
+    field invisible."""
+    official = Graph()
+    _key_multi_field(official, EX.OffType, EX.OffKey, XSDO.Key, "./Row", ["@id", "@type"])
+    generated = Graph()
+    _key_multi_field(generated, EX.GenType, EX.GenKey, XSDO.Key, "./Row", ["@id"])
+
+    mismatches = compare(official, generated, EX.OffType, EX.GenType)
+
+    assert len(mismatches) == 1
+    assert mismatches[0].official_selector == "./Row"
+    assert mismatches[0].generated_selector == "./Row"
+    assert "@type" in mismatches[0].official_detail
+    assert "@type" not in (mismatches[0].generated_detail or "")
+
+
+def test_composite_key_with_identical_fields_in_different_order_matches():
+    official = Graph()
+    _key_multi_field(official, EX.OffType, EX.OffKey, XSDO.Key, "./Row", ["@type", "@id"])
+    generated = Graph()
+    _key_multi_field(generated, EX.GenType, EX.GenKey, XSDO.Key, "./Row", ["@id", "@type"])
+
+    mismatches = compare(official, generated, EX.OffType, EX.GenType)
+
+    assert mismatches == []
+
+
+def test_keyref_with_differing_refer_is_caught_as_a_mismatch():
+    """Two xs:keyrefs with the same selector/field but a different
+    `refer` target reference different keys and are not equivalent --
+    `refer` must actually be compared, not silently dropped."""
+    official = Graph()
+    _keyref(official, EX.OffType, EX.OffKeyRef, "./Row", ["@id"], "OffKey")
+    generated = Graph()
+    _keyref(generated, EX.GenType, EX.GenKeyRef, "./Row", ["@id"], "GenKey")
+
+    mismatches = compare(official, generated, EX.OffType, EX.GenType)
+
+    assert len(mismatches) == 1
+    assert mismatches[0].constraint_kind == str(XSDO.KeyRef)
+    assert "OffKey" in mismatches[0].official_detail
+    assert "GenKey" in mismatches[0].generated_detail
+
+
+def test_keyref_with_identical_refer_matches():
+    official = Graph()
+    _keyref(official, EX.OffType, EX.OffKeyRef, "./Row", ["@id"], "SharedKey")
+    generated = Graph()
+    _keyref(generated, EX.GenType, EX.GenKeyRef, "./Row", ["@id"], "SharedKey")
+
+    mismatches = compare(official, generated, EX.OffType, EX.GenType)
+
+    assert mismatches == []
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -1007,6 +1103,27 @@ two matched complex types. XSD restricts an identity constraint's
 selector/field to a narrow, non-Turing-complete XPath subset, so direct
 structural comparison is exact here, not heuristic -- unlike xs:assert's
 arbitrary predicates, which preconditions.py refuses to handle at all.
+
+Two things a real xs:key/xs:unique/xs:keyref can do that a naive
+"one selector, one field" model misses:
+
+- A composite key (xs:key/xs:unique with more than one xs:field child)
+  is a real, common XSD pattern. Collecting only ONE field per constraint
+  (via graph.value, which just returns some one object) silently drops
+  every field past the first, so a mismatch in a composite key's second
+  (or later) field would never be detected.
+- xs:keyref's `refer` attribute (which key/unique constraint it points at)
+  is part of its identity too: two keyrefs with the same selector/fields
+  but different `refer` targets are not equivalent, but comparing only
+  selector+fields would say they are.
+
+(This module was fixed once already, in commit 3553a2a, to compare ALL
+identity constraints of a given kind on a type -- not just "the" one --
+after the original `dict[str, tuple[str, str]]` shape let a second
+constraint of the same kind silently mask the first. The two field/refer
+issues above are a second, deeper fix to the same file, at the level of
+one individual constraint's own data rather than how many constraints of
+a kind there can be.)
 """
 from __future__ import annotations
 
@@ -1022,16 +1139,52 @@ class IdentityConstraintMismatch:
     constraint_kind: str
     official_selector: str | None
     generated_selector: str | None
+    official_detail: str | None = None
+    generated_detail: str | None = None
 
 
-def _constraints_by_kind(graph: Graph, type_uri: URIRef) -> dict[str, tuple[str, str]]:
-    result = {}
+@dataclass(frozen=True)
+class _ConstraintEntry:
+    selector: str
+    fields: tuple[str, ...]
+    refer: str | None = None
+
+
+def _constraint_entry(graph: Graph, constraint: URIRef, kind: str) -> _ConstraintEntry:
+    selector = str(graph.value(constraint, XSDO.selector))
+    fields = tuple(sorted(str(f) for f in graph.objects(constraint, XSDO.field)))
+    refer = None
+    if kind == str(XSDO.KeyRef):
+        refer_value = graph.value(constraint, XSDO.refer)
+        refer = str(refer_value) if refer_value is not None else None
+    return _ConstraintEntry(selector=selector, fields=fields, refer=refer)
+
+
+def _constraints_by_kind(graph: Graph, type_uri: URIRef) -> dict[str, list[_ConstraintEntry]]:
+    result: dict[str, list[_ConstraintEntry]] = {}
     for constraint in graph.objects(type_uri, XSDO.hasIdentityConstraint):
         kind = str(graph.value(constraint, RDF.type))
-        selector = str(graph.value(constraint, XSDO.selector))
-        field_path = str(graph.value(constraint, XSDO.field))
-        result[kind] = (selector, field_path)
+        result.setdefault(kind, []).append(_constraint_entry(graph, constraint, kind))
     return result
+
+
+def _describe_selectors(entries: list[_ConstraintEntry]) -> str | None:
+    if not entries:
+        return None
+    return ", ".join(sorted(entry.selector for entry in entries))
+
+
+def _format_entry(entry: _ConstraintEntry) -> str:
+    text = f"{entry.selector} [{', '.join(entry.fields)}]"
+    if entry.refer is not None:
+        text += f" refer={entry.refer}"
+    return text
+
+
+def _describe_detail(entries: list[_ConstraintEntry]) -> str | None:
+    if not entries:
+        return None
+    return ", ".join(sorted(_format_entry(entry) for entry in entries))
 
 
 def compare(
@@ -1046,14 +1199,16 @@ def compare(
     mismatches = []
     all_kinds = set(official_constraints) | set(generated_constraints)
     for kind in all_kinds:
-        official_entry = official_constraints.get(kind)
-        generated_entry = generated_constraints.get(kind)
-        if official_entry != generated_entry:
+        official_entries = official_constraints.get(kind, [])
+        generated_entries = generated_constraints.get(kind, [])
+        if set(official_entries) != set(generated_entries):
             mismatches.append(
                 IdentityConstraintMismatch(
                     constraint_kind=kind,
-                    official_selector=official_entry[0] if official_entry else None,
-                    generated_selector=generated_entry[0] if generated_entry else None,
+                    official_selector=_describe_selectors(official_entries),
+                    generated_selector=_describe_selectors(generated_entries),
+                    official_detail=_describe_detail(official_entries),
+                    generated_detail=_describe_detail(generated_entries),
                 )
             )
     return mismatches
@@ -1062,7 +1217,7 @@ def compare(
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `pytest tests/equivalence/test_type_correspondence.py tests/equivalence/test_identity_constraints.py -v`
-Expected: PASS, 6/6
+Expected: PASS, 11/11 (3 in `test_type_correspondence.py` + 8 in `test_identity_constraints.py`)
 
 - [ ] **Step 5: Commit**
 
