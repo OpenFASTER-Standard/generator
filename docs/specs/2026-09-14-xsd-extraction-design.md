@@ -122,6 +122,13 @@ and had to be fixed after the fact):
    KaFE instead) — the extraction logic needs one consistent way to
    represent both a language-tagged and an untagged documentation
    string, not an assumption that every module tags its language.
+6. How `pdfplumber` (or whichever library this turns out to be, if
+   `pdfplumber` proves unsuitable) represents an extracted table's
+   rows/cells for the real Annex PDF specifically — in particular how
+   it handles a "Documentation" cell whose text visually wraps across
+   several lines within the PDF (confirmed real in the actual file),
+   so multi-line descriptions get joined as one string, not split into
+   several spurious rows.
 
 ### Core extraction function
 
@@ -184,6 +191,55 @@ For each `xsdo:ElementDeclaration`/`xsdo:AttributeDeclaration`:
   `xml:lang="en"`/`"de"`-tagged instead — extract as separate
   per-language strings. A real, direct input to future concept
   curation, not optional polish.
+
+### English documentation for FM, from the official Annex PDF (in scope, not deferred)
+
+FM's real XSD has no English text at all, but BZSt separately
+publishes an English "Technical description of the data set" (Annex 2
+to the KHB, `khb_mikadiv_fm_anlage_en_v3.pdf`, already committed to
+`ontologies/mikadiv-fm/sources/khb/`) — a tool-generated schema
+documentation report whose own structure mirrors the real XSD exactly
+(sections literally titled "element MiKaDivFMRoot/MiKaDiv_FM_45b",
+matching real element paths; tables with Name/Type/Use/Default/
+Documentation columns for attributes, an equivalent shape for
+elements). **Confirmed directly, not assumed**: its English text is a
+faithful, direct translation of the exact same German text already in
+the real XSD — e.g. `MiKaDivFMRoot`'s real XSD documentation
+("Root-Element für die Nutzdaten.") matches the PDF's English entry
+("Root element for the user data.") word-for-word in meaning; same for
+`NachrichtUUID` ("Eindeutiger Identifier für die Nachricht." →
+"Unique identifier for the message."). This means:
+
+- **The German Annex PDF does not need parsing at all** — it would
+  only reproduce what's already directly, unambiguously extractable
+  from the XSD itself, with PDF-parsing risk added for no new
+  information.
+- **The English Annex PDF is a real, tractable, separate extraction
+  step**: parse its per-element/per-attribute tables (name → English
+  documentation text, joining multi-line wrapped cells correctly — the
+  real PDF wraps longer descriptions across several visual lines within
+  one table cell), match each row to the already-extracted `xsdo:` term
+  by its real name/path, and attach the result as a second
+  `xsdo:documentation` value with an `@en` tag alongside the XSD's own
+  `@de`-tagged (or, per the correction above, untagged-but-treated-as-
+  German) text. This is table extraction + name-based joining against
+  data this extractor already produces, not free-form prose
+  interpretation — a genuinely different task from later business-rule
+  curation, but squarely part of *this* sub-project's job: producing
+  the most complete, correct `xsdo:` graph this real source material
+  supports.
+- This same pattern (an official English Annex PDF mirroring the XSD's
+  own structure) may generalize to other modules — worth checking when
+  this extractor is later pointed at KaFE/MiKaDiv-VIB, though their
+  XSDs already carry native English `xml:lang="en"` text directly, so
+  it may simply not be needed there.
+
+A new dependency is needed for PDF table extraction — `pdfplumber` is
+the natural candidate (real, dedicated table-detection API, distinct
+from just extracting flat text), but its exact API needs the same
+empirical verification as `xmlschema`'s (Step 0), including how it
+handles a table cell whose text wraps across multiple visual lines,
+before extraction code depends on it.
 
 ### Simple type and facet extraction
 
@@ -262,8 +318,17 @@ the actual XSD file content:
   elements.
 - A real element or attribute with a `default`/`fixed` value — assert
   it's captured.
-- A real `xs:documentation` block — assert both EN and DE text are
-  extracted with correct language tags.
+- A real `xs:documentation` block from FM's own XSD — assert the
+  German text is extracted correctly with no language tag (matching
+  what's actually there), not silently mis-tagged as `@de` or dropped
+  for lacking a tag.
+- `MiKaDivFMRoot` and `NachrichtUUID`, matched against the real English
+  Annex PDF — assert the extracted graph ends up with both `@de` (from
+  the XSD) and `@en` (from the PDF, joined by real name) documentation,
+  and that the English text matches what's actually in the PDF
+  ("Root element for the user data." / "Unique identifier for the
+  message." — verified directly against the real file during
+  brainstorming, not assumed).
 - A negative test: `xs:all`, confirmed absent from the real family —
   hand-construct a tiny synthetic XSD using it, assert a named error is
   raised rather than silent mishandling (this one stays synthetic since
@@ -278,6 +343,13 @@ the actual XSD file content:
 - No known real construct from the census table above is unsupported.
   Every "confirmed absent" entry is backed by an actual grep/inspection
   result recorded in this document, not an assumption.
+- English documentation from the official Annex PDF
+  (`khb_mikadiv_fm_anlage_en_v3.pdf`) is extracted, matched by real
+  name/path against the XSD-derived graph, and attached as a second,
+  `@en`-tagged `xsdo:documentation` value alongside the XSD's own
+  untagged German text — not deferred to a later sub-project, per
+  explicit instruction. Matching is verified against real PDF content,
+  not assumed to work from the design alone.
 - No claim of full-schema *content* coverage (extracting all ~123 real
   elements is real content-curation work for a later sub-project) —
   but full construct-*kind* coverage, meaning nothing in the real files
