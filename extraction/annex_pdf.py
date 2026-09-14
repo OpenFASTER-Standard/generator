@@ -132,7 +132,18 @@ def extract_name_occurrences(pdf_path: str) -> dict[str, list[str]]:
                     state = "USED_BY"
                     idx += 1
                     continue
-                if texts[0] == "Name" and "Documentation" in texts and len(texts) >= 4:
+                # Must also require "Type" and "Use": a real Identity-constraints
+                # table has its own, differently-shaped header line ("Name Refer
+                # Selector Field(s) Documentation" -- confirmed real on pages
+                # 163/177/213) that otherwise satisfies a bare "Name" + "Documentation"
+                # check just as well as a real Attributes table header does, and
+                # would wrongly flip state into ATTRIBUTES for that unrelated table.
+                if (
+                    texts[0] == "Name"
+                    and "Type" in texts
+                    and "Use" in texts
+                    and "Documentation" in texts
+                ):
                     flush_row()
                     name_x = line[0]["x0"]
                     doc_x = next(w["x0"] for w in line if w["text"] == "Documentation")

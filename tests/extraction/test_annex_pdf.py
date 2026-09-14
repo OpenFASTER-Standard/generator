@@ -82,3 +82,41 @@ def test_extract_name_occurrences_keeps_every_distinct_real_text_uncollapsed():
     assert set(occurrences["NachrichtUUID"]) == {"Unique identifier for the message."}
     assert len(occurrences["Bezeichnung"]) > 1
     assert len(set(occurrences["Bezeichnung"])) > 1
+
+
+def test_two_line_wrapped_element_headings_still_resolve_to_their_real_name():
+    # Real artifact confirmed on pages 213-214: a long element path doesn't
+    # fit on its own heading line and wraps onto the very next visual line
+    # at the same left margin instead ("element" alone, then
+    # "SelbststaendigeMeldungMitOrdnungsnummerType/KontoListe/
+    # BescheinigteSteuern" on the next line, and likewise for .../Konto/
+    # Paymentlines). Before the fix, this crashed extract_name_occurrences
+    # with an IndexError in _heading_trailing_name (heading == "element",
+    # no name to split off) -- confirmed exactly 2 real occurrences of this
+    # wrap across the whole 262-page document, both asserted here.
+    occurrences = extract_name_occurrences(ANNEX_PDF)
+
+    assert occurrences["BescheinigteSteuern"] == ["List of all certified taxes."]
+    assert "Paymentlines" in occurrences
+
+
+def test_identity_constraints_table_header_is_not_misread_as_an_attributes_header():
+    # Real artifact confirmed on page 163 (element Meldeart13/KontoListe's own
+    # unique constraint "EindeutigesKonto"): an Identity-constraints table's
+    # own header line ("Name Refer Selector Field(s) Documentation") contains
+    # both "Name" and "Documentation" just like a real Attributes table header
+    # ("Name Type Use Default Documentation") does -- a bare "Name" + has-
+    # "Documentation" check can't tell the two apart, and would wrongly start
+    # reading the identity-constraint's own field rows as attribute rows,
+    # fabricating a spurious "EindeutigesKonto" occurrence out of the
+    # constraint's own free-text description ("A constraint that ensures
+    # that the type of securities account and the account number together
+    # are unique.") -- confirmed by reproducing the bug directly against a
+    # copy of this module with the old, looser header condition.
+    occurrences = extract_name_occurrences(ANNEX_PDF)
+
+    assert "EindeutigesKonto" not in occurrences
+    assert occurrences["KontoListe"] == [
+        "Type for a list of up to 20 accounts.",
+        "Type for a list of up to 20 accounts.",
+    ]
