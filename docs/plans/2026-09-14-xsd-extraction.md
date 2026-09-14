@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build `generator/extraction/`'s `extract(xsd_path) -> rdflib.Graph`, which turns the real, official MiKaDiv-FM XSD family into a complete `xsdo:`-shaped RDF graph — every construct genuinely present in the real files, not a representative subset — plus a separate function that augments that graph with English documentation matched from BZSt's official Annex PDF.
+**Goal:** Build `generator/extraction/`'s `extract(xsd_path) -> rdflib.Graph`, which turns the real, official MiKaDiv-FM XSD family into a complete `xsdo:`-shaped RDF graph — every construct genuinely present in the real files, not a representative subset — plus a separate function that augments that graph with English documentation matched from BZSt's official Annex PDF, with thorough plausibility/coverage checks on every attached translation.
 
-**Architecture:** Seven single-responsibility modules, built bottom-up: URI minting, simple-type facet/union extraction, identity-constraint extraction, element/attribute declaration extraction, complex-type/content-model extraction (which closes a deliberate, temporary gap left in the declaration module — the two are mutually recursive by nature, resolved via dependency injection instead of a circular import), top-level orchestration, and the Annex-PDF documentation matcher.
+**Architecture:** Eight single-responsibility modules, built bottom-up: URI minting, simple-type facet/union extraction, identity-constraint extraction, element/attribute declaration extraction, complex-type/content-model extraction (which closes a deliberate, temporary gap left in the declaration module — the two are mutually recursive by nature, resolved via dependency injection instead of a circular import), top-level orchestration, the Annex-PDF documentation matcher (a block-scoped state machine, not naive page-wide parsing — see Task 7's own real, confirmed findings — with an explicit ambiguity-safety gate for real local-name collisions), and a dedicated plausibility/coverage audit over every attached translation.
 
 **Tech Stack:** Python 3.11+, `xmlschema` (parses the real XSD family — already a pipeline dependency), `rdflib` (RDF graph construction), `pdfplumber` (new dependency — real-verified word-position table extraction from the Annex PDF), `pytest`.
 
@@ -1384,7 +1384,12 @@ git commit -m "feat: add top-level extract(xsd_path) orchestration"
 
 **Interfaces:**
 - Consumes: `XSDO` (own definition, matching this plan's convention).
-- Produces: `attach_english_documentation(graph: Graph, pdf_path: str) -> None` — mutates an already-extracted graph in place, adding an `@en`-tagged `xsdo:documentation` value to every subject whose `xsdo:name` matches a name found in the PDF. Matches the spec's own explicit scope: "do it as part of this sub-project," not deferred.
+- Produces: `AttachmentReport` (frozen dataclass: `attached: list[str]`, `ambiguous: list[str]`, `unmatched: list[str]` — every real name the PDF and/or graph mention ends up in exactly one of these three lists, never silently dropped), `extract_name_occurrences(pdf_path: str) -> dict[str, list[str]]` (every real name → every distinct documentation text found for it, uncollapsed — used by Task 8's plausibility/ambiguity checks too), `attach_english_documentation(graph: Graph, pdf_path: str) -> AttachmentReport` — attaches an `@en`-tagged `xsdo:documentation` only when a name's real PDF occurrences all agree on the same text; a name with genuinely differing text across occurrences is **not** attached (real risk, confirmed below) and is reported as `ambiguous` instead of guessed.
+- **Real, hard-won findings from this task's own design that the implementation must reproduce (each cost a real, confirmed debugging cycle — see below):**
+  1. Row/column extraction must be **scoped per real section block**, not per page. Processing a whole page's words as one flat stream lets a "Used by" back-reference list's own type-name entries (indented at the same `x0` as the real Name column) get captured as fake attribute rows, and lets one table's column positions leak into an unrelated table further down the same page.
+  2. A **real, confirmed local-name collision risk**: ~15 of this corpus's real local names (e.g. `Bezeichnung`, `Kontonummer`, `Position`, `Art`, `Stueckzahl`) genuinely mean different things in different real type contexts, with genuinely different real English text for each. Bare-name matching that silently picks one occurrence would attach a plausible-looking but **wrong** translation to some real graph subjects. This is why `attach_english_documentation` returns an `AttachmentReport` and refuses to attach on disagreement, rather than picking arbitrarily.
+  3. A row whose own line has a name but empty documentation text (because the real text starts on the *next* visual line) needs its own tracking state — collapsing this into the same dict entry a *different* occurrence of the same name already populated silently merges two unrelated real texts into one garbled string.
+  4. **A real PDF rendering artifact**: the word "Documentation" is occasionally split across two words, `"Documentatio"` + `"n"`, landing on different `top` (y-position) values with the second fragment printed *after* the first line of the real trailing text it's supposed to introduce — confirmed real for `MiKaDivFMRoot`'s own section. Detection must tolerate this exact artifact (treat `"Documentatio"` as an equally valid trailing-documentation-label trigger, and discard a lone `"n"`-only line encountered while accumulating that section's documentation).
 
 - [ ] **Step 1: Confirm the real `pdfplumber` extraction approach**
 
@@ -1405,24 +1410,25 @@ with pdfplumber.open(path) as pdf:
 
 Expected: the `Attributes` row's Name/Type/Use/Documentation columns come back merged into one blob string (e.g. `'Attributes', 'Name Type Use Default Documentation\\nNachrichtUUID std:UUIDType M\\nUnique\\nidentifier for\\nthe\\nmessage.'`) even though the page has real ruling lines (`len(page.edges)` is in the hundreds) — `extract_tables()`'s row/column splitting is defeated by this PDF's nested sub-table layout.
 
-The real, verified-working alternative — word-position clustering:
+The real, verified-working alternative — word-position clustering, scoped per real section block via a small state machine:
 
 ```bash
 python3 -c "
 import pdfplumber
 path = 'ontologies/mikadiv-fm/sources/khb/khb_mikadiv_fm_anlage_en_v3.pdf'
 with pdfplumber.open(path) as pdf:
-    page = pdf.pages[15]
+    page = pdf.pages[23]  # page 24 -- has a real 'Used by' back-reference list
     words = page.extract_words()
-    header = [w for w in words if w['text'] in ('Name', 'Documentation') and 630 < w['top'] < 645]
-    print(sorted((round(w['x0'],1), w['text']) for w in header))
-    sub = [w for w in words if 637 < w['top'] < 730]
-    for w in sorted(sub, key=lambda w: w['top']):
-        print(round(w['x0'], 1), round(w['top'], 1), w['text'])
+    lines = {}
+    for w in words:
+        lines.setdefault(round(w['top'], 1), []).append(w)
+    for top in sorted(lines):
+        lw = sorted(lines[top], key=lambda w: w['x0'])
+        print(round(top, 1), round(lw[0]['x0'], 1), [w['text'] for w in lw])
 "
 ```
 
-Expected: the header row gives clean column x-positions (`Name` at `x0≈122.4`, `Documentation` at `x0≈473.3`); the data rows below cluster cleanly by `top` (y-position) into visual rows, with `NachrichtUUID`'s wrapped documentation ("Unique identifier for the message.") appearing as separate one-or-two-word visual rows all at the Documentation column's `x0≈478.7` — confirming that clustering words by `top` into rows, then classifying each row by whether it has a word at the Name column's `x0` (a new record) or only at the Documentation column's `x0` (a continuation of the previous record's text), correctly recovers the real per-attribute documentation.
+Expected: a real section heading (`complexType DLMeldepflichtig`) starts at `x0≈60.0`, while a `Used by` back-reference entry (`complexType MeldungListe45cType`, listing a type that references this one) is indented to `x0≈137.8` — coincidentally the **same** `x0` as the real Attributes table's own Name column, confirming that a naive page-wide scan (no state tracking for "are we inside a `Used by` list right now") would misread that back-reference entry as a fake attribute row. Also confirms the real table structure: a `Name Type Use Default Documentation` header line, an `Attributes` label line, then one row per real attribute — with wrapped documentation continuing across further visual lines at the Documentation column's own `x0`, exactly as found for `NachrichtUUID` on page 16.
 
 - [ ] **Step 2: Add the `pdfplumber` dependency**
 
@@ -1433,10 +1439,12 @@ In `pyproject.toml`, add `"pdfplumber>=0.11"` to `dependencies`.
 ```python
 # tests/extraction/test_annex_pdf.py
 """Tests for English documentation extraction from the real Annex PDF,
-matched by name against an already-extracted graph."""
+matched by name against an already-extracted graph -- including the
+real ambiguity-safety gate: a name whose real PDF occurrences
+genuinely disagree is reported, never guessed."""
 from rdflib import Graph, Literal, Namespace, RDF
 
-from extraction.annex_pdf import attach_english_documentation
+from extraction.annex_pdf import attach_english_documentation, extract_name_occurrences
 from extraction.extract import extract
 from extraction.uris import global_uri
 
@@ -1451,27 +1459,33 @@ def test_root_elements_english_documentation_is_attached_alongside_german():
     graph = extract(ROOT_XSD)
     root_uri = global_uri(FM, "MiKaDivFMRoot")
 
-    attach_english_documentation(graph, ANNEX_PDF)
+    report = attach_english_documentation(graph, ANNEX_PDF)
 
     docs = {(str(d), d.language) for d in graph.objects(root_uri, XSDO.documentation)}
     assert ("Root-Element für die Nutzdaten.", None) in docs
     assert ("Root element for the user data.", "en") in docs
+    assert "MiKaDivFMRoot" in report.attached
 
 
 def test_wrapped_multi_line_documentation_is_joined_into_one_string():
     graph = extract(ROOT_XSD)
     # NachrichtUUID is a local attribute of the anonymous MeldungListe45bType
     # extension chain -- easiest to locate via a fresh, minimal fixture graph
-    # instead of threading through the real nesting.
+    # instead of threading through the real nesting. It is also, per the
+    # real corpus, one name repeated identically across many real sections
+    # (7 real occurrences, all "Unique identifier for the message.") -- a
+    # real, confirmed *non*-ambiguous repeat, distinct from the genuinely
+    # ambiguous names this task must instead refuse to attach.
     subject = global_uri(FM, "NachrichtUUID")
     graph.add((subject, RDF.type, XSDO.AttributeDeclaration))
     graph.add((subject, XSDO.name, Literal("NachrichtUUID")))
 
-    attach_english_documentation(graph, ANNEX_PDF)
+    report = attach_english_documentation(graph, ANNEX_PDF)
 
     english_docs = [d for d in graph.objects(subject, XSDO.documentation) if d.language == "en"]
     assert len(english_docs) == 1
     assert str(english_docs[0]) == "Unique identifier for the message."
+    assert "NachrichtUUID" in report.attached
 
 
 def test_a_name_not_present_in_the_pdf_gets_no_english_documentation():
@@ -1480,9 +1494,34 @@ def test_a_name_not_present_in_the_pdf_gets_no_english_documentation():
     graph.add((subject, RDF.type, XSDO.AttributeDeclaration))
     graph.add((subject, XSDO.name, Literal("SomeNameNotInThePdf")))
 
-    attach_english_documentation(graph, ANNEX_PDF)
+    report = attach_english_documentation(graph, ANNEX_PDF)
 
     assert list(graph.objects(subject, XSDO.documentation)) == []
+    assert "SomeNameNotInThePdf" in report.unmatched
+
+
+def test_a_name_with_genuinely_conflicting_real_text_is_not_attached():
+    # Bezeichnung is real, confirmed ambiguous: mostly "The non-natural
+    # person's name." but also genuinely "Designation of the class of
+    # securities." elsewhere in the real corpus -- two different real
+    # meanings sharing one bare local name.
+    graph = Graph()
+    subject = global_uri(FM, "Bezeichnung")
+    graph.add((subject, RDF.type, XSDO.AttributeDeclaration))
+    graph.add((subject, XSDO.name, Literal("Bezeichnung")))
+
+    report = attach_english_documentation(graph, ANNEX_PDF)
+
+    assert list(graph.objects(subject, XSDO.documentation)) == []
+    assert "Bezeichnung" in report.ambiguous
+
+
+def test_extract_name_occurrences_keeps_every_distinct_real_text_uncollapsed():
+    occurrences = extract_name_occurrences(ANNEX_PDF)
+
+    assert set(occurrences["NachrichtUUID"]) == {"Unique identifier for the message."}
+    assert len(occurrences["Bezeichnung"]) > 1
+    assert len(set(occurrences["Bezeichnung"])) > 1
 ```
 
 - [ ] **Step 4: Run tests to verify they fail**
@@ -1495,101 +1534,174 @@ Expected: FAIL with `ModuleNotFoundError: No module named 'extraction.annex_pdf'
 ```python
 # extraction/annex_pdf.py
 """English documentation extraction from BZSt's official Annex PDF
-(khb_mikadiv_fm_anlage_en_v3.pdf), matched by real element/attribute
-name against an already-extracted xsdo: graph, attached as a second,
-@en-tagged xsdo:documentation value alongside the XSD's own untagged
-German text. In scope for this sub-project per explicit instruction
-(see the extraction design spec) -- not deferred.
+(khb_mikadiv_fm_anlage_en_v3.pdf), matched by real element/attribute/
+type name against an already-extracted xsdo: graph, attached as a
+second, @en-tagged xsdo:documentation value alongside the XSD's own
+untagged German text. In scope for this sub-project per explicit
+instruction (see the extraction design spec) -- not deferred.
 
-pdfplumber's own extract_tables() garbles this PDF's nested Attributes/
-Elements sub-tables (verified directly -- see this plan's Task 7 Step
-1); word-position clustering via extract_words() is the real,
-verified-working alternative used here.
+pdfplumber's own extract_tables() garbles this PDF's nested Attributes
+sub-tables (verified directly -- see this plan's Task 7 Step 1);
+word-position clustering via extract_words() is the real,
+verified-working alternative used here -- but only once scoped per
+real section block via the state machine below. An earlier, page-wide
+version of this same clustering approach was tried and found to
+silently corrupt many real names' text (heading/"Used by" text
+leaking into attribute rows, and separate real occurrences of the same
+name being concatenated together) -- see this task's own Interfaces
+section for the four specific, confirmed failure modes this state
+machine exists to avoid.
+
+Real, confirmed risk this module treats as a hard safety rule, not an
+edge case: ~15 of this corpus's real local names (e.g. Bezeichnung,
+Kontonummer, Position) genuinely mean different things -- with
+genuinely different real English text -- in different real type
+contexts. attach_english_documentation refuses to attach when a name's
+occurrences disagree, rather than silently picking one.
 """
 from __future__ import annotations
+
+from dataclasses import dataclass, field
 
 import pdfplumber
 from rdflib import Graph, Literal, Namespace
 
 XSDO = Namespace("https://purl.openfaster.org/xsdo/")
 
-_ROW_Y_TOLERANCE = 1.0
+_MARGIN_X = 70.0  # real section headings start at x0~=60; "Used by"
+                   # back-reference entries are indented to x0~=137 --
+                   # confirmed live against MiKaDiv_FM_1.02's real
+                   # DLMeldepflichtig/MeldungListe45cType page.
 _COLUMN_X_TOLERANCE = 5.0
 
 
-def _cluster_rows(words: list[dict], y_tolerance: float = _ROW_Y_TOLERANCE) -> list[list[dict]]:
-    rows: list[list[dict]] = []
-    for word in sorted(words, key=lambda w: w["top"]):
-        for row in rows:
-            if abs(row[0]["top"] - word["top"]) <= y_tolerance:
-                row.append(word)
-                break
-        else:
-            rows.append([word])
-    return rows
+@dataclass(frozen=True)
+class AttachmentReport:
+    attached: list[str] = field(default_factory=list)
+    ambiguous: list[str] = field(default_factory=list)
+    unmatched: list[str] = field(default_factory=list)
 
 
-def _find_columns(words: list[dict]) -> tuple[float, float] | None:
-    name_word = next((w for w in words if w["text"] == "Name"), None)
-    doc_word = next((w for w in words if w["text"] == "Documentation"), None)
-    if name_word is None or doc_word is None:
-        return None
-    return name_word["x0"], doc_word["x0"]
+def _line_groups(words: list[dict]) -> dict[float, list[dict]]:
+    lines: dict[float, list[dict]] = {}
+    for word in words:
+        lines.setdefault(round(word["top"], 1), []).append(word)
+    return {top: sorted(ws, key=lambda w: w["x0"]) for top, ws in lines.items()}
 
 
-def _extract_name_to_documentation(pdf_path: str) -> dict[str, str]:
-    results: dict[str, str] = {}
+def _heading_trailing_name(heading: str) -> str:
+    # "element MiKaDivFMRoot/MiKaDiv_FM_45b" -> "MiKaDiv_FM_45b";
+    # "complexType AntwortListeType" -> "AntwortListeType".
+    path = heading.split(" ", 1)[1]
+    return path.rsplit("/", 1)[-1]
+
+
+def extract_name_occurrences(pdf_path: str) -> dict[str, list[str]]:
+    occurrences: dict[str, list[str]] = {}
+
+    state = "NONE"
+    current_heading: str | None = None
+    heading_doc_parts: list[str] = []
+    current_row_name: str | None = None
+    row_doc_parts: list[str] = []
+    name_x = doc_x = None
+
+    def flush_heading_doc() -> None:
+        nonlocal heading_doc_parts
+        if current_heading is not None and heading_doc_parts:
+            name = _heading_trailing_name(current_heading)
+            occurrences.setdefault(name, []).append(" ".join(heading_doc_parts).strip())
+        heading_doc_parts = []
+
+    def flush_row() -> None:
+        nonlocal current_row_name, row_doc_parts
+        if current_row_name is not None and row_doc_parts:
+            occurrences.setdefault(current_row_name, []).append(" ".join(row_doc_parts).strip())
+        current_row_name = None
+        row_doc_parts = []
+
     with pdfplumber.open(pdf_path) as pdf:
         for page in pdf.pages:
-            words = page.extract_words()
-            columns = _find_columns(words)
-            if columns is None:
-                continue
-            name_x, doc_x = columns
+            lines = _line_groups(page.extract_words())
+            for top in sorted(lines):
+                line = lines[top]
+                texts = [w["text"] for w in line]
+                joined = "".join(texts)
 
-            current_name = None
-            for row in _cluster_rows(words):
-                row_sorted = sorted(row, key=lambda w: w["x0"])
-                name_word = next(
-                    (
-                        w for w in row_sorted
-                        if abs(w["x0"] - name_x) < _COLUMN_X_TOLERANCE and w["text"] != "Name"
-                    ),
-                    None,
-                )
-                doc_words = [w for w in row_sorted if w["x0"] >= doc_x - _COLUMN_X_TOLERANCE]
-                doc_text = " ".join(w["text"] for w in doc_words)
+                if texts[0] in ("element", "complexType") and line[0]["x0"] < _MARGIN_X:
+                    flush_row()
+                    flush_heading_doc()
+                    current_heading = " ".join(texts)
+                    state = "NONE"
+                    continue
+                if texts[0] == "Used" and len(texts) >= 2 and texts[1] == "by":
+                    flush_row()
+                    state = "USED_BY"
+                    continue
+                if texts[0] == "Name" and "Documentation" in texts and len(texts) >= 4:
+                    flush_row()
+                    name_x = line[0]["x0"]
+                    doc_x = next(w["x0"] for w in line if w["text"] == "Documentation")
+                    state = "ATTRIBUTES"
+                    continue
+                if joined in ("Documentation", "Documentatio"):
+                    flush_row()
+                    state = "TRAILING_DOC"
+                    continue
 
-                if name_word is not None:
-                    current_name = name_word["text"]
-                    if doc_text:
-                        results[current_name] = doc_text
-                elif doc_text and current_name is not None:
-                    results[current_name] = (results.get(current_name, "") + " " + doc_text).strip()
+                if state == "ATTRIBUTES":
+                    name_word = next(
+                        (w for w in line if abs(w["x0"] - name_x) < _COLUMN_X_TOLERANCE), None
+                    )
+                    doc_words = [w for w in line if w["x0"] >= doc_x - _COLUMN_X_TOLERANCE]
+                    doc_text = " ".join(w["text"] for w in doc_words)
+                    if name_word is not None:
+                        flush_row()
+                        current_row_name = name_word["text"]
+                        if doc_text:
+                            row_doc_parts.append(doc_text)
+                    elif doc_text:
+                        row_doc_parts.append(doc_text)
+                elif state == "TRAILING_DOC":
+                    if texts != ["n"]:  # real split-word "Documentation" artifact suffix
+                        heading_doc_parts.append(" ".join(texts))
+                # USED_BY and NONE states: this line is real, but out of
+                # scope for name->documentation extraction (a back-reference
+                # entry, or a Diagram/Namespace/Type/Children/Identity-
+                # constraints line).
 
-    return results
+        flush_row()
+        flush_heading_doc()
+
+    return occurrences
 
 
-def attach_english_documentation(graph: Graph, pdf_path: str) -> None:
-    name_to_documentation = _extract_name_to_documentation(pdf_path)
+def attach_english_documentation(graph: Graph, pdf_path: str) -> AttachmentReport:
+    occurrences = extract_name_occurrences(pdf_path)
+    report = AttachmentReport()
+
     for subject in set(graph.subjects(XSDO.name, None)):
         name = str(graph.value(subject, XSDO.name))
-        english_text = name_to_documentation.get(name)
-        if english_text:
-            graph.add((subject, XSDO.documentation, Literal(english_text, lang="en")))
+        texts = occurrences.get(name)
+        if not texts:
+            report.unmatched.append(name)
+            continue
+        distinct_texts = set(texts)
+        if len(distinct_texts) > 1:
+            report.ambiguous.append(name)
+            continue
+        graph.add((subject, XSDO.documentation, Literal(next(iter(distinct_texts)), lang="en")))
+        report.attached.append(name)
+
+    return report
 ```
 
 - [ ] **Step 6: Run tests to verify they pass**
 
 Run: `pytest tests/extraction/test_annex_pdf.py -v`
-Expected: PASS, 3/3
+Expected: PASS, 5/5
 
-- [ ] **Step 7: Run the full extraction test suite**
-
-Run: `pytest tests/extraction/ -v`
-Expected: PASS, all tests across all 7 tasks
-
-- [ ] **Step 8: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add extraction/annex_pdf.py tests/extraction/test_annex_pdf.py pyproject.toml
@@ -1598,9 +1710,301 @@ git commit -m "feat: add English documentation extraction from the official Anne
 
 ---
 
+## Task 8: Plausibility checks for the attached English translations
+
+**Files:**
+- Create: `extraction/translation_plausibility.py`
+- Test: `tests/extraction/test_translation_plausibility.py`
+
+**Interfaces:**
+- Consumes: `extract_name_occurrences` from Task 7.
+- Produces: `PlausibilityIssue` (frozen dataclass: `kind: str`, `subject_name: str`, `detail: str`), `check_translation_plausibility(graph: Graph) -> list[PlausibilityIssue]` — for every subject with **both** a German (untagged or `@de`) and an `@en` `xsdo:documentation`, checks the pair is a plausible translation of each other; `check_translation_coverage(graph: Graph, occurrences: dict[str, list[str]]) -> CoverageReport` (frozen dataclass: `total_documented_subjects: int`, `attached: int`, `ambiguous: int`, `unmatched: int` — real visibility into how much of the real corpus actually got an English match, never silently swallowed).
+- **Why this is a separate task from Task 7, not folded in:** Task 7's `AttachmentReport` already refuses to attach an *ambiguous* match — that's a correctness gate on *which* text gets attached. This task is a different, complementary concern: for whatever *did* get attached, is the resulting (German, English) pair actually a plausible translation of each other at all — catching a match that was technically unambiguous (only one distinct text was found) but still wrong for some other reason (a parsing artifact, a wrong-row attachment, a genuinely mistranslated or partially-untranslated source entry).
+- **Real, concrete plausibility heuristics** (chosen because they're checkable without a translation-quality oracle, and because the real corpus gives real examples of what they'd catch):
+  1. **Non-empty.** The English text, stripped, is not empty — defensive, since `attach_english_documentation` already guards against this, but this task must not assume its own upstream is bug-free.
+  2. **Length ratio.** `len(english) / len(german)` must fall within `[0.3, 3.0]` — generous bounds (German and English sentence structures differ), but real enough to catch gross truncation, wrong-row attachment, or a stray fragment (e.g. the real `"letzten Position)."` fragment found attached to `Typ` during this task's own design — see below).
+  3. **Shared numeric/legal-reference tokens.** Real administrative/legal prose repeats certain tokens verbatim across languages — paragraph/section references (`45b`, `50c`), acronyms (`ISIN`, `UUID`, `EStG`), version-style codes. Extract every token matching `\b[A-Z]{2,}[0-9]*\b|\b\d+[a-zA-Z]?\b` from both texts; every token found in the German text must also appear in the English text. A translation that silently drops or garbles a legal reference is a real, serious defect this check exists to catch.
+- **Real, confirmed finding from this task's own design, to reproduce as a test case:** re-parsing the real Annex PDF during this plan's design surfaced a real fragment, `"letzten Position)."` — a stray piece of German text ending up associated with the bare name `Typ` alongside its otherwise-correct English sentence, a genuine PDF-parsing edge case, not a hypothetical. This task's own plausibility checks must be demonstrated to actually flag it (via the shared-token/length-ratio heuristics), not just handle contrived examples.
+
+- [ ] **Step 1: Write the failing tests**
+
+```python
+# tests/extraction/test_translation_plausibility.py
+"""Tests for plausibility checks on attached (German, English)
+documentation pairs -- and for real coverage visibility into how many
+of the real corpus's documented subjects actually got a match."""
+from rdflib import RDF, Graph, Literal, Namespace
+
+from extraction.annex_pdf import extract_name_occurrences
+from extraction.translation_plausibility import (
+    XSDO,
+    check_translation_coverage,
+    check_translation_plausibility,
+)
+
+EX = Namespace("https://example.org/test/")
+ANNEX_PDF = "ontologies/mikadiv-fm/sources/khb/khb_mikadiv_fm_anlage_en_v3.pdf"
+
+
+def _documented(graph, subject, german, english):
+    graph.add((subject, RDF.type, XSDO.AttributeDeclaration))
+    graph.add((subject, XSDO.name, Literal("Test")))
+    graph.add((subject, XSDO.documentation, Literal(german)))
+    graph.add((subject, XSDO.documentation, Literal(english, lang="en")))
+
+
+def test_plausible_pair_produces_no_issues():
+    graph = Graph()
+    _documented(
+        graph, EX.Good,
+        "Eindeutiger Identifier für die Nachricht.",
+        "Unique identifier for the message.",
+    )
+
+    assert check_translation_plausibility(graph) == []
+
+
+def test_wildly_short_english_text_is_flagged_by_length_ratio():
+    graph = Graph()
+    _documented(
+        graph, EX.TooShort,
+        "Eindeutiger Identifier für die Nachricht, der niemals doppelt vergeben wird.",
+        "ID.",
+    )
+
+    issues = check_translation_plausibility(graph)
+
+    assert any(i.kind == "length_ratio" and i.subject_name == "Test" for i in issues)
+
+
+def test_dropped_legal_reference_is_flagged_by_missing_shared_token():
+    graph = Graph()
+    _documented(
+        graph, EX.DroppedRef,
+        "Meldung nach § 45b Absatz 6 EStG.",
+        "A report under the relevant provision of the tax code.",
+    )
+
+    issues = check_translation_plausibility(graph)
+
+    assert any(i.kind == "missing_shared_token" and "45b" in i.detail for i in issues)
+
+
+def test_real_stray_fragment_found_during_this_plan_is_flagged():
+    # "letzten Position)." -- a real, confirmed stray German fragment this
+    # plan's own design found attached to the bare name "Typ" in one real
+    # PDF pass; the real English text it should have been paired with is
+    # a full English sentence, so the fragment fails both heuristics.
+    graph = Graph()
+    _documented(
+        graph, EX.StrayFragment,
+        "Gibt an, ob es sich um eine Erst- oder eine Berichtigungsmeldung handelt.",
+        "letzten Position).",
+    )
+
+    issues = check_translation_plausibility(graph)
+
+    assert any(i.subject_name == "Test" for i in issues)
+
+
+def test_coverage_report_counts_every_real_documented_subject():
+    graph = Graph()
+    matched = EX.Matched
+    graph.add((matched, RDF.type, XSDO.AttributeDeclaration))
+    graph.add((matched, XSDO.name, Literal("NachrichtUUID")))
+    graph.add((matched, XSDO.documentation, Literal("Eindeutiger Identifier.")))
+
+    ambiguous = EX.Ambiguous
+    graph.add((ambiguous, RDF.type, XSDO.AttributeDeclaration))
+    graph.add((ambiguous, XSDO.name, Literal("Bezeichnung")))
+    graph.add((ambiguous, XSDO.documentation, Literal("Bezeichnung.")))
+
+    unmatched = EX.Unmatched
+    graph.add((unmatched, RDF.type, XSDO.AttributeDeclaration))
+    graph.add((unmatched, XSDO.name, Literal("NotInThePdf")))
+    graph.add((unmatched, XSDO.documentation, Literal("Nicht im PDF.")))
+
+    occurrences = extract_name_occurrences(ANNEX_PDF)
+
+    report = check_translation_coverage(graph, occurrences)
+
+    assert report.total_documented_subjects == 3
+    assert report.attached == 1
+    assert report.ambiguous == 1
+    assert report.unmatched == 1
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+Run: `pytest tests/extraction/test_translation_plausibility.py -v`
+Expected: FAIL with `ModuleNotFoundError: No module named 'extraction.translation_plausibility'`
+
+- [ ] **Step 3: Write the implementation**
+
+```python
+# extraction/translation_plausibility.py
+"""Plausibility checks for attached (German, English) xsdo:documentation
+pairs -- a different, complementary concern from Task 7's own
+ambiguity-safety gate (which decides *whether* to attach at all). This
+module audits whatever *did* get attached, and reports real coverage
+across the whole corpus so gaps stay visible instead of silent.
+
+Real heuristics, chosen because they're checkable without a
+translation-quality oracle: non-empty, a length-ratio bound generous
+enough for real DE/EN sentence-structure differences but tight enough
+to catch truncation or a wrong-row attachment, and a shared-token check
+for the numeric/legal-reference tokens (paragraph numbers, acronyms)
+real administrative prose repeats verbatim across languages.
+"""
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass
+
+from rdflib import Graph, Namespace
+
+XSDO = Namespace("https://purl.openfaster.org/xsdo/")
+
+_MIN_LENGTH_RATIO = 0.3
+_MAX_LENGTH_RATIO = 3.0
+_TOKEN_PATTERN = re.compile(r"\b[A-Z]{2,}[0-9]*\b|\b\d+[a-zA-Z]?\b")
+
+
+@dataclass(frozen=True)
+class PlausibilityIssue:
+    kind: str
+    subject_name: str
+    detail: str
+
+
+@dataclass(frozen=True)
+class CoverageReport:
+    total_documented_subjects: int
+    attached: int
+    ambiguous: int
+    unmatched: int
+
+
+def _shared_tokens_missing(german: str, english: str) -> set[str]:
+    german_tokens = set(_TOKEN_PATTERN.findall(german))
+    english_tokens = set(_TOKEN_PATTERN.findall(english))
+    return german_tokens - english_tokens
+
+
+def check_translation_plausibility(graph: Graph) -> list[PlausibilityIssue]:
+    issues: list[PlausibilityIssue] = []
+
+    for subject in set(graph.subjects(XSDO.documentation, None)):
+        docs = list(graph.objects(subject, XSDO.documentation))
+        german = next((d for d in docs if d.language in (None, "de")), None)
+        english = next((d for d in docs if d.language == "en"), None)
+        if german is None or english is None:
+            continue
+
+        name = str(graph.value(subject, XSDO.name) or subject)
+        german_text, english_text = str(german).strip(), str(english).strip()
+
+        if not english_text:
+            issues.append(PlausibilityIssue("empty", name, "English text is empty"))
+            continue
+
+        ratio = len(english_text) / max(len(german_text), 1)
+        if not (_MIN_LENGTH_RATIO <= ratio <= _MAX_LENGTH_RATIO):
+            issues.append(
+                PlausibilityIssue(
+                    "length_ratio", name,
+                    f"ratio={ratio:.2f} (german={len(german_text)} chars, "
+                    f"english={len(english_text)} chars)",
+                )
+            )
+
+        missing = _shared_tokens_missing(german_text, english_text)
+        if missing:
+            issues.append(
+                PlausibilityIssue(
+                    "missing_shared_token", name,
+                    f"tokens in German but not English: {sorted(missing)}",
+                )
+            )
+
+    return issues
+
+
+def check_translation_coverage(graph: Graph, occurrences: dict[str, list[str]]) -> CoverageReport:
+    documented_subjects = set(graph.subjects(XSDO.documentation, None))
+    attached = ambiguous = unmatched = 0
+
+    for subject in documented_subjects:
+        name = str(graph.value(subject, XSDO.name))
+        texts = occurrences.get(name)
+        if not texts:
+            unmatched += 1
+        elif len(set(texts)) > 1:
+            ambiguous += 1
+        else:
+            attached += 1
+
+    return CoverageReport(
+        total_documented_subjects=len(documented_subjects),
+        attached=attached,
+        ambiguous=ambiguous,
+        unmatched=unmatched,
+    )
+```
+
+- [ ] **Step 4: Run tests to verify they pass**
+
+Run: `pytest tests/extraction/test_translation_plausibility.py -v`
+Expected: PASS, 5/5
+
+- [ ] **Step 5: Run the real corpus end-to-end and inspect the result**
+
+This is real, whole-corpus verification, not another isolated unit test — run it and read the actual output before proceeding:
+
+```bash
+python3 -c "
+from extraction.extract import extract
+from extraction.annex_pdf import attach_english_documentation, extract_name_occurrences
+from extraction.translation_plausibility import check_translation_coverage, check_translation_plausibility
+
+graph = extract('ontologies/mikadiv-fm/sources/xsd/MiKaDiv_FM_1.02.xsd')
+pdf_path = 'ontologies/mikadiv-fm/sources/khb/khb_mikadiv_fm_anlage_en_v3.pdf'
+report = attach_english_documentation(graph, pdf_path)
+print('attached:', len(report.attached), 'ambiguous:', len(report.ambiguous), 'unmatched:', len(report.unmatched))
+print('ambiguous names:', report.ambiguous)
+
+occurrences = extract_name_occurrences(pdf_path)
+coverage = check_translation_coverage(graph, occurrences)
+print(coverage)
+
+issues = check_translation_plausibility(graph)
+print(len(issues), 'plausibility issues')
+for issue in issues[:20]:
+    print(' ', issue)
+"
+```
+
+Real, known-real names to expect in `report.ambiguous` (confirmed during this plan's own design, not guessed): `Bezeichnung`, `Kontonummer`, `Position`, `Art`, `Stueckzahl` — each genuinely means different things in different real type contexts in this corpus. If any real, non-empty `check_translation_plausibility` issues appear for names that **did** get attached, treat each one as a genuine finding to report back, not a bug to silently work around — it may be a real data-quality quirk in the source PDF (like the confirmed `Typ`/`"letzten Position)."` stray fragment from this plan's own design) rather than an extraction bug. Do not tune the plausibility thresholds just to make real issues disappear without first understanding what each one actually is.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add extraction/translation_plausibility.py tests/extraction/test_translation_plausibility.py
+git commit -m "feat: add plausibility and coverage checks for attached English translations"
+```
+
+- [ ] **Step 7: Run the full extraction test suite**
+
+Run: `pytest tests/extraction/ -v`
+Expected: PASS, all tests across all 8 tasks
+
+---
+
 ## Definition of Done
 
 - `extract(xsd_path)` runs against the real `MiKaDiv_FM_1.02.xsd` entry point and produces a complete `xsdo:` graph covering every construct kind the spec's census confirms is real: `xs:extension`/`abstract`, `xs:choice` (including nested), the full 12-facet set, `xs:union`, identity constraints (`xs:unique` real; `xs:key`/`xs:keyref` supported but synthetic-tested), attribute uses (`required`/`optional`, `default`/`fixed`), and both real documentation forms (FM's untagged German, and the tagged form via the shared `declarations.py` code path).
 - `xs:all`, `substitutionGroup`, `mixed="true"`, `xs:assert`/`xs:assertion`/`xs:any`/`xs:anyAttribute` all either raise a named error (`xs:all`) or are simply never reached by any code path (the rest) — no silent mishandling.
-- `attach_english_documentation` correctly matches and attaches real English text from the official Annex PDF for at least `MiKaDivFMRoot` and `NachrichtUUID`, verified against the real PDF's actual content, not assumed.
+- `attach_english_documentation` correctly matches and attaches real English text from the official Annex PDF for at least `MiKaDivFMRoot` and `NachrichtUUID`, verified against the real PDF's actual content, not assumed — and correctly **refuses** to attach for real, confirmed-ambiguous names (`Bezeichnung`, `Kontonummer`, `Position`, `Art`, `Stueckzahl`, at minimum), reporting them instead of guessing.
+- Every attached (German, English) pair in the real, whole-corpus extraction passes `check_translation_plausibility`, or every surviving issue has been read, understood, and reported as a genuine finding (e.g. a real source-PDF data-quality quirk) rather than silently ignored or threshold-tuned away.
+- `check_translation_coverage`'s real counts (`attached`/`ambiguous`/`unmatched`) are inspected against the real corpus at least once (Task 8 Step 5) and reported, not just asserted in isolated unit tests — real, whole-corpus visibility, not just spot checks.
 - No claim of full-schema content coverage — every *construct kind* is proven; not every one of the real family's ~123 elements/149 attributes/111 complex types/56 simple types has been individually reviewed.
