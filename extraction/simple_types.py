@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from rdflib import RDF, BNode, Graph, Literal, Namespace, URIRef
 
-from extraction.uris import type_uri
+from extraction.uris import type_uri, child_uri
 
 XSDO = Namespace("https://purl.openfaster.org/xsdo/")
 
@@ -55,8 +55,14 @@ def extract_simple_type(graph: Graph, xsd_type, uri: URIRef) -> None:
 
     member_types = getattr(xsd_type, "member_types", None)
     if member_types is not None:
-        for member in member_types:
-            member_uri = type_uri(member, uri)
+        for index, member in enumerate(member_types):
+            # Named members get their own independent global URI; anonymous members
+            # need per-member disambiguation (child_uri with fixed "Type" suffix would
+            # collide for 2+ anonymous members, losing distinct facets and triples).
+            if member.name is not None:
+                member_uri = type_uri(member, uri)
+            else:
+                member_uri = child_uri(uri, f"Member{index}")
             graph.add((uri, XSDO.hasUnionMember, member_uri))
             if member.name is None:
                 extract_simple_type(graph, member, member_uri)
