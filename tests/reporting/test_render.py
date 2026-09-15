@@ -35,7 +35,7 @@ def test_render_report_escapes_closing_script_tags_in_data(tmp_path, monkeypatch
     (tmp_path / "report.js").write_text("")
     monkeypatch.setattr(render_module, "_ASSETS_DIR", tmp_path)
 
-    data = {"documentationPairs": {"matched": [{"de": "Enthält </script> Text."}]}}
+    data = {"documentationTexts": {"matched": [{"languages": {"de": "Enthält </script> Text."}}]}}
     html = render_report(data)
 
     assert "</script> Text" not in html  # the raw, unescaped form must not appear

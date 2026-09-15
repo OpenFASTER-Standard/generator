@@ -5,7 +5,14 @@ finding). Only the 3 findings with real, testable Python-side logic get
 tests here (Fix 1, Fix 2, Fix 5) -- Fix 3 (search) and Fix 4 (unreferenced
 declarations) are pure reporting/assets/report.js changes, verified
 instead via a real-browser Playwright check against the real regenerated
-report (see the final fix report for that evidence)."""
+report (see the final fix report for that evidence).
+
+Fix 5's own mitigation was later replaced: PlausibilityIssue gained a real
+subject_uri field (a follow-up requested directly by the operator, who
+wanted the ambiguity resolved precisely rather than worked around), so
+these tests assert the new, precise per-URI attribution instead of the
+old per-name ambiguity-avoidance behavior.
+"""
 import json
 
 from rdflib import RDF, Graph, Literal, Namespace
@@ -15,7 +22,7 @@ from extraction.translation_plausibility import CoverageReport, PlausibilityIssu
 from reporting.data import (
     XSDO,
     build_audit,
-    build_documentation_pairs,
+    build_documentation_texts,
     build_report_data,
 )
 
@@ -38,19 +45,22 @@ def test_english_only_subject_appears_in_new_group_not_dropped():
     _documented(graph, EX.EnglishOnly, "EnglishOnly", german=None, english="Documentati on")
     _documented(graph, EX.Matched, "Matched", german="Deutsch.", english="English.")
 
-    pairs = build_documentation_pairs(graph, occurrences={}, plausibility_issues=[])
+    texts = build_documentation_texts(graph, occurrences={}, plausibility_issues=[])
 
-    assert "englishOnly" in pairs
-    assert pairs["englishOnly"] == [
-        {"uri": str(EX.EnglishOnly), "name": "EnglishOnly", "en": "Documentati on"}
+    assert "englishOnly" in texts
+    assert texts["englishOnly"] == [
+        {
+            "uri": str(EX.EnglishOnly), "name": "EnglishOnly",
+            "languages": {"en": "Documentati on"},
+        }
     ]
     # It must not also show up, or otherwise vanish from, any other group.
-    assert pairs["englishOnly"] not in (pairs["matched"], pairs["unmatched"], pairs["ambiguous"])
-    all_names = {p["name"] for group in pairs.values() for p in group}
+    assert texts["englishOnly"] not in (texts["matched"], texts["unmatched"], texts["ambiguous"])
+    all_names = {p["name"] for group in texts.values() for p in group}
     assert "EnglishOnly" in all_names
 
 
-def test_documentation_pairs_group_counts_reconcile_with_total_documented_subjects():
+def test_documentation_texts_group_counts_reconcile_with_total_documented_subjects():
     """Every real subject with ANY xsdo:documentation triple (the same
     universe check_translation_coverage's own CoverageReport.total_documented_subjects
     counts) must land in exactly one of the 4 groups -- this is the real
@@ -63,9 +73,9 @@ def test_documentation_pairs_group_counts_reconcile_with_total_documented_subjec
     _documented(graph, EX.EO, "EnglishOnly", german=None, english="Only English.")
 
     occurrences = {"A": ["Meaning one.", "Meaning two."]}
-    pairs = build_documentation_pairs(graph, occurrences, plausibility_issues=[])
+    texts = build_documentation_texts(graph, occurrences, plausibility_issues=[])
 
-    total_in_groups = sum(len(v) for v in pairs.values())
+    total_in_groups = sum(len(v) for v in texts.values())
     documented_subjects = set(graph.subjects(XSDO.documentation, None))
     assert total_in_groups == len(documented_subjects) == 4
 
@@ -73,16 +83,16 @@ def test_documentation_pairs_group_counts_reconcile_with_total_documented_subjec
 # --- Fix 2: deterministic ordering ------------------------------------------
 
 
-def test_documentation_pairs_groups_are_sorted_by_name_then_uri():
+def test_documentation_texts_groups_are_sorted_by_name_then_uri():
     graph = Graph()
     # Insert in deliberately non-alphabetical order.
     _documented(graph, EX.Zebra, "Zebra", german="Z.", english="Z.")
     _documented(graph, EX.Apple, "Apple", german="A.", english="A.")
     _documented(graph, EX.Mango, "Mango", german="M.", english="M.")
 
-    pairs = build_documentation_pairs(graph, occurrences={}, plausibility_issues=[])
+    texts = build_documentation_texts(graph, occurrences={}, plausibility_issues=[])
 
-    names = [p["name"] for p in pairs["matched"]]
+    names = [p["name"] for p in texts["matched"]]
     assert names == sorted(names) == ["Apple", "Mango", "Zebra"]
 
 
@@ -116,7 +126,10 @@ def test_build_report_data_is_byte_identical_across_repeated_calls():
     graph.add((EX.T, RDF.type, XSDO.SimpleTypeDefinition))
     graph.add((EX.T, XSDO.name, Literal("T")))
 
-    issues = [PlausibilityIssue("length_ratio", f"Subj{i}", f"ratio {i}") for i in range(10)]
+    issues = [
+        PlausibilityIssue("length_ratio", f"Subj{i}", f"ratio {i}", subject_uri=str(EX[f"Subj{i}"]))
+        for i in range(10)
+    ]
     coverage = CoverageReport(10, 10, 0, 0)
     attachment = AttachmentReport(attached=[f"Subj{i}" for i in range(10)])
 
@@ -128,47 +141,57 @@ def test_build_report_data_is_byte_identical_across_repeated_calls():
     assert json.dumps(first, sort_keys=False) == json.dumps(second, sort_keys=False)
 
 
-# --- Fix 5: an issue for a name shared by 2+ matched subjects -------------
+# --- Fix 5 (superseded): an issue for a name shared by 2+ matched subjects --
+# PlausibilityIssue now carries a real subject_uri (a follow-up requested
+# directly by the operator instead of the original name-based mitigation
+# below), so these tests assert precise, correct per-URI attribution.
 
 
-def test_issue_for_a_name_shared_by_two_matched_subjects_is_not_misattributed():
+def test_issue_with_a_real_subject_uri_attaches_to_exactly_the_right_subject():
     """Real-corpus shape: WIdNr names 2 distinct matched subjects
     (MeldepflichtigeStelleType.@WIdNr, IdMerkmalNNPType.@WIdNr) with
-    different real text lengths, but PlausibilityIssue only carries a
-    bare name -- so a length_ratio issue computed from ONE of them must
-    not be displayed as though it belongs to the other too."""
+    different real text lengths. Now that PlausibilityIssue carries a real
+    URI, the one real length_ratio issue must attach to exactly the
+    subject it's actually about, not to both and not to neither."""
     graph = Graph()
     _documented(graph, EX.WIdNrOne, "WIdNr", german="Kurze Wirtschafts-ID.",
                 english="Short economic ID.")
     _documented(graph, EX.WIdNrTwo, "WIdNr",
                 german="Eine viel, viel, viel laengere Wirtschafts-Identifikationsnummer.",
                 english="A much, much, much longer economic identification number.")
-    issues = [PlausibilityIssue("length_ratio", "WIdNr", "ratio=9.99")]
+    issues = [
+        PlausibilityIssue("length_ratio", "WIdNr", "ratio=9.99", subject_uri=str(EX.WIdNrOne))
+    ]
 
-    pairs = build_documentation_pairs(graph, occurrences={}, plausibility_issues=issues)
+    texts = build_documentation_texts(graph, occurrences={}, plausibility_issues=issues)
 
-    assert len(pairs["matched"]) == 2
-    for pair in pairs["matched"]:
-        assert pair["issues"] == []
+    by_uri = {p["uri"]: p for p in texts["matched"]}
+    assert by_uri[str(EX.WIdNrOne)]["issues"] == [{"kind": "length_ratio", "detail": "ratio=9.99"}]
+    assert by_uri[str(EX.WIdNrTwo)]["issues"] == []
 
     # The flat §3 issue list is unaffected -- it never claimed per-subject
-    # scoping, so the real issue must still be visible there.
+    # scoping on its own, so the real issue must still be visible there too.
     audit = build_audit(AttachmentReport(), CoverageReport(2, 2, 0, 0), issues)
-    assert audit["issues"] == [{"kind": "length_ratio", "subjectName": "WIdNr", "detail": "ratio=9.99"}]
+    assert audit["issues"] == [
+        {
+            "kind": "length_ratio", "subjectName": "WIdNr", "detail": "ratio=9.99",
+            "subjectUri": str(EX.WIdNrOne),
+        }
+    ]
 
 
 def test_issue_for_a_uniquely_named_matched_subject_is_still_attached():
-    """Sanity check that Fix 5's guard doesn't over-fire: a name held by
-    exactly one matched subject must still get its real issue(s)."""
+    """Sanity check: a name held by exactly one matched subject must still
+    get its real issue(s)."""
     graph = Graph()
     _documented(graph, EX.Solo, "Solo", german="Deutsch.", english="English.")
-    issues = [PlausibilityIssue("length_ratio", "Solo", "ratio=9.99")]
+    issues = [PlausibilityIssue("length_ratio", "Solo", "ratio=9.99", subject_uri=str(EX.Solo))]
 
-    pairs = build_documentation_pairs(graph, occurrences={}, plausibility_issues=issues)
+    texts = build_documentation_texts(graph, occurrences={}, plausibility_issues=issues)
 
-    assert pairs["matched"] == [
+    assert texts["matched"] == [
         {
-            "uri": str(EX.Solo), "name": "Solo", "de": "Deutsch.", "en": "English.",
+            "uri": str(EX.Solo), "name": "Solo", "languages": {"de": "Deutsch.", "en": "English."},
             "issues": [{"kind": "length_ratio", "detail": "ratio=9.99"}],
         }
     ]

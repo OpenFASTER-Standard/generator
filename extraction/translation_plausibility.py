@@ -94,6 +94,14 @@ class PlausibilityIssue:
     kind: str
     subject_name: str
     detail: str
+    # Added after real corpus use surfaced a genuine ambiguity: 2+ real
+    # subjects can share the same bare xsdo:name (e.g. WIdNr, a field
+    # name reused on 2 different real complex types) -- subject_name
+    # alone can't tell a consumer which one an issue is actually about.
+    # Defaults to "" (not None) so it's always a plain string, and so
+    # every pre-existing 3-positional-arg construction of this class
+    # keeps working unchanged.
+    subject_uri: str = ""
 
 
 @dataclass(frozen=True)
@@ -138,10 +146,11 @@ def check_translation_plausibility(graph: Graph) -> list[PlausibilityIssue]:
             continue
 
         name = str(graph.value(subject, XSDO.name) or subject)
+        uri = str(subject)
         german_text, english_text = str(german).strip(), str(english).strip()
 
         if not english_text:
-            issues.append(PlausibilityIssue("empty", name, "English text is empty"))
+            issues.append(PlausibilityIssue("empty", name, "English text is empty", subject_uri=uri))
             continue
 
         if german_text == english_text and not _is_acronym_name(name):
@@ -149,6 +158,7 @@ def check_translation_plausibility(graph: Graph) -> list[PlausibilityIssue]:
                 PlausibilityIssue(
                     "untranslated", name,
                     f"German and English text are byte-identical: {german_text!r}",
+                    subject_uri=uri,
                 )
             )
 
@@ -159,6 +169,7 @@ def check_translation_plausibility(graph: Graph) -> list[PlausibilityIssue]:
                     "length_ratio", name,
                     f"ratio={ratio:.2f} (german={len(german_text)} chars, "
                     f"english={len(english_text)} chars)",
+                    subject_uri=uri,
                 )
             )
 
@@ -168,6 +179,7 @@ def check_translation_plausibility(graph: Graph) -> list[PlausibilityIssue]:
                 PlausibilityIssue(
                     "missing_shared_token", name,
                     f"tokens in German but not English: {sorted(missing)}",
+                    subject_uri=uri,
                 )
             )
 
@@ -177,6 +189,7 @@ def check_translation_plausibility(graph: Graph) -> list[PlausibilityIssue]:
                 PlausibilityIssue(
                     "extra_shared_token", name,
                     f"tokens in English but not German: {sorted(extra)}",
+                    subject_uri=uri,
                 )
             )
 
@@ -186,6 +199,7 @@ def check_translation_plausibility(graph: Graph) -> list[PlausibilityIssue]:
                 PlausibilityIssue(
                     "structural_artifact", name,
                     f"English text contains PDF structural markup: {found_artifacts}",
+                    subject_uri=uri,
                 )
             )
 

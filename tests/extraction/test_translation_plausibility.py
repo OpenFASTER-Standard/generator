@@ -181,6 +181,24 @@ def test_acronym_shaped_identical_pair_is_not_flagged_as_untranslated():
     assert not any(i.kind == "untranslated" for i in issues)
 
 
+def test_issue_carries_the_real_subject_uri_not_just_its_bare_name():
+    # Real motivation: 2+ real subjects can share the same bare xsdo:name
+    # (e.g. WIdNr, confirmed real on both MeldepflichtigeStelleType and
+    # IdMerkmalNNPType) -- a consumer needs the real URI to tell them
+    # apart, not just the name.
+    graph = Graph()
+    _documented(
+        graph, EX.WIdNrTwo,
+        "Eindeutiger Identifier für die Nachricht, der niemals doppelt vergeben wird.",
+        "ID.",
+    )
+
+    issues = check_translation_plausibility(graph)
+
+    assert len(issues) >= 1
+    assert all(i.subject_uri == str(EX.WIdNrTwo) for i in issues)
+
+
 def test_coverage_report_counts_every_real_documented_subject():
     graph = Graph()
     matched = EX.Matched

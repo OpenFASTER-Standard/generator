@@ -30,7 +30,7 @@ a.ref:hover { text-decoration: underline; }
 .doc-pair.ambiguous { border-left: 4px solid #c62828; }
 .doc-pair.englishOnly { border-left: 4px solid #f9a825; }
 .global-declarations > h4 { margin: 0 0 0.35rem 0; color: #666; font-size: 0.95rem; }
-.doc-pair .de, .doc-pair .en { font-size: 0.9rem; margin: 0.2rem 0; }
+.doc-pair .doc-lang { font-size: 0.9rem; margin: 0.2rem 0; }
 .issue { font-size: 0.85rem; color: #c62828; margin-top: 0.3rem; }
 .audit-numbers { display: flex; gap: 2rem; font-size: 1.05rem; margin-bottom: 1rem; }
 .audit-issues { list-style: none; padding: 0; }

@@ -41,7 +41,7 @@
   // The declaration box's own DOM id is deliberately NOT the bare subject
   // URI: the same URI is also used, unprefixed, as the id of that
   // subject's Structure entry (renderComplexType/renderSimpleType) and/or
-  // its Documentation-Pairs entry (renderDocPair) -- confirmed against the
+  // its Documentation-Pairs entry (renderDocEntry) -- confirmed against the
   // real whole-corpus report that a large fraction of subjects have both a
   // structural entry and a doc-pair entry, which would otherwise collide.
   // Declarations are never link targets (nothing does refLink(ref) for an
@@ -195,32 +195,48 @@
     return root;
   }
 
-  // Prefixed for the same reason as renderTermRef's declaration id above:
-  // a doc-pair's subject URI is also, unprefixed, the id of that same
-  // subject's Structure/declaration entry elsewhere on the page. Doc-pair
-  // entries are never link targets, so the prefix is safe to add.
-  function renderDocPair(pair, kind) {
-    var box = el("div", {
-      class: "entry doc-pair " + kind, id: "doc:" + pair.uri, "data-name": pair.name,
+  // Real languages render in this preferred order when present (German
+  // source text first, its English PDF-matched translation next); any
+  // OTHER real language a future module might carry (not hardcoded to
+  // exactly these two) still renders, just alphabetically after them --
+  // never silently dropped.
+  var _LANGUAGE_DISPLAY_ORDER = ["de", "en"];
+
+  function _sortedLanguages(languages) {
+    return Object.keys(languages).sort(function (a, b) {
+      var ai = _LANGUAGE_DISPLAY_ORDER.indexOf(a);
+      var bi = _LANGUAGE_DISPLAY_ORDER.indexOf(b);
+      if (ai === -1) ai = _LANGUAGE_DISPLAY_ORDER.length;
+      if (bi === -1) bi = _LANGUAGE_DISPLAY_ORDER.length;
+      if (ai !== bi) return ai - bi;
+      return a < b ? -1 : a > b ? 1 : 0;
     });
-    box.appendChild(el("h4", {}, [text(pair.name)]));
-    // Fix 1: an "englishOnly" pair has no "de" field at all (that's the
-    // whole point -- no German documentation exists for it), so the DE
-    // line only renders when there is one.
-    if (pair.de !== undefined) {
-      box.appendChild(el("div", { class: "de" }, [text("DE: " + pair.de)]));
-    }
+  }
+
+  // Prefixed for the same reason as renderTermRef's declaration id above:
+  // a doc-entry's subject URI is also, unprefixed, the id of that same
+  // subject's Structure/declaration entry elsewhere on the page. Doc
+  // entries are never link targets themselves, so the prefix is safe to
+  // add -- and it's also exactly what renderAudit's own cross-link below
+  // targets.
+  function renderDocEntry(entry, kind) {
+    var box = el("div", {
+      class: "entry doc-pair " + kind, id: "doc:" + entry.uri, "data-name": entry.name,
+    });
+    box.appendChild(el("h4", {}, [text(entry.name)]));
+    _sortedLanguages(entry.languages).forEach(function (lang) {
+      box.appendChild(
+        el("div", { class: "doc-lang" }, [text(lang.toUpperCase() + ": " + entry.languages[lang])])
+      );
+    });
     if (kind === "matched") {
-      box.appendChild(el("div", { class: "en" }, [text("EN: " + pair.en)]));
-      pair.issues.forEach(function (issue) {
+      entry.issues.forEach(function (issue) {
         box.appendChild(el("div", { class: "issue" }, [text(issue.kind + ": " + issue.detail)]));
       });
     } else if (kind === "ambiguous") {
       var cand = el("ul", { class: "candidates" });
-      pair.candidates.forEach(function (c) { cand.appendChild(el("li", {}, [text(c)])); });
+      entry.candidates.forEach(function (c) { cand.appendChild(el("li", {}, [text(c)])); });
       box.appendChild(cand);
-    } else if (kind === "englishOnly") {
-      box.appendChild(el("div", { class: "en" }, [text("EN: " + pair.en)]));
     }
     return box;
   }
@@ -228,7 +244,7 @@
   function renderDocs() {
     var root = el("div", { class: "section", id: "section-docs" });
     // Fix 1 (final whole-branch review): "English-only" is a 4th real
-    // group (reporting/data.py's build_documentation_pairs) for subjects
+    // group (reporting/data.py's build_documentation_texts) for subjects
     // with real @en documentation but no German at all -- previously
     // silently dropped entirely; now rendered like the other 3 groups so
     // §2's total subject count reconciles with §3's coverage total.
@@ -238,10 +254,10 @@
         var key = pair[0], label = pair[1];
         var groupBox = el("div", { class: "doc-group" });
         groupBox.appendChild(
-          el("h3", {}, [text(label + " (" + data.documentationPairs[key].length + ")")])
+          el("h3", {}, [text(label + " (" + data.documentationTexts[key].length + ")")])
         );
-        data.documentationPairs[key].forEach(function (p) {
-          groupBox.appendChild(renderDocPair(p, key));
+        data.documentationTexts[key].forEach(function (p) {
+          groupBox.appendChild(renderDocEntry(p, key));
         });
         root.appendChild(groupBox);
       });
@@ -260,7 +276,19 @@
     var issues = el("ul", { class: "audit-issues" });
     data.audit.issues.forEach(function (issue) {
       var li = el("li", { "data-name": issue.subjectName });
-      li.appendChild(text("[" + issue.kind + "] " + issue.subjectName + " -- " + issue.detail));
+      li.appendChild(text("[" + issue.kind + "] "));
+      // A real subject URI is now available on every issue found against
+      // the real corpus -- link straight to its Documentation Pairs entry
+      // instead of just naming it (subjectUri is null only for a
+      // legacy/synthetic issue built without one).
+      if (issue.subjectUri) {
+        li.appendChild(
+          el("a", { href: "#doc:" + issue.subjectUri, class: "ref" }, [text(issue.subjectName)])
+        );
+      } else {
+        li.appendChild(text(issue.subjectName));
+      }
+      li.appendChild(text(" -- " + issue.detail));
       issues.appendChild(li);
     });
     root.appendChild(issues);
@@ -277,15 +305,35 @@
     sections[key].style.display = key === "structure" ? "" : "none";
   });
 
-  document.querySelectorAll("#nav button[data-section]").forEach(function (btn) {
-    btn.addEventListener("click", function () {
-      Object.keys(sections).forEach(function (key) {
-        sections[key].style.display = key === btn.dataset.section ? "" : "none";
-      });
-      document.querySelectorAll("#nav button[data-section]").forEach(function (b) {
-        b.classList.toggle("active", b === btn);
-      });
+  function showSection(key) {
+    Object.keys(sections).forEach(function (k) {
+      sections[k].style.display = k === key ? "" : "none";
     });
+    document.querySelectorAll("#nav button[data-section]").forEach(function (b) {
+      b.classList.toggle("active", b.dataset.section === key);
+    });
+  }
+
+  document.querySelectorAll("#nav button[data-section]").forEach(function (btn) {
+    btn.addEventListener("click", function () { showSection(btn.dataset.section); });
+  });
+
+  // Real cross-section navigation (e.g. an Audit issue's link to its own
+  // Documentation Pairs entry, added alongside the WIdNr subject_uri
+  // fix): the browser can't scroll to a target inside a currently
+  // display:none section, so intercept the click, switch to whichever
+  // section actually contains the target first, then let the browser's
+  // own hash-navigation scroll to it.
+  app.addEventListener("click", function (e) {
+    var link = e.target.closest("a[href^='#']");
+    if (!link) return;
+    var targetId = link.getAttribute("href").slice(1);
+    var target = document.getElementById(targetId);
+    if (!target) return;
+    var containingKey = Object.keys(sections).find(function (key) {
+      return sections[key].contains(target);
+    });
+    if (containingKey) showSection(containingKey);
   });
 
   // Fix 3 (final whole-branch review): the previous logic hid a

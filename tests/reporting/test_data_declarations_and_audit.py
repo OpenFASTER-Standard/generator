@@ -1,4 +1,4 @@
-"""Tests for build_declarations, build_documentation_pairs, build_audit,
+"""Tests for build_declarations, build_documentation_texts, build_audit,
 and the combining build_report_data."""
 from rdflib import RDF, Graph, Literal, Namespace
 
@@ -8,7 +8,7 @@ from reporting.data import (
     XSDO,
     build_audit,
     build_declarations,
-    build_documentation_pairs,
+    build_documentation_texts,
     build_report_data,
 )
 
@@ -38,7 +38,7 @@ def test_build_declarations_covers_elements_and_attributes():
     assert declarations[str(EX.Attr)] == {
         "name": "Attr", "kind": "Attribute", "type": str(EX.SomeType),
         "default": "false", "fixed": None,
-        "documentation": {"de": None, "en": None},
+        "documentation": {},
     }
 
 
@@ -49,7 +49,7 @@ def _documented(graph, uri, name, german, english=None):
         graph.add((uri, XSDO.documentation, Literal(english, lang="en")))
 
 
-def test_documentation_pairs_groups_matched_unmatched_and_ambiguous():
+def test_documentation_texts_groups_matched_unmatched_and_ambiguous():
     graph = Graph()
     _documented(graph, EX.Matched, "Matched", "Deutsch.", "English.")
     _documented(graph, EX.Unmatched, "Unmatched", "Nur Deutsch.")
@@ -59,22 +59,26 @@ def test_documentation_pairs_groups_matched_unmatched_and_ambiguous():
         "Matched": ["English."],
         "Ambiguous": ["Meaning one.", "Meaning two."],
     }
-    issues = [PlausibilityIssue("length_ratio", "Matched", "ratio=9.99")]
+    issues = [
+        PlausibilityIssue("length_ratio", "Matched", "ratio=9.99", subject_uri=str(EX.Matched))
+    ]
 
-    pairs = build_documentation_pairs(graph, occurrences, issues)
+    texts = build_documentation_texts(graph, occurrences, issues)
 
-    assert pairs["matched"] == [
+    assert texts["matched"] == [
         {
-            "uri": str(EX.Matched), "name": "Matched", "de": "Deutsch.",
-            "en": "English.", "issues": [{"kind": "length_ratio", "detail": "ratio=9.99"}],
+            "uri": str(EX.Matched), "name": "Matched",
+            "languages": {"de": "Deutsch.", "en": "English."},
+            "issues": [{"kind": "length_ratio", "detail": "ratio=9.99"}],
         }
     ]
-    assert pairs["unmatched"] == [
-        {"uri": str(EX.Unmatched), "name": "Unmatched", "de": "Nur Deutsch."}
+    assert texts["unmatched"] == [
+        {"uri": str(EX.Unmatched), "name": "Unmatched", "languages": {"de": "Nur Deutsch."}}
     ]
-    assert pairs["ambiguous"] == [
+    assert texts["ambiguous"] == [
         {
-            "uri": str(EX.Ambiguous), "name": "Ambiguous", "de": "Mehrdeutig.",
+            "uri": str(EX.Ambiguous), "name": "Ambiguous",
+            "languages": {"de": "Mehrdeutig."},
             "candidates": ["Meaning one.", "Meaning two."],
         }
     ]
@@ -83,14 +87,19 @@ def test_documentation_pairs_groups_matched_unmatched_and_ambiguous():
 def test_build_audit_reshapes_the_already_computed_reports():
     attachment = AttachmentReport(attached=["A", "B"], ambiguous=["C"], unmatched=["D", "E", "F"])
     coverage = CoverageReport(total_documented_subjects=6, attached=2, ambiguous=1, unmatched=3)
-    issues = [PlausibilityIssue("untranslated", "A", "identical text")]
+    issues = [PlausibilityIssue("untranslated", "A", "identical text", subject_uri=str(EX.A))]
 
     audit = build_audit(attachment, coverage, issues)
 
     assert audit == {
         "attachment": {"attached": 2, "ambiguous": 1, "unmatched": 3},
         "coverage": {"total": 6, "attached": 2, "ambiguous": 1, "unmatched": 3},
-        "issues": [{"kind": "untranslated", "subjectName": "A", "detail": "identical text"}],
+        "issues": [
+            {
+                "kind": "untranslated", "subjectName": "A", "detail": "identical text",
+                "subjectUri": str(EX.A),
+            }
+        ],
     }
 
 
@@ -107,5 +116,5 @@ def test_build_report_data_combines_all_four_sections():
         attachment=AttachmentReport(),
     )
 
-    assert set(data.keys()) == {"structure", "declarations", "documentationPairs", "audit"}
+    assert set(data.keys()) == {"structure", "declarations", "documentationTexts", "audit"}
     assert data["structure"]["https://example.org/test"]["simpleTypes"][0]["name"] == "T"

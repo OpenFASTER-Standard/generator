@@ -41,6 +41,29 @@ def _target_namespace_of(uri: str) -> str:
     return uri.split("#", 1)[0]
 
 
+# FM's own real xs:documentation is untagged (no xml:lang at all) and is
+# German-only -- a real, verified, project-specific fact (see
+# extraction/documentation.py's own docstring), not an arbitrary
+# assumption -- so an untagged xsdo:documentation Literal is keyed under
+# "de" here, same as a real xml:lang="de"-tagged one would be.
+_UNTAGGED_LANGUAGE_KEY = "de"
+
+
+def _documentation_by_language(graph: Graph, subject) -> dict[str, str]:
+    """Every real xsdo:documentation value on a subject, keyed by its
+    real language -- NOT hardcoded to exactly "de"/"en". A module whose
+    real XSD carries a third real xml:lang tag (not present in the
+    MiKaDiv-FM corpus today, but not something this function should
+    silently drop either) shows up here under its own real language
+    key instead of being lost.
+    """
+    texts: dict[str, str] = {}
+    for doc in graph.objects(subject, XSDO.documentation):
+        lang = doc.language if doc.language is not None else _UNTAGGED_LANGUAGE_KEY
+        texts[lang] = str(doc)
+    return texts
+
+
 def _build_content_model(graph: Graph, group_node) -> dict:
     kind = "Choice" if (group_node, RDF.type, XSDO.Choice) in graph else "Sequence"
     particles = sorted(
@@ -166,59 +189,53 @@ def build_declarations(graph: Graph) -> dict:
             type_ref = graph.value(uri, XSDO.type)
             default = graph.value(uri, XSDO.defaultValue)
             fixed = graph.value(uri, XSDO.fixedValue)
-            docs = list(graph.objects(uri, XSDO.documentation))
-            de = next((str(d) for d in docs if d.language in (None, "de")), None)
-            en = next((str(d) for d in docs if d.language == "en"), None)
             declarations[str(uri)] = {
                 "name": str(graph.value(uri, XSDO.name)),
                 "kind": kind_label,
                 "type": str(type_ref) if type_ref is not None else None,
                 "default": str(default) if default is not None else None,
                 "fixed": str(fixed) if fixed is not None else None,
-                "documentation": {"de": de, "en": en},
+                "documentation": _documentation_by_language(graph, uri),
             }
     return declarations
 
 
-def build_documentation_pairs(
+def build_documentation_texts(
     graph: Graph, occurrences: dict[str, list[str]], plausibility_issues: list
 ) -> dict:
-    # First pass: resolve every real documented subject's own name/de/en
-    # once, and count how many distinct MATCHED (both de+en present)
-    # subjects share the same real xsdo:name. Fix 5 (final whole-branch
-    # review): extraction.translation_plausibility.PlausibilityIssue only
-    # carries a bare subject_name, never a URI, so an issue for a name
-    # shared by 2+ real matched subjects (confirmed real: WIdNr names both
-    # MeldepflichtigeStelleType.@WIdNr and IdMerkmalNNPType.@WIdNr, with
-    # different real German text lengths) can't be safely attributed to
-    # either one specifically.
-    resolved = []
-    matched_name_counts: dict[str, int] = {}
-    for subject in set(graph.subjects(XSDO.documentation, None)):
-        name_literal = graph.value(subject, XSDO.name)
-        name = str(name_literal) if name_literal is not None else str(subject)
-        docs = list(graph.objects(subject, XSDO.documentation))
-        de = next((str(d) for d in docs if d.language in (None, "de")), None)
-        en = next((str(d) for d in docs if d.language == "en"), None)
-        resolved.append((subject, name, de, en))
-        if de is not None and en is not None:
-            matched_name_counts[name] = matched_name_counts.get(name, 0) + 1
-
-    issues_by_name: dict[str, list[dict]] = {}
+    # Fix (real subject_uri now available on PlausibilityIssue, added
+    # after the final review found 2 real subjects sharing the bare name
+    # "WIdNr" -- MeldepflichtigeStelleType.@WIdNr and
+    # IdMerkmalNNPType.@WIdNr -- with a real issue that could only be
+    # correctly attributed to one of them). Keyed by the real subject
+    # URI, not the ambiguous bare name, so no collision is possible.
+    issues_by_uri: dict[str, list[dict]] = {}
     for issue in plausibility_issues:
-        issues_by_name.setdefault(issue.subject_name, []).append(
+        if not issue.subject_uri:
+            continue  # a legacy/synthetic issue with no real URI to attach to
+        issues_by_uri.setdefault(issue.subject_uri, []).append(
             {"kind": issue.kind, "detail": issue.detail}
         )
     # Fix 2 (final whole-branch review): plausibility_issues' own order is
     # itself non-deterministic (check_translation_plausibility, already
-    # merged in extraction/, iterates a set()) -- sort each per-name group
-    # so a subject with 2+ real issues always lists them in the same order.
-    for issue_list in issues_by_name.values():
+    # merged in extraction/, iterates a set()) -- sort each per-subject
+    # group so a subject with 2+ real issues always lists them in the
+    # same order.
+    for issue_list in issues_by_uri.values():
         issue_list.sort(key=lambda i: (i["kind"], i["detail"]))
 
     matched, unmatched, ambiguous, english_only = [], [], [], []
-    for subject, name, de, en in resolved:
+    for subject in set(graph.subjects(XSDO.documentation, None)):
         uri = str(subject)
+        name_literal = graph.value(subject, XSDO.name)
+        name = str(name_literal) if name_literal is not None else uri
+        # Every real language actually present on this subject -- not
+        # hardcoded to exactly "de"/"en", so a real third language (a
+        # native xml:lang tag some future module carries) is never
+        # silently dropped from what the report shows.
+        languages = _documentation_by_language(graph, subject)
+        de = languages.get("de")
+        en = languages.get("en")
 
         # Fix 1 (final whole-branch review): a subject can have real @en
         # documentation with no German at all (confirmed real: 3 such
@@ -232,31 +249,28 @@ def build_documentation_pairs(
         # §3's.
         if de is None:
             if en is not None:
-                english_only.append({"uri": uri, "name": name, "en": en})
+                english_only.append({"uri": uri, "name": name, "languages": languages})
             continue
 
         if en is not None:
-            # Fix 5: don't attach a name-keyed issue when that name is
-            # ambiguous across 2+ real matched subjects -- skip attaching
-            # it to either specific subject's own "issues" list here
-            # rather than display a possibly factually-wrong claim. The
-            # flat §3 issue list (build_audit) still shows every real
-            # issue regardless -- it never claimed to be scoped to one
-            # specific subject's own text in the first place.
-            issues = issues_by_name.get(name, []) if matched_name_counts.get(name, 0) <= 1 else []
-            matched.append({"uri": uri, "name": name, "de": de, "en": en, "issues": issues})
+            matched.append(
+                {
+                    "uri": uri, "name": name, "languages": languages,
+                    "issues": issues_by_uri.get(uri, []),
+                }
+            )
             continue
 
         candidates = occurrences.get(name, [])
         if len(set(candidates)) > 1:
             ambiguous.append(
                 {
-                    "uri": uri, "name": name, "de": de,
+                    "uri": uri, "name": name, "languages": languages,
                     "candidates": sorted(set(candidates)),
                 }
             )
         else:
-            unmatched.append({"uri": uri, "name": name, "de": de})
+            unmatched.append({"uri": uri, "name": name, "languages": languages})
 
     # Fix 2: the subject universe above is walked via set(...), whose
     # iteration order depends on PYTHONHASHSEED -- sort every output list
@@ -296,7 +310,13 @@ def build_audit(attachment, coverage, plausibility_issues: list) -> dict:
         # identical inputs never reorders §3's issue list.
         "issues": sorted(
             (
-                {"kind": i.kind, "subjectName": i.subject_name, "detail": i.detail}
+                {
+                    "kind": i.kind, "subjectName": i.subject_name, "detail": i.detail,
+                    # Real subject URI (added alongside the WIdNr fix) --
+                    # lets the report link an issue back to its exact
+                    # Documentation-Pairs entry instead of just naming it.
+                    "subjectUri": i.subject_uri or None,
+                }
                 for i in plausibility_issues
             ),
             key=lambda i: (i["subjectName"], i["kind"]),
@@ -314,6 +334,6 @@ def build_report_data(
     return {
         "structure": build_structure(graph),
         "declarations": build_declarations(graph),
-        "documentationPairs": build_documentation_pairs(graph, occurrences, plausibility_issues),
+        "documentationTexts": build_documentation_texts(graph, occurrences, plausibility_issues),
         "audit": build_audit(attachment, coverage, plausibility_issues),
     }
