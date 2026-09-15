@@ -63,6 +63,28 @@ def test_real_composite_unique_constraint_extracts_all_fields():
     assert fields == {"@ArtDesDepotkontos", "@Kontonummer"}
 
 
+def test_real_identity_constraint_gets_its_own_documentation():
+    # Fix 3 (final review, Important gap): an identity constraint's own
+    # real xs:documentation was never extracted at all.
+    schema = xmlschema.XMLSchema(FIXTURE)
+    meldeart13 = schema.maps.types["{http://www.itzbund.de/MiKaDiv/FMMa13/1.02}Meldeart13"]
+    konto_liste = next(
+        p for p in meldeart13.content.iter_model() if p.local_name == "KontoListe"
+    )
+    graph = Graph()
+
+    extract_identity_constraints(graph, konto_liste, EX.KontoListeType)
+
+    constraint = next(iter(graph.objects(EX.KontoListeType, XSDO.hasIdentityConstraint)))
+    docs = list(graph.objects(constraint, XSDO.documentation))
+    assert len(docs) == 1
+    assert docs[0].language is None
+    assert str(docs[0]) == (
+        "Constraint der sicherstellt, dass Art des Depokontos und "
+        "Kontonummer zusammen eindeutig sind."
+    )
+
+
 def test_synthetic_key_and_keyref_extract_kind_and_refer(tmp_path):
     xsd_path = tmp_path / "keyref.xsd"
     xsd_path.write_text(_SYNTHETIC_KEYREF_XSD)

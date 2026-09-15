@@ -16,6 +16,7 @@ from __future__ import annotations
 import xmlschema
 from rdflib import RDF, Graph, Literal, Namespace, URIRef
 
+from extraction.documentation import extract_documentation
 from extraction.uris import child_uri
 
 XSDO = Namespace("https://purl.openfaster.org/xsdo/")
@@ -40,6 +41,7 @@ def extract_identity_constraints(graph: Graph, xsd_element, owner_uri: URIRef) -
     for identity_constraint in xsd_element.identities:
         constraint_uri = child_uri(owner_uri, identity_constraint.local_name)
         graph.add((constraint_uri, RDF.type, _kind_of(identity_constraint)))
+        extract_documentation(graph, constraint_uri, identity_constraint)
         graph.add(
             (constraint_uri, XSDO.selector, Literal(identity_constraint.selector.path))
         )

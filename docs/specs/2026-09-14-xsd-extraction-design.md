@@ -166,11 +166,43 @@ For each `xsdo:ComplexTypeDefinition`:
 - `xsdo:extends` → the base type's own minted URI, if the type uses
   `xs:extension`. The extracted content model captures only the type's
   *own* additional particles — never a flattened duplicate of the base
-  type's, per Step 0's confirmed API.
+  type's. **Correction, found during the final whole-branch review
+  (2026-09-14, Fix 1) and re-verified against the real corpus**: the
+  original Step 0 check only confirmed this against one real example
+  (`DLZertifiziert`, which adds its own `<xs:sequence>`). It is
+  genuinely false in general — confirmed against the real corpus that
+  when an `xs:extension` adds ONLY attributes (no new
+  `<xs:sequence>`/`<xs:choice>` of its own), or is genuinely empty,
+  `xmlschema`'s `xsd_type.content.iter_model()` falls back to returning
+  the BASE type's own particle objects directly (identity-equal to
+  `xsd_type.base_type.content.iter_model()`'s own particles, not merely
+  equal) — affecting 29/53 real extension types in this corpus (e.g.
+  `PersonNatDatenType`/`PersonBasisType`'s `Anschrift`, and the
+  genuinely-empty `Meldeart11`/`SelbststaendigeMeldungMitOrdnungsnummerType`).
+  Extraction now explicitly filters these out by identity before
+  minting (`extraction/complex_types.py`'s `_base_particle_ids`,
+  mirroring the same own-vs-inherited distinction already used for
+  attributes via `xsd_type.attributes.base_attributes`) — the resulting
+  content model is genuinely own-only, matching this section's original
+  intent, just implemented against the library's real (not assumed)
+  behavior.
 - `xsdo:abstract` (boolean) — real, present, tightly coupled with
   `xsdo:extends`: a document can never actually instantiate an
   abstract type directly, only a concrete type that (transitively)
   extends it. A future consumer needs this to know not to try.
+- `xsdo:name`, for named/global types, and `xsdo:documentation` (same
+  two real forms as element/attribute declarations, via the same shared
+  `extraction.documentation.extract_documentation` helper) for the
+  type's own `xs:documentation`. **Added by Fix 3 (final whole-branch
+  review)**: the original design only listed these for
+  `xsdo:ElementDeclaration`/`xsdo:AttributeDeclaration` below, silently
+  leaving 97 real `complexType`-level, 40 real `simpleType`-level, and 5
+  of 6 real identity-constraint-level `xs:documentation` blocks
+  unextracted — a real gap against this document's own Definition of
+  Done ("no known real construct... is unsupported"). `xsdo:name` was
+  also missing from types outright, needed both for its own sake and so
+  `attach_english_documentation`'s name-based matching can reach
+  type-level subjects.
 - `xsdo:contentModel` → a `xsdo:Sequence` or `xsdo:Choice` node
   (`xsdo:All` is not implemented — confirmed absent from the real
   files; the walk raises a named error if one is ever encountered, not
@@ -260,7 +292,10 @@ this document's nested sub-tables.
 
 ### Simple type and facet extraction
 
-For each `xsdo:SimpleTypeDefinition`, extract the full closed set of
+For each `xsdo:SimpleTypeDefinition`, also extract `xsdo:name` (named/
+global types) and the type's own `xsdo:documentation` (Fix 3, final
+review — see the Complex type extraction section above for why this
+was missing), plus the full closed set of
 12 standard XSD constraining facets: `xsdo:hasEnumerationValue`/
 `xsdo:literalValue`, `xsdo:length`/`xsdo:minLength`/`xsdo:maxLength`,
 `xsdo:pattern`, `xsdo:whiteSpace`, `xsdo:minInclusive`/
@@ -283,7 +318,11 @@ the union type itself.
 For each `xs:key`/`xs:unique`/`xs:keyref` on a complex type:
 `xsdo:hasIdentityConstraint` → a node typed `xsdo:Key`/`xsdo:Unique`/
 `xsdo:KeyRef`, with `xsdo:selector`, one or more `xsdo:field` values,
-and (for `KeyRef`) `xsdo:refer`. FM itself only exercises `xs:unique`
+`xsdo:documentation` for the constraint's own real `xs:documentation`
+if it has one (Fix 3, final review — 5 of the 6 real `xs:unique`
+constraints reachable in this corpus have their own documentation; the
+6th genuinely has none in the source XSD, confirmed by direct
+inspection, not a gap), and (for `KeyRef`) `xsdo:refer`. FM itself only exercises `xs:unique`
 (7 real occurrences, confirmed). `xs:key`/`xs:keyref` have **not**
 been confirmed real anywhere on disk, in FM or elsewhere (see the
 corrected census table entry above) — they stay supported anyway as
@@ -310,6 +349,17 @@ the actual XSD file content:
   is correctly `false` on the concrete type and `true` on the base,
   and the extracted content model contains only the concrete type's
   own additional particles.
+- A real type whose `xs:extension` adds ONLY attributes, no own element
+  content (`PersonNatDatenType`/`PersonBasisType`, where the base has
+  real element content of its own, `Anschrift`) — assert the extending
+  type's own content model is empty, not a duplicate of the base's (Fix
+  1, final review: the original test case for the bullet above,
+  `Paymentline45BBasisType`/`PaymentlineBasisType`, has an empty base
+  element-content, so it never actually exercised this dedup path). Also
+  covered against a genuinely-empty extension
+  (`Meldeart11`/`SelbststaendigeMeldungMitOrdnungsnummerType`), which
+  would otherwise duplicate the base's entire subtree, identity
+  constraints included.
 - `PersonType` (or another real type from the 6 confirmed
   Choice-affected types in `Personentypen.xsd`) — assert the Choice
   branches are extracted correctly, including if the Choice is nested

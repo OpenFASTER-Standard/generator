@@ -11,12 +11,13 @@ from extraction.complex_types import (
     extract_complex_type,
     extract_element_declaration_with_recursion,
 )
-from extraction.uris import global_uri
+from extraction.uris import child_uri, global_uri
 
 EX = Namespace("https://example.org/test/")
 FACHTYPEN = "ontologies/mikadiv-fm/sources/xsd/MiKaDiv_FM_Fachtypen_1.02.xsd"
 PERSONENTYPEN = "ontologies/mikadiv-fm/sources/xsd/MiKaDiv_FM_Personentypen_1.02.xsd"
 MELDEART13 = "ontologies/mikadiv-fm/sources/xsd/MiKaDiv_FM_Meldeart13_1.02.xsd"
+MELDEART11 = "ontologies/mikadiv-fm/sources/xsd/MiKaDiv_FM_Meldeart11_1.02.xsd"
 ROOT = "ontologies/mikadiv-fm/sources/xsd/MiKaDiv_FM_1.02.xsd"
 
 
@@ -59,6 +60,88 @@ def test_extension_from_abstract_base_captures_only_own_particles():
     content = graph.value(ext_uri, XSDO.contentModel)
     particles = list(graph.objects(content, XSDO.hasParticle))
     assert len(particles) == 1  # only AusschuettendeGesellschaft -- not ISIN/Zahlungstag
+
+
+def test_named_complex_type_gets_its_own_name_and_documentation():
+    # Fix 3 (final review, Important gap): a complex type's own real
+    # xs:documentation was never extracted at all -- only elements/
+    # attributes got xsdo:documentation. Also needed: xsdo:name on the
+    # type itself, both for its own sake and so annex_pdf's name-based
+    # English-documentation matching can reach type-level subjects too.
+    schema = xmlschema.XMLSchema(PERSONENTYPEN)
+    t = schema.maps.types["{http://www.itzbund.de/MiKaDiv/FMPers/1.02}PersonBasisType"]
+    uri = EX.PersonBasisType
+    graph = Graph()
+
+    extract_complex_type(graph, t, uri)
+
+    assert str(graph.value(uri, XSDO.name)) == "PersonBasisType"
+    docs = list(graph.objects(uri, XSDO.documentation))
+    assert len(docs) == 1
+    assert docs[0].language is None
+    assert str(docs[0]) == str(t.annotation.documentation[0].text).strip()
+
+
+def test_extension_adding_only_attributes_does_not_duplicate_inherited_elements():
+    # Regression test for Fix 1 (final whole-branch review, Critical bug):
+    # PersonNatDatenType extends PersonBasisType adding ONLY attributes (no
+    # own <xs:sequence>). PersonBasisType has one real element particle,
+    # Anschrift. xmlschema's own xsd_type.content.iter_model() is confirmed
+    # to fall back to returning the BASE type's own particle objects
+    # (identity-equal, not just equal) in this situation -- unlike
+    # Paymentline45BBasisType/PaymentlineBasisType above, whose base has no
+    # element content at all, so this dedup path was never actually
+    # exercised by that test. Before the fix, extract_complex_type on
+    # PersonNatDatenType incorrectly re-extracted and re-minted Anschrift
+    # under PersonNatDatenType's own URI too.
+    schema = xmlschema.XMLSchema(PERSONENTYPEN)
+    base = schema.maps.types["{http://www.itzbund.de/MiKaDiv/FMPers/1.02}PersonBasisType"]
+    ext = schema.maps.types["{http://www.itzbund.de/MiKaDiv/FMPers/1.02}PersonNatDatenType"]
+    base_uri, ext_uri = EX.PersonBasisType, EX.PersonNatDatenType
+    graph = Graph()
+
+    extract_complex_type(graph, base, base_uri)
+    extract_complex_type(graph, ext, ext_uri)
+
+    # The base keeps its own real Anschrift particle.
+    base_content = graph.value(base_uri, XSDO.contentModel)
+    base_particles = list(graph.objects(base_content, XSDO.hasParticle))
+    assert len(base_particles) == 1
+    anschrift_uri = graph.value(base_particles[0], XSDO["term"])
+    assert str(graph.value(anschrift_uri, XSDO.name)) == "Anschrift"
+
+    # The extending type adds no element content of its own -- its content
+    # model must be empty, not a duplicate of the base's.
+    ext_content = graph.value(ext_uri, XSDO.contentModel)
+    ext_particles = list(graph.objects(ext_content, XSDO.hasParticle))
+    assert ext_particles == []
+
+    # And Anschrift must never be re-minted/re-extracted under the
+    # extending type's own scoped URI.
+    duplicate_uri = child_uri(ext_uri, "Anschrift")
+    assert (duplicate_uri, RDF.type, XSDO.ElementDeclaration) not in graph
+
+
+def test_genuinely_empty_extension_does_not_duplicate_the_bases_entire_subtree():
+    # Regression test for Fix 1: Meldeart11 is a genuinely EMPTY xs:extension
+    # of SelbststaendigeMeldungMitOrdnungsnummerType (no own attributes or
+    # elements at all). Before the fix, the base's entire
+    # Verwahrkette/Kontopersonen/KontoListe subtree -- including the real
+    # identity constraint EindeutigesKonto nested under KontoListe/Konto --
+    # got duplicated under Meldeart11's own URI too.
+    schema = xmlschema.XMLSchema(MELDEART11)
+    t = schema.maps.types["{http://www.itzbund.de/MiKaDiv/FMMa11/1.02}Meldeart11"]
+    uri = EX.Meldeart11
+    graph = Graph()
+
+    extract_complex_type(graph, t, uri)
+
+    content = graph.value(uri, XSDO.contentModel)
+    particles = list(graph.objects(content, XSDO.hasParticle))
+    assert particles == []
+
+    for local_name in ("Verwahrkette", "Kontopersonen", "KontoListe"):
+        assert (child_uri(uri, local_name), RDF.type, XSDO.ElementDeclaration) not in graph
 
 
 def test_extension_attribute_uses_exclude_inherited_attributes():

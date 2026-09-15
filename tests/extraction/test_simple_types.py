@@ -59,6 +59,27 @@ def test_union_member_types_are_linked_by_their_own_real_uri():
     }
 
 
+def test_named_simple_type_gets_its_own_name_and_documentation():
+    # Fix 3 (final review, Important gap): a simple type's own real
+    # xs:documentation was never extracted at all -- only elements/
+    # attributes got xsdo:documentation. Also needed: xsdo:name.
+    schema = _schema()
+    xsd_type = schema.maps.types["{http://www.itzbund.de/MiKaDiv/FMStd/1.02}WIDType"]
+    uri = EX.WIDType
+    graph = Graph()
+
+    extract_simple_type(graph, xsd_type, uri)
+
+    assert str(graph.value(uri, XSDO.name)) == "WIDType"
+    docs = list(graph.objects(uri, XSDO.documentation))
+    assert len(docs) == 1
+    assert docs[0].language is None
+    assert str(docs[0]) == (
+        "Die Wirtschafts-Identifikationsnummer einer nicht-natürlichen "
+        "Person ohne Bindestrich vor dem 5-stelligen Unterscheidungsmerkmal."
+    )
+
+
 def test_type_with_no_facets_still_gets_the_definition_triple():
     schema = _schema()
     xsd_type = schema.maps.types["{http://www.itzbund.de/MiKaDiv/FMStd/1.02}Datum0Type"]

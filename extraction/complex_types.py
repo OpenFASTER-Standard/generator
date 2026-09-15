@@ -25,7 +25,11 @@ from __future__ import annotations
 import xmlschema
 from rdflib import RDF, BNode, Graph, Literal, Namespace, URIRef
 
-from extraction.declarations import extract_attribute_declaration, extract_element_declaration
+from extraction.declarations import (
+    extract_attribute_declaration,
+    extract_documentation,
+    extract_element_declaration,
+)
 from extraction.identity_constraints import extract_identity_constraints
 from extraction.uris import child_uri, type_uri
 
@@ -47,11 +51,16 @@ def extract_complex_type(graph: Graph, xsd_type, uri: URIRef) -> None:
     graph.add((uri, RDF.type, XSDO.ComplexTypeDefinition))
     graph.add((uri, XSDO.targetNamespace, Literal(xsd_type.target_namespace)))
     graph.add((uri, XSDO.abstract, Literal(bool(xsd_type.abstract))))
+    if xsd_type.name is not None:
+        graph.add((uri, XSDO.name, Literal(xsd_type.local_name)))
+    extract_documentation(graph, uri, xsd_type)
 
     if xsd_type.base_type is not None:
         graph.add((uri, XSDO.extends, type_uri(xsd_type.base_type, uri)))
 
-    content_node = _extract_content_model(graph, xsd_type.content, uri)
+    content_node = _extract_content_model(
+        graph, xsd_type.content, uri, skip_particle_ids=_base_particle_ids(xsd_type)
+    )
     graph.add((uri, XSDO.contentModel, content_node))
 
     base_attribute_names = set(xsd_type.attributes.base_attributes or ())
@@ -68,7 +77,42 @@ def extract_complex_type(graph: Graph, xsd_type, uri: URIRef) -> None:
         graph.add((use_node, XSDO["term"], attribute_uri))
 
 
-def _extract_content_model(graph: Graph, group, owner_uri: URIRef) -> BNode:
+def _base_particle_ids(xsd_type) -> frozenset[int]:
+    """Identities of the particles xsd_type.content.iter_model() returns
+    that actually belong to the base type, not to this type's own
+    additional content.
+
+    Real, confirmed xmlschema behavior (see this module's own docstring
+    and the extraction design spec): for an xs:extension type,
+    .content.iter_model() returns ONLY the type's own additional
+    particles *when it actually adds any* (e.g. DLZertifiziert, which
+    adds its own <xs:sequence>). But when an extension adds ONLY
+    attributes (no new element content of its own) -- or is genuinely
+    empty -- xmlschema falls back to returning the BASE type's own
+    content group, whose particles are the exact same Python objects
+    (verified live: identity-equal, not just equal) as
+    base_type.content.iter_model()'s. Left unfiltered, those particles
+    get re-extracted and re-minted under the EXTENDING type's own URI
+    too, duplicating them (confirmed real for 29/53 real extension
+    types in this corpus, e.g. PersonNatDatenType re-duplicating
+    PersonBasisType's own Anschrift, and Meldeart11 -- a genuinely empty
+    extension -- duplicating SelbststaendigeMeldungMitOrdnungsnummerType's
+    entire Verwahrkette/Kontopersonen/KontoListe subtree, identity
+    constraints included).
+
+    This mirrors exactly how extract_complex_type already handles the
+    same real duplication risk for attributes, via
+    xsd_type.attributes.base_attributes.
+    """
+    base_type = xsd_type.base_type
+    if base_type is None:
+        return frozenset()
+    return frozenset(id(p) for p in base_type.content.iter_model())
+
+
+def _extract_content_model(
+    graph: Graph, group, owner_uri: URIRef, skip_particle_ids: frozenset[int] = frozenset()
+) -> BNode:
     if group.model == "all":
         raise NotImplementedError(
             "xs:all is confirmed absent from every real file this extractor "
@@ -80,7 +124,11 @@ def _extract_content_model(graph: Graph, group, owner_uri: URIRef) -> BNode:
         (group_node, RDF.type, XSDO.Choice if group.model == "choice" else XSDO.Sequence)
     )
 
-    for position, particle in enumerate(group.iter_model(), start=1):
+    position = 0
+    for particle in group.iter_model():
+        if id(particle) in skip_particle_ids:
+            continue  # inherited from the base type -- not this type's own
+        position += 1
         particle_node = BNode()
         graph.add((group_node, XSDO.hasParticle, particle_node))
         graph.add((particle_node, XSDO.particlePosition, Literal(position)))

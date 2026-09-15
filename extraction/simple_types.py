@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from rdflib import RDF, BNode, Graph, Literal, Namespace, URIRef
 
+from extraction.documentation import extract_documentation
 from extraction.uris import type_uri, child_uri
 
 XSDO = Namespace("https://purl.openfaster.org/xsdo/")
@@ -33,6 +34,9 @@ _PATTERN_KEY = f"{_XS}pattern"
 
 def extract_simple_type(graph: Graph, xsd_type, uri: URIRef) -> None:
     graph.add((uri, RDF.type, XSDO.SimpleTypeDefinition))
+    if xsd_type.name is not None:
+        graph.add((uri, XSDO.name, Literal(xsd_type.local_name)))
+    extract_documentation(graph, uri, xsd_type)
 
     facets = getattr(xsd_type, "facets", None) or {}
 
