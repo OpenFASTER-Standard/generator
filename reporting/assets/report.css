@@ -1,0 +1,35 @@
+/* reporting/assets/report.css */
+body { font-family: system-ui, sans-serif; margin: 0; color: #1a1a1a; }
+#nav { position: sticky; top: 0; background: #1a1a1a; padding: 0.75rem 1rem;
+       display: flex; gap: 0.5rem; align-items: center; z-index: 10; }
+#nav button { background: #333; color: #fff; border: none; padding: 0.4rem 0.8rem;
+              border-radius: 4px; cursor: pointer; }
+#nav button:hover { background: #555; }
+#nav button.active { background: #0b5fff; }
+#search { margin-left: auto; padding: 0.4rem 0.6rem; border-radius: 4px;
+          border: 1px solid #ccc; min-width: 240px; }
+#app { padding: 1rem 1.5rem; max-width: 1100px; margin: 0 auto; }
+.namespace { margin-bottom: 2rem; }
+.namespace > h3 { border-bottom: 2px solid #ddd; padding-bottom: 0.25rem; }
+.entry { border: 1px solid #e0e0e0; border-radius: 6px; padding: 0.75rem 1rem;
+         margin: 0.5rem 0; background: #fafafa; }
+.entry h4 { margin: 0 0 0.35rem 0; }
+.meta { font-size: 0.9rem; color: #444; margin: 0.15rem 0; }
+.content-model { margin: 0.3rem 0 0.3rem 0.5rem; padding-left: 1rem;
+                 border-left: 2px solid #ddd; list-style: none; }
+.model-kind { font-weight: 600; color: #666; }
+.particle { list-style: none; }
+.attribute-uses, .identity-constraints, .candidates { margin: 0.3rem 0;
+    padding-left: 1.2rem; font-size: 0.9rem; }
+a.ref { color: #0b5fff; text-decoration: none; }
+a.ref:hover { text-decoration: underline; }
+.declaration { background: #fff; border-style: dashed; }
+.doc-group { margin-bottom: 1.5rem; }
+.doc-pair.matched { border-left: 4px solid #2e7d32; }
+.doc-pair.unmatched { border-left: 4px solid #999; }
+.doc-pair.ambiguous { border-left: 4px solid #c62828; }
+.doc-pair .de, .doc-pair .en { font-size: 0.9rem; margin: 0.2rem 0; }
+.issue { font-size: 0.85rem; color: #c62828; margin-top: 0.3rem; }
+.audit-numbers { display: flex; gap: 2rem; font-size: 1.05rem; margin-bottom: 1rem; }
+.audit-issues { list-style: none; padding: 0; }
+.audit-issues li { font-size: 0.9rem; margin: 0.25rem 0; }
