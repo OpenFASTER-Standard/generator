@@ -138,7 +138,10 @@
       box.appendChild(el("div", { class: "meta" }, [text("enumeration: " + t.enumeration.join(", "))]));
     }
     if (t.patterns.length) {
-      box.appendChild(el("div", { class: "meta" }, [text("pattern: " + t.patterns.join(", "))]));
+      box.appendChild(el("div", { class: "meta" }, [text("pattern:")]));
+      t.patterns.forEach(function (p) {
+        box.appendChild(el("code", { class: "pattern-value" }, [text(p)]));
+      });
     }
     if (t.unionMembers.length) {
       var um = el("div", { class: "meta" }, [text("union of: ")]);
@@ -267,10 +270,26 @@
   function renderAudit() {
     var root = el("div", { class: "section", id: "section-audit" });
     var numbers = el("div", { class: "audit-numbers" });
+    // Captions exist because "attachment" and "coverage" are genuinely
+    // different denominators, not two views of the same number: attachment
+    // scans every named construct in the schema (documented or not),
+    // coverage scans only the subset that actually carries German
+    // documentation -- confirmed real gap on the full corpus (415 vs 380
+    // named constructs) that was previously shown as two bare, unexplained
+    // word:number lines.
+    var AUDIT_CAPTIONS = {
+      attachment: "PDF-matching pass over every named construct in the schema " +
+        "(elements, attributes, types) -- documented or not.",
+      coverage: "Same matching, restricted to constructs that actually carry " +
+        "German documentation -- the number that matters for translation completeness.",
+    };
     ["attachment", "coverage"].forEach(function (key) {
       var block = data.audit[key];
       var line = Object.keys(block).map(function (k) { return k + "=" + block[k]; }).join(", ");
-      numbers.appendChild(el("div", {}, [text(key + ": " + line)]));
+      var section = el("div", { class: "audit-block" });
+      section.appendChild(el("div", { class: "audit-caption" }, [text(AUDIT_CAPTIONS[key])]));
+      section.appendChild(el("div", { class: "audit-line" }, [text(key + ": " + line)]));
+      numbers.appendChild(section);
     });
     root.appendChild(numbers);
     var issues = el("ul", { class: "audit-issues" });

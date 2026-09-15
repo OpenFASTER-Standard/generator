@@ -32,6 +32,12 @@ a.ref:hover { text-decoration: underline; }
 .global-declarations > h4 { margin: 0 0 0.35rem 0; color: #666; font-size: 0.95rem; }
 .doc-pair .doc-lang { font-size: 0.9rem; margin: 0.2rem 0; }
 .issue { font-size: 0.85rem; color: #c62828; margin-top: 0.3rem; }
-.audit-numbers { display: flex; gap: 2rem; font-size: 1.05rem; margin-bottom: 1rem; }
+.pattern-value { display: block; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    white-space: pre-wrap; word-break: break-all; background: #f0f0f0; padding: 0.4rem 0.6rem;
+    border-radius: 4px; margin: 0.2rem 0; font-size: 0.85rem; }
+.audit-numbers { display: flex; gap: 2rem; margin-bottom: 1rem; align-items: flex-start; }
+.audit-block { flex: 1; }
+.audit-caption { font-size: 0.8rem; color: #666; margin-bottom: 0.2rem; max-width: 32rem; }
+.audit-line { font-size: 1.05rem; }
 .audit-issues { list-style: none; padding: 0; }
 .audit-issues li { font-size: 0.9rem; margin: 0.25rem 0; }

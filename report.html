@@ -39,7 +39,13 @@ a.ref:hover { text-decoration: underline; }
 .global-declarations > h4 { margin: 0 0 0.35rem 0; color: #666; font-size: 0.95rem; }
 .doc-pair .doc-lang { font-size: 0.9rem; margin: 0.2rem 0; }
 .issue { font-size: 0.85rem; color: #c62828; margin-top: 0.3rem; }
-.audit-numbers { display: flex; gap: 2rem; font-size: 1.05rem; margin-bottom: 1rem; }
+.pattern-value { display: block; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    white-space: pre-wrap; word-break: break-all; background: #f0f0f0; padding: 0.4rem 0.6rem;
+    border-radius: 4px; margin: 0.2rem 0; font-size: 0.85rem; }
+.audit-numbers { display: flex; gap: 2rem; margin-bottom: 1rem; align-items: flex-start; }
+.audit-block { flex: 1; }
+.audit-caption { font-size: 0.8rem; color: #666; margin-bottom: 0.2rem; max-width: 32rem; }
+.audit-line { font-size: 1.05rem; }
 .audit-issues { list-style: none; padding: 0; }
 .audit-issues li { font-size: 0.9rem; margin: 0.25rem 0; }
 
@@ -48,7 +54,7 @@ a.ref:hover { text-decoration: underline; }
 <body>
 <nav id="nav">
   <button data-section="structure" class="active">Structure</button>
-  <button data-section="docs">Documentation Pairs</button>
+  <button data-section="docs">Documentation</button>
   <button data-section="audit">Audit</button>
   <input id="search" type="text" placeholder="Filter by name...">
 </nav>
@@ -195,7 +201,10 @@ a.ref:hover { text-decoration: underline; }
       box.appendChild(el("div", { class: "meta" }, [text("enumeration: " + t.enumeration.join(", "))]));
     }
     if (t.patterns.length) {
-      box.appendChild(el("div", { class: "meta" }, [text("pattern: " + t.patterns.join(", "))]));
+      box.appendChild(el("div", { class: "meta" }, [text("pattern:")]));
+      t.patterns.forEach(function (p) {
+        box.appendChild(el("code", { class: "pattern-value" }, [text(p)]));
+      });
     }
     if (t.unionMembers.length) {
       var um = el("div", { class: "meta" }, [text("union of: ")]);
@@ -324,10 +333,26 @@ a.ref:hover { text-decoration: underline; }
   function renderAudit() {
     var root = el("div", { class: "section", id: "section-audit" });
     var numbers = el("div", { class: "audit-numbers" });
+    // Captions exist because "attachment" and "coverage" are genuinely
+    // different denominators, not two views of the same number: attachment
+    // scans every named construct in the schema (documented or not),
+    // coverage scans only the subset that actually carries German
+    // documentation -- confirmed real gap on the full corpus (415 vs 380
+    // named constructs) that was previously shown as two bare, unexplained
+    // word:number lines.
+    var AUDIT_CAPTIONS = {
+      attachment: "PDF-matching pass over every named construct in the schema " +
+        "(elements, attributes, types) -- documented or not.",
+      coverage: "Same matching, restricted to constructs that actually carry " +
+        "German documentation -- the number that matters for translation completeness.",
+    };
     ["attachment", "coverage"].forEach(function (key) {
       var block = data.audit[key];
       var line = Object.keys(block).map(function (k) { return k + "=" + block[k]; }).join(", ");
-      numbers.appendChild(el("div", {}, [text(key + ": " + line)]));
+      var section = el("div", { class: "audit-block" });
+      section.appendChild(el("div", { class: "audit-caption" }, [text(AUDIT_CAPTIONS[key])]));
+      section.appendChild(el("div", { class: "audit-line" }, [text(key + ": " + line)]));
+      numbers.appendChild(section);
     });
     root.appendChild(numbers);
     var issues = el("ul", { class: "audit-issues" });
