@@ -138,12 +138,14 @@ Verified feasible directly, not assumed:
   written. Carries the full `xsdo:` graph `extract()` +
   `attach_english_documentation()` produce, plus run metadata (source
   XSD/PDF paths and content hashes) in a small `graph:runs-index`.
+  **Provenance quads for that run's own facts live in this same named
+  graph**, not a separate one (refined during planning: a provenance
+  record is meaningless without the specific run it describes anyway, so
+  named-graph-per-run already gives provenance the isolation a separate
+  `graph:prov` would have added no real value over).
 - `graph:corrections` — append-only. Correction proposals and
   approval/rejection decisions. Never edited or deleted in place; a
   change is always a new record.
-- `graph:prov` — RDF-star provenance quads, one per tracked fact
-  (documentation text today; extensible to any future prose field
-  without a schema change).
 - `current` is not stored — it's computed: the latest `graph:run-*` with
   any *approved* correction from `graph:corrections` overlaid.
 
@@ -304,8 +306,18 @@ built to static assets served by `webapp`.
 - `python -m webapp serve` opens (or creates) the store, runs extraction
   if no runs exist yet, and serves the real MiKaDiv-FM corpus through the
   new frontend.
-- Every documentation fact shows a working glance marker and expand panel
-  with a real citation (PDF crop or XSD fragment) — no re-typed text.
+- Every documentation fact shows a working glance marker and expand
+  panel. Every subject with attached English text (any construct, local
+  or global) gets a real PDF-crop citation. Every *globally-named*
+  construct (a named `complexType`/`simpleType`/global element — 138 of
+  377 real documented subjects, confirmed) with German text gets a real
+  XSD-fragment citation. The remaining locally-scoped declarations (239
+  of 377 — element/attribute declarations nested inside a type) get
+  German provenance only as "this run, this file" rather than an exact
+  fragment, since recovering their exact source component needs
+  `extraction/`'s own internals (which mint their URIs) to track that
+  mapping — a real, explicitly scoped-out follow-up, not a silent gap
+  (see Plan C's own Task 18 for the confirmed numbers and reasoning).
 - A correction can be proposed, approved by a *different* reviewer, and
   is reflected in `current`; a self-approval attempt is rejected; a
   correction whose source value changed in a later run shows as `stale`.
