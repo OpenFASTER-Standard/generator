@@ -3,6 +3,16 @@
   var data = JSON.parse(document.getElementById("report-data").textContent);
   var app = document.getElementById("app");
 
+  // Fix 4 (final whole-branch review): populated as a side effect of
+  // every renderTermRef call below, so the structure walk knows exactly
+  // which declarations WERE reached via some particle/attribute-use ref.
+  // Anything left over after the whole walk (the schema's own single,
+  // truly-global root element -- referenced by nobody's content model,
+  // since it's the document's own entry point -- and any future
+  // schema's equivalent) gets rendered in its own "Global declarations"
+  // subsection so it isn't invisible in §1.
+  var referencedDeclarationUris = new Set();
+
   function el(tag, attrs, children) {
     var e = document.createElement(tag);
     attrs = attrs || {};
@@ -40,6 +50,7 @@
   function renderTermRef(ref) {
     var decl = data.declarations[ref];
     if (!decl) return refLink(ref);
+    referencedDeclarationUris.add(ref);
     var box = el("div", { class: "entry declaration", id: "decl:" + ref, "data-name": decl.name });
     box.appendChild(el("h4", {}, [text(decl.kind + " " + decl.name)]));
     if (decl.type) {
@@ -142,14 +153,45 @@
 
   function renderStructure() {
     var root = el("div", { class: "section", id: "section-structure" });
+    var nsBoxes = {};
     Object.keys(data.structure).sort().forEach(function (ns) {
       var nsBlock = data.structure[ns];
       var nsBox = el("div", { class: "namespace" });
       nsBox.appendChild(el("h3", {}, [text(ns)]));
       nsBlock.complexTypes.forEach(function (t) { nsBox.appendChild(renderComplexType(t)); });
       nsBlock.simpleTypes.forEach(function (t) { nsBox.appendChild(renderSimpleType(t)); });
+      nsBoxes[ns] = nsBox;
       root.appendChild(nsBox);
     });
+
+    // Fix 4: anything in data.declarations never reached by the walk
+    // above (via renderTermRef) gets its own "Global declarations"
+    // subsection, grouped by the same uri.split("#", 1)[0] namespace
+    // convention reporting/data.py's own build_structure uses. Wrapped
+    // in a .doc-group (not just a bare heading) so the search filter's
+    // empty-container-hiding logic (Fix 3) applies to it too.
+    var unreferencedByNamespace = {};
+    Object.keys(data.declarations).forEach(function (uri) {
+      if (referencedDeclarationUris.has(uri)) return;
+      var ns = uri.split("#")[0];
+      (unreferencedByNamespace[ns] = unreferencedByNamespace[ns] || []).push(uri);
+    });
+    Object.keys(unreferencedByNamespace).sort().forEach(function (ns) {
+      var nsBox = nsBoxes[ns];
+      if (!nsBox) {
+        nsBox = el("div", { class: "namespace" });
+        nsBox.appendChild(el("h3", {}, [text(ns)]));
+        nsBoxes[ns] = nsBox;
+        root.appendChild(nsBox);
+      }
+      var groupBox = el("div", { class: "doc-group global-declarations" });
+      groupBox.appendChild(el("h4", {}, [text("Global declarations")]));
+      unreferencedByNamespace[ns].sort().forEach(function (uri) {
+        groupBox.appendChild(renderTermRef(uri));
+      });
+      nsBox.appendChild(groupBox);
+    });
+
     return root;
   }
 
@@ -162,7 +204,12 @@
       class: "entry doc-pair " + kind, id: "doc:" + pair.uri, "data-name": pair.name,
     });
     box.appendChild(el("h4", {}, [text(pair.name)]));
-    box.appendChild(el("div", { class: "de" }, [text("DE: " + pair.de)]));
+    // Fix 1: an "englishOnly" pair has no "de" field at all (that's the
+    // whole point -- no German documentation exists for it), so the DE
+    // line only renders when there is one.
+    if (pair.de !== undefined) {
+      box.appendChild(el("div", { class: "de" }, [text("DE: " + pair.de)]));
+    }
     if (kind === "matched") {
       box.appendChild(el("div", { class: "en" }, [text("EN: " + pair.en)]));
       pair.issues.forEach(function (issue) {
@@ -172,13 +219,21 @@
       var cand = el("ul", { class: "candidates" });
       pair.candidates.forEach(function (c) { cand.appendChild(el("li", {}, [text(c)])); });
       box.appendChild(cand);
+    } else if (kind === "englishOnly") {
+      box.appendChild(el("div", { class: "en" }, [text("EN: " + pair.en)]));
     }
     return box;
   }
 
   function renderDocs() {
     var root = el("div", { class: "section", id: "section-docs" });
-    [["matched", "Matched"], ["unmatched", "Unmatched"], ["ambiguous", "Ambiguous"]]
+    // Fix 1 (final whole-branch review): "English-only" is a 4th real
+    // group (reporting/data.py's build_documentation_pairs) for subjects
+    // with real @en documentation but no German at all -- previously
+    // silently dropped entirely; now rendered like the other 3 groups so
+    // §2's total subject count reconciles with §3's coverage total.
+    [["matched", "Matched"], ["unmatched", "Unmatched"], ["ambiguous", "Ambiguous"],
+     ["englishOnly", "English-only"]]
       .forEach(function (pair) {
         var key = pair[0], label = pair[1];
         var groupBox = el("div", { class: "doc-group" });
@@ -233,11 +288,66 @@
     });
   });
 
-  document.getElementById("search").addEventListener("input", function (e) {
-    var term = e.target.value.toLowerCase();
-    document.querySelectorAll(".entry").forEach(function (entry) {
-      var name = (entry.dataset.name || "").toLowerCase();
-      entry.style.display = name.indexOf(term) === -1 ? "none" : "";
+  // Fix 3 (final whole-branch review): the previous logic hid a
+  // non-matching .entry outright, including complex/simple-type entries
+  // that CONTAIN a matching declaration .entry (renderTermRef nests
+  // declarations inside their containing type's own .entry) -- via
+  // normal DOM/CSS containment, hiding the parent also hides the
+  // matching child, even though the child itself was never told to hide.
+  // Verified live: searching "Paymentlines" (a real element name; most
+  // real Structure entries are nested declarations, not top-level types)
+  // returned zero visible results. The Audit section's issue <li>
+  // elements also had no hookup into search at all.
+  //
+  // Fix: collect every candidate (.entry, plus Audit's own issue <li>s),
+  // find which ones match the term directly, then walk UP the DOM from
+  // each match and mark every ancestor .entry/.namespace/.doc-group as
+  // visible too -- so a matching nested declaration keeps its parent
+  // type (and that type's own namespace) visible. Anything not matched
+  // and not an ancestor of a match stays hidden, which also naturally
+  // hides a namespace/doc-group left with zero visible entries.
+  function searchCandidates() {
+    return document.querySelectorAll(".entry, .audit-issues li");
+  }
+
+  function containerAncestors() {
+    return document.querySelectorAll(".namespace, .doc-group");
+  }
+
+  function applySearchFilter(term) {
+    term = term.toLowerCase();
+    var candidates = searchCandidates();
+    var containers = containerAncestors();
+
+    if (!term) {
+      candidates.forEach(function (c) { c.style.display = ""; });
+      containers.forEach(function (c) { c.style.display = ""; });
+      return;
+    }
+
+    candidates.forEach(function (c) { c.style.display = "none"; });
+    containers.forEach(function (c) { c.style.display = "none"; });
+
+    candidates.forEach(function (c) {
+      var name = (c.dataset.name || "").toLowerCase();
+      if (name.indexOf(term) === -1) return;
+      c.style.display = "";
+      var node = c.parentElement;
+      while (node && node !== app) {
+        if (
+          node.classList &&
+          (node.classList.contains("entry") ||
+            node.classList.contains("namespace") ||
+            node.classList.contains("doc-group"))
+        ) {
+          node.style.display = "";
+        }
+        node = node.parentElement;
+      }
     });
+  }
+
+  document.getElementById("search").addEventListener("input", function (e) {
+    applySearchFilter(e.target.value);
   });
 })();
