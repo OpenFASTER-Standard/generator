@@ -154,3 +154,104 @@ def build_structure(graph: Graph) -> dict:
         structure[ns]["simpleTypes"].append(_build_simple_type(graph, type_uri))
 
     return structure
+
+
+def build_declarations(graph: Graph) -> dict:
+    declarations: dict[str, dict] = {}
+    for kind_label, rdf_type in (
+        ("Element", XSDO.ElementDeclaration),
+        ("Attribute", XSDO.AttributeDeclaration),
+    ):
+        for uri in graph.subjects(RDF.type, rdf_type):
+            type_ref = graph.value(uri, XSDO.type)
+            default = graph.value(uri, XSDO.defaultValue)
+            fixed = graph.value(uri, XSDO.fixedValue)
+            docs = list(graph.objects(uri, XSDO.documentation))
+            de = next((str(d) for d in docs if d.language in (None, "de")), None)
+            en = next((str(d) for d in docs if d.language == "en"), None)
+            declarations[str(uri)] = {
+                "name": str(graph.value(uri, XSDO.name)),
+                "kind": kind_label,
+                "type": str(type_ref) if type_ref is not None else None,
+                "default": str(default) if default is not None else None,
+                "fixed": str(fixed) if fixed is not None else None,
+                "documentation": {"de": de, "en": en},
+            }
+    return declarations
+
+
+def build_documentation_pairs(
+    graph: Graph, occurrences: dict[str, list[str]], plausibility_issues: list
+) -> dict:
+    issues_by_name: dict[str, list[dict]] = {}
+    for issue in plausibility_issues:
+        issues_by_name.setdefault(issue.subject_name, []).append(
+            {"kind": issue.kind, "detail": issue.detail}
+        )
+
+    matched, unmatched, ambiguous = [], [], []
+    for subject in set(graph.subjects(XSDO.documentation, None)):
+        name_literal = graph.value(subject, XSDO.name)
+        name = str(name_literal) if name_literal is not None else str(subject)
+        docs = list(graph.objects(subject, XSDO.documentation))
+        de = next((str(d) for d in docs if d.language in (None, "de")), None)
+        en = next((str(d) for d in docs if d.language == "en"), None)
+        if de is None:
+            continue  # every real documented subject in this corpus has German
+
+        if en is not None:
+            matched.append(
+                {
+                    "uri": str(subject), "name": name, "de": de, "en": en,
+                    "issues": issues_by_name.get(name, []),
+                }
+            )
+            continue
+
+        candidates = occurrences.get(name, [])
+        if len(set(candidates)) > 1:
+            ambiguous.append(
+                {
+                    "uri": str(subject), "name": name, "de": de,
+                    "candidates": sorted(set(candidates)),
+                }
+            )
+        else:
+            unmatched.append({"uri": str(subject), "name": name, "de": de})
+
+    return {"matched": matched, "unmatched": unmatched, "ambiguous": ambiguous}
+
+
+def build_audit(attachment, coverage, plausibility_issues: list) -> dict:
+    return {
+        "attachment": {
+            "attached": len(attachment.attached),
+            "ambiguous": len(attachment.ambiguous),
+            "unmatched": len(attachment.unmatched),
+        },
+        "coverage": {
+            "total": coverage.total_documented_subjects,
+            "attached": coverage.attached,
+            "ambiguous": coverage.ambiguous,
+            "unmatched": coverage.unmatched,
+        },
+        "issues": [
+            {"kind": i.kind, "subjectName": i.subject_name, "detail": i.detail}
+            for i in plausibility_issues
+        ],
+    }
+
+
+def build_report_data(
+    graph: Graph,
+    occurrences: dict[str, list[str]],
+    plausibility_issues: list,
+    coverage,
+    attachment,
+) -> dict:
+    return {
+        "structure": build_structure(graph),
+        "declarations": build_declarations(graph),
+        "documentationPairs": build_documentation_pairs(graph, occurrences, plausibility_issues),
+        "audit": build_audit(attachment, coverage, plausibility_issues),
+    }
