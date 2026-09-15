@@ -26,6 +26,7 @@ occurrences disagree, rather than silently picking one.
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 
 import pdfplumber
@@ -38,6 +39,30 @@ _MARGIN_X = 70.0  # real section headings start at x0~=60; "Used by"
                    # confirmed live against MiKaDiv_FM_1.02's real
                    # DLMeldepflichtig/MeldungListe45cType page.
 _COLUMN_X_TOLERANCE = 5.0
+
+# Real, confirmed page-footer artifact (Fix 2, final whole-branch review):
+# every one of this PDF's 262 real pages (792pt tall) has a lone page-number
+# line in its footer, a single word matching \d{1,3}, at top~=736.0 -- with a
+# hard, exception-free gap against real body content, whose lowest real line
+# was confirmed (by inspecting every page's own word positions directly) to
+# never exceed top=710.5. Before this fix, TRAILING_DOC's own accumulation
+# didn't recognize this line and appended the page number straight onto the
+# current heading's documentation text (e.g. "Official serial number. 196"
+# for AOrdNr) -- corrupting 13 real names' attached English text, and
+# fabricating false ambiguity for at least 4 more names whose real
+# occurrences were otherwise byte-identical except for a trailing page
+# number (e.g. Adresse, Anschrift).
+_PAGE_FOOTER_TOP_THRESHOLD = 720.0
+_PAGE_FOOTER_PATTERN = re.compile(r"\d{1,3}")
+
+
+def _is_page_footer_line(texts: list[str], top: float) -> bool:
+    return (
+        len(texts) == 1
+        and bool(_PAGE_FOOTER_PATTERN.fullmatch(texts[0]))
+        and top > _PAGE_FOOTER_TOP_THRESHOLD
+    )
+
 
 # Real artifact, confirmed on pages 213-214: a long element path
 # occasionally doesn't fit on its own heading line and wraps onto the
@@ -147,6 +172,14 @@ def extract_name_occurrences(pdf_path: str) -> dict[str, list[str]]:
                 line = lines[top]
                 texts = [w["text"] for w in line]
                 joined = "".join(texts)
+
+                if _is_page_footer_line(texts, top):
+                    # Skip a lone page-number footer line entirely -- it
+                    # must never be accumulated into TRAILING_DOC's or
+                    # ATTRIBUTES' row-continuation text (see this module's
+                    # own _is_page_footer_line docstring/comment above).
+                    idx += 1
+                    continue
 
                 # "simpleType" is a real, common heading-start keyword too (44
                 # real headings, pages 63-75/155-156/205/215/259-260) --

@@ -212,3 +212,30 @@ def test_simpletype_headings_start_their_own_section_instead_of_being_swallowed(
     assert occurrences["WertpapierArtType"] == [
         "Type used to define the type of securities."
     ]
+
+
+def test_page_footer_page_numbers_no_longer_leak_into_attached_documentation():
+    # Fix 2 (final whole-branch review, Critical bug): TRAILING_DOC's own
+    # accumulation didn't recognize a page's own footer (a lone page-number
+    # line near the bottom of the page) and appended it straight onto the
+    # current heading's documentation -- confirmed real, pre-fix corrupted
+    # text for at least 13 real names, 3 of them asserted directly here.
+    occurrences = extract_name_occurrences(ANNEX_PDF)
+
+    assert occurrences["AOrdNr"] == ["Official serial number."]
+    assert occurrences["Abgaenge"] == ["Information on securities sold."]
+    assert occurrences["AbgefKapitalertragsteuer"] == [
+        "Withheld capital income tax pursuant to section 44 (1a) EStG."
+    ]
+
+
+def test_names_that_only_differed_by_a_trailing_page_number_are_no_longer_falsely_ambiguous():
+    # Fix 2: before the page-footer fix, these real names' otherwise
+    # byte-identical occurrences disagreed only in their trailing page
+    # number, fabricating false ambiguity -- attach_english_documentation
+    # would refuse to attach a real, genuinely unambiguous translation.
+    occurrences = extract_name_occurrences(ANNEX_PDF)
+
+    for name in ("Adresse", "Anschrift", "Miteigentuemer", "NichtNatAuslandNoStNr"):
+        distinct_texts = set(occurrences[name])
+        assert len(distinct_texts) == 1, f"{name} unexpectedly still ambiguous: {distinct_texts}"

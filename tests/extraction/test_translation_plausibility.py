@@ -113,6 +113,74 @@ def test_genuine_prose_is_not_flagged_as_a_structural_artifact():
     assert not any(i.kind == "structural_artifact" for i in issues)
 
 
+def test_extra_english_only_token_is_flagged_by_extra_shared_token():
+    # Fix 2 (final whole-branch review): the reverse-direction counterpart
+    # to missing_shared_token -- reconstructs the real page-footer bug's
+    # shape (a stray trailing page number appended only to the English
+    # text, e.g. real pre-fix "Official serial number. 196").
+    graph = Graph()
+    _documented(
+        graph, EX.StrayPageNumber,
+        "Amtliche Ordnungsnummer.",
+        "Official serial number. 196",
+    )
+
+    issues = check_translation_plausibility(graph)
+
+    assert any(
+        i.kind == "extra_shared_token" and i.subject_name == "Test" and "196" in i.detail
+        for i in issues
+    )
+
+
+def test_extra_shared_token_stays_silent_on_genuine_matched_prose():
+    graph = Graph()
+    _documented(
+        graph, EX.GenuineProse,
+        "Meldung nach § 45b Absatz 6 EStG.",
+        "Report pursuant to section 45b (6) EStG.",
+    )
+
+    issues = check_translation_plausibility(graph)
+
+    assert not any(i.kind == "extra_shared_token" for i in issues)
+
+
+def test_byte_identical_untranslated_pair_is_flagged():
+    # Fix 4 (final whole-branch review): a real, confirmed-live untranslated
+    # source entry -- BruttoBescheinigteSteuern's real German sentence,
+    # attached verbatim (still German) as if it were the English text.
+    graph = Graph()
+    _documented(
+        graph, EX.Untranslated,
+        "Liste aller Bruttobeträge bescheinigter Steuern.",
+        "Liste aller Bruttobeträge bescheinigter Steuern.",
+    )
+
+    issues = check_translation_plausibility(graph)
+
+    assert any(i.kind == "untranslated" and i.subject_name == "Test" for i in issues)
+
+
+def test_acronym_shaped_identical_pair_is_not_flagged_as_untranslated():
+    # COAF is a real, confirmed exception: its own real German
+    # xs:documentation is already the English phrase "Corporate Action
+    # Event Reference." (an untranslated technical loanword, not a gap) --
+    # confirmed directly in MiKaDiv_FM_Fachtypen_1.02.xsd.
+    graph = Graph()
+    subject = EX.Coaf
+    graph.add((subject, RDF.type, XSDO.AttributeDeclaration))
+    graph.add((subject, XSDO.name, Literal("COAF")))
+    graph.add((subject, XSDO.documentation, Literal("Corporate Action Event Reference.")))
+    graph.add(
+        (subject, XSDO.documentation, Literal("Corporate Action Event Reference.", lang="en"))
+    )
+
+    issues = check_translation_plausibility(graph)
+
+    assert not any(i.kind == "untranslated" for i in issues)
+
+
 def test_coverage_report_counts_every_real_documented_subject():
     graph = Graph()
     matched = EX.Matched
