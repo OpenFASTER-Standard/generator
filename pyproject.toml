@@ -24,4 +24,4 @@ dev = ["pytest>=8.0"]
 testpaths = ["tests"]
 
 [tool.setuptools.packages.find]
-include = ["extraction*", "generation*", "equivalence*", "ingestion*"]
+include = ["extraction*", "generation*", "equivalence*", "ingestion*", "reporting*"]
