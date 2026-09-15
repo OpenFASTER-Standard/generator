@@ -183,43 +183,97 @@ def build_declarations(graph: Graph) -> dict:
 def build_documentation_pairs(
     graph: Graph, occurrences: dict[str, list[str]], plausibility_issues: list
 ) -> dict:
-    issues_by_name: dict[str, list[dict]] = {}
-    for issue in plausibility_issues:
-        issues_by_name.setdefault(issue.subject_name, []).append(
-            {"kind": issue.kind, "detail": issue.detail}
-        )
-
-    matched, unmatched, ambiguous = [], [], []
+    # First pass: resolve every real documented subject's own name/de/en
+    # once, and count how many distinct MATCHED (both de+en present)
+    # subjects share the same real xsdo:name. Fix 5 (final whole-branch
+    # review): extraction.translation_plausibility.PlausibilityIssue only
+    # carries a bare subject_name, never a URI, so an issue for a name
+    # shared by 2+ real matched subjects (confirmed real: WIdNr names both
+    # MeldepflichtigeStelleType.@WIdNr and IdMerkmalNNPType.@WIdNr, with
+    # different real German text lengths) can't be safely attributed to
+    # either one specifically.
+    resolved = []
+    matched_name_counts: dict[str, int] = {}
     for subject in set(graph.subjects(XSDO.documentation, None)):
         name_literal = graph.value(subject, XSDO.name)
         name = str(name_literal) if name_literal is not None else str(subject)
         docs = list(graph.objects(subject, XSDO.documentation))
         de = next((str(d) for d in docs if d.language in (None, "de")), None)
         en = next((str(d) for d in docs if d.language == "en"), None)
+        resolved.append((subject, name, de, en))
+        if de is not None and en is not None:
+            matched_name_counts[name] = matched_name_counts.get(name, 0) + 1
+
+    issues_by_name: dict[str, list[dict]] = {}
+    for issue in plausibility_issues:
+        issues_by_name.setdefault(issue.subject_name, []).append(
+            {"kind": issue.kind, "detail": issue.detail}
+        )
+    # Fix 2 (final whole-branch review): plausibility_issues' own order is
+    # itself non-deterministic (check_translation_plausibility, already
+    # merged in extraction/, iterates a set()) -- sort each per-name group
+    # so a subject with 2+ real issues always lists them in the same order.
+    for issue_list in issues_by_name.values():
+        issue_list.sort(key=lambda i: (i["kind"], i["detail"]))
+
+    matched, unmatched, ambiguous, english_only = [], [], [], []
+    for subject, name, de, en in resolved:
+        uri = str(subject)
+
+        # Fix 1 (final whole-branch review): a subject can have real @en
+        # documentation with no German at all (confirmed real: 3 such
+        # subjects, including one whose English text is the literally
+        # corrupted PDF artifact "Documentati on") -- these used to be
+        # silently `continue`-past here, vanishing from §2 entirely even
+        # though §3's coverage total (build_audit, via
+        # CoverageReport.total_documented_subjects) counts every subject
+        # with ANY xsdo:documentation triple, German or not. Giving them
+        # their own group keeps §2's total subject count reconciled with
+        # §3's.
         if de is None:
-            continue  # every real documented subject in this corpus has German
+            if en is not None:
+                english_only.append({"uri": uri, "name": name, "en": en})
+            continue
 
         if en is not None:
-            matched.append(
-                {
-                    "uri": str(subject), "name": name, "de": de, "en": en,
-                    "issues": issues_by_name.get(name, []),
-                }
-            )
+            # Fix 5: don't attach a name-keyed issue when that name is
+            # ambiguous across 2+ real matched subjects -- skip attaching
+            # it to either specific subject's own "issues" list here
+            # rather than display a possibly factually-wrong claim. The
+            # flat §3 issue list (build_audit) still shows every real
+            # issue regardless -- it never claimed to be scoped to one
+            # specific subject's own text in the first place.
+            issues = issues_by_name.get(name, []) if matched_name_counts.get(name, 0) <= 1 else []
+            matched.append({"uri": uri, "name": name, "de": de, "en": en, "issues": issues})
             continue
 
         candidates = occurrences.get(name, [])
         if len(set(candidates)) > 1:
             ambiguous.append(
                 {
-                    "uri": str(subject), "name": name, "de": de,
+                    "uri": uri, "name": name, "de": de,
                     "candidates": sorted(set(candidates)),
                 }
             )
         else:
-            unmatched.append({"uri": str(subject), "name": name, "de": de})
+            unmatched.append({"uri": uri, "name": name, "de": de})
 
-    return {"matched": matched, "unmatched": unmatched, "ambiguous": ambiguous}
+    # Fix 2: the subject universe above is walked via set(...), whose
+    # iteration order depends on PYTHONHASHSEED -- sort every output list
+    # deterministically so regenerating the report from identical inputs
+    # never reorders its content (a stable, human-sensible reading order:
+    # by name, then by URI to break ties between same-named subjects).
+    matched.sort(key=lambda p: (p["name"], p["uri"]))
+    unmatched.sort(key=lambda p: (p["name"], p["uri"]))
+    ambiguous.sort(key=lambda p: (p["name"], p["uri"]))
+    english_only.sort(key=lambda p: (p["name"], p["uri"]))
+
+    return {
+        "matched": matched,
+        "unmatched": unmatched,
+        "ambiguous": ambiguous,
+        "englishOnly": english_only,
+    }
 
 
 def build_audit(attachment, coverage, plausibility_issues: list) -> dict:
@@ -235,10 +289,18 @@ def build_audit(attachment, coverage, plausibility_issues: list) -> dict:
             "ambiguous": coverage.ambiguous,
             "unmatched": coverage.unmatched,
         },
-        "issues": [
-            {"kind": i.kind, "subjectName": i.subject_name, "detail": i.detail}
-            for i in plausibility_issues
-        ],
+        # Fix 2 (final whole-branch review): check_translation_plausibility
+        # (already merged in extraction/) iterates a set(), so
+        # plausibility_issues' own order is non-deterministic across
+        # process runs -- sort here so regenerating the report from
+        # identical inputs never reorders §3's issue list.
+        "issues": sorted(
+            (
+                {"kind": i.kind, "subjectName": i.subject_name, "detail": i.detail}
+                for i in plausibility_issues
+            ),
+            key=lambda i: (i["subjectName"], i["kind"]),
+        ),
     }
 
 
