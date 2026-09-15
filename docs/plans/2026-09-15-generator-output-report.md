@@ -410,15 +410,41 @@ def build_structure(graph: Graph) -> dict:
     return structure
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [ ] **Step 4: Register the new package with the editable install**
+
+**Real, verified-necessary step, not optional.** This project's `openfaster-generator` package is installed via `pip install -e .` (editable install), which on this Python/setuptools version uses a finder-based mechanism with a **hardcoded package-name-to-path mapping baked in at install time** (`/usr/local/lib/python3.11/dist-packages/__editable___openfaster_generator_0_1_0_finder.py`, a real, inspectable file) — confirmed live: that mapping currently only lists `equivalence`/`extraction`/`generation`/`ingestion`, so `import reporting` fails with `ModuleNotFoundError` even after `reporting/__init__.py` exists on disk, until the mapping itself is regenerated. Every later task's tests depend on `import reporting` working, so this must happen now, in Task 1, not deferred to Task 4.
+
+In `pyproject.toml`, change:
+```toml
+[tool.setuptools.packages.find]
+include = ["extraction*", "generation*", "equivalence*", "ingestion*"]
+```
+to:
+```toml
+[tool.setuptools.packages.find]
+include = ["extraction*", "generation*", "equivalence*", "ingestion*", "reporting*"]
+```
+
+Then re-run (matching this project's own established pattern for installing/registering packages in this environment):
+```bash
+cd /work/generator && python3 -m pip install -e . --break-system-packages
+```
+
+Verify the fix directly:
+```bash
+cd /work && python3 -c "import reporting; print(reporting.__file__)"
+```
+Expected: prints `/work/generator/reporting/__init__.py`, no error.
+
+- [ ] **Step 5: Run tests to verify they pass**
 
 Run: `cd /work && python3 -m pytest generator/tests/reporting/test_data_structure.py -v`
 Expected: PASS, 4/4
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add reporting/__init__.py reporting/data.py tests/reporting/
+git add reporting/__init__.py reporting/data.py tests/reporting/ pyproject.toml
 git commit -m "feat: add structure-tree section of the report data model"
 ```
 
@@ -1130,28 +1156,15 @@ git commit -m "feat: add self-contained HTML/CSS/JS report shell and renderer"
 
 **Files:**
 - Create: `reporting/__main__.py`
-- Modify: `pyproject.toml` (add `"reporting*"` to `[tool.setuptools.packages.find]`'s `include` list)
 - Create: `report.html` (in `/work/generator`, the real, committed report)
 - Test: `tests/reporting/test_cli_smoke.py`
 
 **Interfaces:**
 - Consumes: `build_report_data` (Task 2), `render_report` (Task 3), and the already-merged `extraction.extract.extract`, `extraction.annex_pdf.attach_english_documentation`/`extract_name_occurrences`, `extraction.translation_plausibility.check_translation_coverage`/`check_translation_plausibility`.
 - Produces: a `main()` function run via `python -m reporting <xsd_path> <pdf_path> -o <output>`.
+- The `reporting*` package-include entry and the editable-install re-registration already happened in Task 1, Step 4 — nothing left to do for that here.
 
-- [ ] **Step 1: Add `reporting*` to the package include list**
-
-In `pyproject.toml`, change:
-```toml
-[tool.setuptools.packages.find]
-include = ["extraction*", "generation*", "equivalence*", "ingestion*"]
-```
-to:
-```toml
-[tool.setuptools.packages.find]
-include = ["extraction*", "generation*", "equivalence*", "ingestion*", "reporting*"]
-```
-
-- [ ] **Step 2: Write the failing smoke test**
+- [ ] **Step 1: Write the failing smoke test**
 
 ```python
 # tests/reporting/test_cli_smoke.py
@@ -1160,12 +1173,18 @@ real pipeline end to end and produces a non-trivial HTML file. This is
 deliberately not a mock of the pipeline -- it's the same real pipeline
 the operator will actually run, exercised once here so a real breakage
 (e.g. an import error, an argument-parsing bug) fails in CI/test runs
-too, not only when a human happens to run the CLI by hand."""
+too, not only when a human happens to run the CLI by hand.
+
+Both real fixture paths are given as absolute paths, and the subprocess
+runs with cwd=/work/generator explicitly -- this repo's real fixture
+files live in a separate sibling repo at /work/ontologies/, so a
+cwd-relative path here would resolve incorrectly regardless of which
+directory pytest itself happens to be invoked from."""
 import subprocess
 import sys
 
-ROOT_XSD = "ontologies/mikadiv-fm/sources/xsd/MiKaDiv_FM_1.02.xsd"
-ANNEX_PDF = "ontologies/mikadiv-fm/sources/khb/khb_mikadiv_fm_anlage_en_v3.pdf"
+ROOT_XSD = "/work/ontologies/mikadiv-fm/sources/xsd/MiKaDiv_FM_1.02.xsd"
+ANNEX_PDF = "/work/ontologies/mikadiv-fm/sources/khb/khb_mikadiv_fm_anlage_en_v3.pdf"
 
 
 def test_cli_generates_a_real_non_trivial_report(tmp_path):
@@ -1173,7 +1192,7 @@ def test_cli_generates_a_real_non_trivial_report(tmp_path):
 
     result = subprocess.run(
         [sys.executable, "-m", "reporting", ROOT_XSD, ANNEX_PDF, "-o", str(output)],
-        cwd="generator",
+        cwd="/work/generator",
         capture_output=True,
         text=True,
         timeout=180,
@@ -1186,12 +1205,12 @@ def test_cli_generates_a_real_non_trivial_report(tmp_path):
     assert len(html) > 100_000  # a real, non-trivial report, not an empty shell
 ```
 
-- [ ] **Step 3: Run the test to verify it fails**
+- [ ] **Step 2: Run the test to verify it fails**
 
 Run: `cd /work && python3 -m pytest generator/tests/reporting/test_cli_smoke.py -v`
 Expected: FAIL — `reporting/__main__.py` doesn't exist yet, so `python -m reporting` exits non-zero with a "No module named reporting.__main__" error, and the assertion on `result.returncode == 0` fails.
 
-- [ ] **Step 4: Write the implementation**
+- [ ] **Step 3: Write the implementation**
 
 ```python
 # reporting/__main__.py
@@ -1244,26 +1263,28 @@ if __name__ == "__main__":
     main()
 ```
 
-- [ ] **Step 5: Run the test to verify it passes**
+- [ ] **Step 4: Run the test to verify it passes**
 
 Run: `cd /work && python3 -m pytest generator/tests/reporting/test_cli_smoke.py -v`
 Expected: PASS, 1/1
 
-- [ ] **Step 6: Run the full reporting test suite**
+- [ ] **Step 5: Run the full reporting test suite**
 
 Run: `cd /work && python3 -m pytest generator/tests/reporting/ -v`
 Expected: PASS, all tests across all 4 tasks
 
-- [ ] **Step 7: Generate the real report for the operator to actually look at**
+- [ ] **Step 6: Generate the real report for the operator to actually look at**
+
+Run from `/work`, not `/work/generator` — the real fixture files live at `/work/ontologies/...`, and `python -m reporting` resolves correctly regardless of cwd (it's a real, top-level editable-installed package, not a submodule of anything path-relative):
 
 ```bash
-cd /work/generator
-python3 -m reporting ontologies/mikadiv-fm/sources/xsd/MiKaDiv_FM_1.02.xsd ontologies/mikadiv-fm/sources/khb/khb_mikadiv_fm_anlage_en_v3.pdf -o report.html
+cd /work
+python3 -m reporting ontologies/mikadiv-fm/sources/xsd/MiKaDiv_FM_1.02.xsd ontologies/mikadiv-fm/sources/khb/khb_mikadiv_fm_anlage_en_v3.pdf -o generator/report.html
 ```
 
 Confirm the printed byte count is non-trivial (hundreds of KB expected, given the real corpus's ~415 documented subjects and ~415 real types/elements/attributes).
 
-- [ ] **Step 8: Verify the real report in an actual browser (Playwright, Node)**
+- [ ] **Step 7: Verify the real report in an actual browser (Playwright, Node)**
 
 This project's own convention (see `CLAUDE.md`) is to verify UI work in a real browser before calling it done — not a substitute for the operator's own review, but a sanity check that catches an obviously broken render first. `playwright` is a **Node** package already baked into this box's image (not a Python dependency of this project) — use it directly, not via any Python binding:
 
@@ -1304,10 +1325,10 @@ const { chromium } = require('playwright');
 
 If this script raises any error, fix the underlying HTML/CSS/JS bug in `reporting/assets/` (not the verification script) and re-run both this check and the full test suite before proceeding. Delete `report-screenshot.png` afterward — it's a throwaway sanity-check artifact, not part of the deliverable.
 
-- [ ] **Step 9: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
-git add reporting/__main__.py pyproject.toml report.html
+git add reporting/__main__.py report.html
 git commit -m "feat: add reporting CLI, generate and commit the real report"
 ```
 
