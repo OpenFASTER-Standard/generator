@@ -1,7 +1,8 @@
 """Tests for build_structure: walking a real xsdo:-shaped graph into a
 plain, JSON-serializable structure tree. Uses small, hand-built graphs
 with the exact real predicates extraction/ produces -- not mocks."""
-from rdflib import RDF, BNode, Graph, Literal, Namespace
+import pytest
+from rdflib import RDF, BNode, Graph, Literal, Namespace, XSD
 
 from reporting.data import XSDO, build_structure
 
@@ -164,3 +165,41 @@ def test_simple_type_with_facets_enumeration_pattern_and_union():
     assert set(simple_types["UnionType"]["unionMembers"]) == {
         str(EX.EnumType), str(EX.LenType)
     }
+
+
+def test_decimal_facet_values_are_coerced_to_strings():
+    """Facet values like minInclusive/maxInclusive on decimal types become
+    Decimal objects from .toPython(), which json.dumps can't serialize.
+    They must be coerced to strings."""
+    graph = Graph()
+    graph.add((EX.DecimalType, RDF.type, XSDO.SimpleTypeDefinition))
+    graph.add((EX.DecimalType, XSDO.name, Literal("DecimalType")))
+    # minInclusive with a decimal value becomes Decimal('0.00') from .toPython()
+    graph.add((EX.DecimalType, XSDO.minInclusive, Literal("0.00", datatype=XSD.decimal)))
+    # maxInclusive with a decimal value becomes Decimal('99.99')
+    graph.add((EX.DecimalType, XSDO.maxInclusive, Literal("99.99", datatype=XSD.decimal)))
+
+    structure = build_structure(graph)
+
+    simple_types = {t["name"]: t for t in structure[NS]["simpleTypes"]}
+    decimal_type = simple_types["DecimalType"]
+
+    # Both facet values must be strings, not Decimal objects
+    assert isinstance(decimal_type["facets"]["minInclusive"], str)
+    assert isinstance(decimal_type["facets"]["maxInclusive"], str)
+    assert decimal_type["facets"]["minInclusive"] == "0.00"
+    assert decimal_type["facets"]["maxInclusive"] == "99.99"
+
+
+def test_complex_type_without_content_model_raises_error():
+    """A complex type that somehow has no xsdo:contentModel triple must
+    raise a clear error rather than silently producing wrong data."""
+    graph = Graph()
+    # Add a complex type but explicitly do NOT add a contentModel triple
+    graph.add((EX.BadType, RDF.type, XSDO.ComplexTypeDefinition))
+    graph.add((EX.BadType, XSDO.name, Literal("BadType")))
+    graph.add((EX.BadType, XSDO.abstract, Literal(False)))
+
+    # build_structure should raise ValueError, not silently succeed
+    with pytest.raises(ValueError, match="has no xsdo:contentModel"):
+        build_structure(graph)

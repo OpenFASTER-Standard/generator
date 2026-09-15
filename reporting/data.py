@@ -25,6 +25,18 @@ _FACET_PREDICATES = {
 }
 
 
+def _json_safe_facet_value(value):
+    """Coerce RDF facet value to a JSON-safe Python type.
+
+    Keeps int/bool as-is (already JSON-safe), converts all other types
+    (Decimal, date, datetime, etc.) to strings to avoid json.dumps errors.
+    """
+    python_value = value.toPython()
+    if isinstance(python_value, (int, bool)):
+        return python_value
+    return str(python_value)
+
+
 def _target_namespace_of(uri: str) -> str:
     return uri.split("#", 1)[0]
 
@@ -92,6 +104,8 @@ def _build_complex_type(graph: Graph, type_uri: URIRef) -> dict:
     name = graph.value(type_uri, XSDO.name)
     extends = graph.value(type_uri, XSDO.extends)
     content_node = graph.value(type_uri, XSDO.contentModel)
+    if content_node is None:
+        raise ValueError(f"{type_uri} has no xsdo:contentModel")
     return {
         "uri": str(type_uri),
         "name": str(name) if name is not None else None,
@@ -109,7 +123,7 @@ def _build_simple_type(graph: Graph, type_uri: URIRef) -> dict:
     for label, predicate in _FACET_PREDICATES.items():
         value = graph.value(type_uri, predicate)
         if value is not None:
-            facets[label] = value.toPython()
+            facets[label] = _json_safe_facet_value(value)
     enumeration = [
         str(graph.value(value_node, XSDO.literalValue))
         for value_node in graph.objects(type_uri, XSDO.hasEnumerationValue)
