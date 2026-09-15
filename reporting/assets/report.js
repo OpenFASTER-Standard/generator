@@ -27,10 +27,20 @@
   // duplicated. A reference to a named TYPE (extends, an attribute's own
   // type, a union member) instead becomes a real anchor link into that
   // type's own, separately-rendered top-level entry in Structure.
+  //
+  // The declaration box's own DOM id is deliberately NOT the bare subject
+  // URI: the same URI is also used, unprefixed, as the id of that
+  // subject's Structure entry (renderComplexType/renderSimpleType) and/or
+  // its Documentation-Pairs entry (renderDocPair) -- confirmed against the
+  // real whole-corpus report that a large fraction of subjects have both a
+  // structural entry and a doc-pair entry, which would otherwise collide.
+  // Declarations are never link targets (nothing does refLink(ref) for an
+  // element/attribute), so this prefix is safe to add without breaking
+  // any existing href="#...".
   function renderTermRef(ref) {
     var decl = data.declarations[ref];
     if (!decl) return refLink(ref);
-    var box = el("div", { class: "entry declaration", id: ref, "data-name": decl.name });
+    var box = el("div", { class: "entry declaration", id: "decl:" + ref, "data-name": decl.name });
     box.appendChild(el("h4", {}, [text(decl.kind + " " + decl.name)]));
     if (decl.type) {
       var typeLine = el("div", { class: "meta" }, [text("type: ")]);
@@ -143,9 +153,13 @@
     return root;
   }
 
+  // Prefixed for the same reason as renderTermRef's declaration id above:
+  // a doc-pair's subject URI is also, unprefixed, the id of that same
+  // subject's Structure/declaration entry elsewhere on the page. Doc-pair
+  // entries are never link targets, so the prefix is safe to add.
   function renderDocPair(pair, kind) {
     var box = el("div", {
-      class: "entry doc-pair " + kind, id: pair.uri, "data-name": pair.name,
+      class: "entry doc-pair " + kind, id: "doc:" + pair.uri, "data-name": pair.name,
     });
     box.appendChild(el("h4", {}, [text(pair.name)]));
     box.appendChild(el("div", { class: "de" }, [text("DE: " + pair.de)]));
