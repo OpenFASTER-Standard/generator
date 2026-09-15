@@ -141,19 +141,21 @@ server round-trip):
   attribute uses (required/optional, linking to the attribute), and its
   identity constraints. Elements/attributes are leaf entries showing
   name, type (linked), default/fixed, and inline documentation.
-- **§2 Documentation pairs** — four visible groups (matched/unmatched/
+- **§2 Documentation texts** — four visible groups (matched/unmatched/
   ambiguous/**english-only**, per the data model above — the fourth
   group was added during implementation after the final review found
   real subjects with `@en`-only documentation, e.g. from a corrupted
-  PDF-parsing artifact, were being silently dropped). A matched pair
-  with a plausibility issue shows that issue's reason directly beneath
-  it, highlighted — except when the same bare name maps to 2+ distinct
-  matched subjects, in which case the issue is deliberately left
-  unattributed at this level (real `PlausibilityIssue`s carry no URI,
-  only a bare name, so attaching to one specific subject would be a
-  guess) and surfaces only in §3 instead. An ambiguous name shows every
-  distinct candidate text found, so the reader can see why nothing was
-  attached.
+  PDF-parsing artifact, were being silently dropped). Each entry shows
+  every real language actually present for that subject (not hardcoded
+  to exactly German/English — `PlausibilityIssue`/`xsdo:documentation`
+  are read generically by real language tag, so a future module's third
+  real language is never silently dropped). A matched entry with a
+  plausibility issue shows that issue's reason directly beneath it,
+  highlighted — `PlausibilityIssue` carries the real subject's own URI,
+  so this attaches correctly even when 2+ distinct real subjects share
+  the same bare name (confirmed real: `WIdNr`, reused on two different
+  real complex types). An ambiguous name shows every distinct candidate
+  text found, so the reader can see why nothing was attached.
 - **§1 Structure** also renders a small "Global declarations" group per
   namespace, added during implementation: any element/attribute
   declaration never reached by a particle/attribute-use reference
@@ -162,8 +164,8 @@ server round-trip):
   instead of being silently omitted.
 - **§3 Audit dashboard** — the raw `attached`/`ambiguous`/`unmatched`
   numbers from both report types, then the full issue list (kind,
-  subject, detail). (Not yet implemented: cross-linking each issue back
-  to its subject's own §2 entry — deferred, not a correctness gap.)
+  subject, detail), each entry a real link to that exact subject's own
+  §2 entry (via its real URI).
 
 ## CLI (`__main__.py`)
 
