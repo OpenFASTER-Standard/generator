@@ -410,6 +410,7 @@ from __future__ import annotations
 from uuid import uuid4
 
 from rdflib import RDF, Dataset, Graph, Literal, URIRef
+from rdflib.namespace import XSD
 from rdflib.term import Node
 
 from provenance.vocab import PROV
@@ -458,7 +459,7 @@ def _write_decision(
     check.add((decision_uri, REVIEW.outcome, Literal(outcome)))
     check.add((decision_uri, REVIEW.reason, Literal(reason)))
     check.add((decision_uri, PROV.wasAttributedTo, decider))
-    check.add((decision_uri, PROV.generatedAtTime, Literal(generated_at)))
+    check.add((decision_uri, PROV.generatedAtTime, Literal(generated_at, datatype=XSD.dateTime)))
 
     conforms, results_text = validate_graph(check)
     if not conforms:
@@ -499,7 +500,7 @@ def propose_correction(
     check.add((correction_uri, REVIEW.proposedValue, Literal(proposed_value)))
     check.add((correction_uri, REVIEW.reason, Literal(reason)))
     check.add((correction_uri, PROV.wasAttributedTo, reviewer_uri(proposer)))
-    check.add((correction_uri, PROV.generatedAtTime, Literal(generated_at)))
+    check.add((correction_uri, PROV.generatedAtTime, Literal(generated_at, datatype=XSD.dateTime)))
 
     conforms, results_text = validate_graph(check)
     if not conforms:
