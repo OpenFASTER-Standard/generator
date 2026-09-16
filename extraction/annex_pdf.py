@@ -332,3 +332,152 @@ def attach_english_documentation(graph: Graph, pdf_path: str) -> AttachmentRepor
         report.attached.append(name)
 
     return report
+
+
+@dataclass(frozen=True)
+class TextOccurrence:
+    text: str
+    page_number: int
+    bbox: tuple[float, float, float, float]
+
+
+def _bbox_of(words: list[dict]) -> tuple[float, float, float, float]:
+    return (
+        min(w["x0"] for w in words),
+        min(w["top"] for w in words),
+        max(w["x1"] for w in words),
+        max(w["bottom"] for w in words),
+    )
+
+
+def extract_name_occurrences_with_pages(pdf_path: str) -> dict[str, list[TextOccurrence]]:
+    """Same state machine as extract_name_occurrences (kept byte-identical
+    on purpose -- see this function's own regression test), but tracking
+    the real page number and word bounding boxes behind each occurrence,
+    for real inline PDF citations. A citation's bbox can legitimately
+    span a wide vertical range when its text was assembled from several
+    visually separate lines -- a real characteristic of this PDF's table
+    layout, not a bug.
+    """
+    occurrences: dict[str, list[TextOccurrence]] = {}
+
+    state = "NONE"
+    current_heading: str | None = None
+    heading_doc_words: list[dict] = []
+    heading_page_number: int | None = None
+    current_row_name: str | None = None
+    row_doc_words: list[dict] = []
+    row_page_number: int | None = None
+    name_x = doc_x = None
+
+    def flush_heading_doc() -> None:
+        nonlocal heading_doc_words
+        if current_heading is not None and heading_doc_words:
+            name = _heading_trailing_name(current_heading)
+            text = " ".join(w["text"] for w in heading_doc_words).strip()
+            occurrences.setdefault(name, []).append(
+                TextOccurrence(text=text, page_number=heading_page_number, bbox=_bbox_of(heading_doc_words))
+            )
+        heading_doc_words = []
+
+    def flush_row() -> None:
+        nonlocal current_row_name, row_doc_words
+        if current_row_name is not None and row_doc_words:
+            text = " ".join(w["text"] for w in row_doc_words).strip()
+            occurrences.setdefault(current_row_name, []).append(
+                TextOccurrence(text=text, page_number=row_page_number, bbox=_bbox_of(row_doc_words))
+            )
+        current_row_name = None
+        row_doc_words = []
+
+    with pdfplumber.open(pdf_path) as pdf:
+        for page in pdf.pages:
+            lines = _line_groups(page.extract_words())
+            tops = sorted(lines)
+            idx = 0
+            while idx < len(tops):
+                top = tops[idx]
+                line = lines[top]
+                texts = [w["text"] for w in line]
+                joined = "".join(texts)
+
+                if _is_page_footer_line(texts, top):
+                    idx += 1
+                    continue
+
+                if texts[0] in ("element", "complexType", "simpleType") and line[0]["x0"] < _MARGIN_X:
+                    flush_row()
+                    flush_heading_doc()
+                    heading_texts = list(texts)
+                    if idx + 1 < len(tops):
+                        next_line = lines[tops[idx + 1]]
+                        next_texts = [w["text"] for w in next_line]
+                        if next_line[0]["x0"] < _MARGIN_X and next_texts[0] not in _SECTION_KEYWORDS:
+                            heading_texts.extend(next_texts)
+                            idx += 1
+                    current_heading = " ".join(heading_texts)
+                    state = "NONE"
+                    idx += 1
+                    continue
+                if texts[0] == "Used" and len(texts) >= 2 and texts[1] == "by":
+                    flush_row()
+                    state = "USED_BY"
+                    idx += 1
+                    continue
+                if texts[0] == "Name":
+                    columns = [(w["x0"], w["text"]) for w in line]
+                    consumed = 0
+                    peek = idx + 1
+                    if peek < len(tops) and [w["text"] for w in lines[tops[peek]]] == ["Attributes"]:
+                        consumed += 1
+                        peek += 1
+                    if peek < len(tops):
+                        columns, completed = _complete_split_header_words(columns, lines[tops[peek]])
+                        if completed:
+                            consumed += 1
+                    header_texts = [text for _, text in columns]
+                    if "Type" in header_texts and "Use" in header_texts and "Documentation" in header_texts:
+                        flush_row()
+                        name_x = columns[0][0]
+                        doc_x = next(x0 for x0, text in columns if text == "Documentation")
+                        state = "ATTRIBUTES"
+                        idx += 1 + consumed
+                        continue
+                if joined in ("Documentation", "Documentatio"):
+                    flush_row()
+                    state = "TRAILING_DOC"
+                    idx += 1
+                    continue
+
+                if state == "ATTRIBUTES":
+                    name_word = next((w for w in line if abs(w["x0"] - name_x) < _COLUMN_X_TOLERANCE), None)
+                    doc_words_here = [w for w in line if w["x0"] >= doc_x - _COLUMN_X_TOLERANCE]
+                    is_split_name_continuation = (
+                        name_word is not None
+                        and current_row_name is not None
+                        and not row_doc_words
+                        and name_word["text"][:1].islower()
+                    )
+                    if is_split_name_continuation:
+                        current_row_name += name_word["text"]
+                        if doc_words_here:
+                            row_doc_words.extend(doc_words_here)
+                    elif name_word is not None:
+                        flush_row()
+                        current_row_name = name_word["text"]
+                        row_page_number = page.page_number
+                        if doc_words_here:
+                            row_doc_words.extend(doc_words_here)
+                    elif doc_words_here:
+                        row_doc_words.extend(doc_words_here)
+                elif state == "TRAILING_DOC":
+                    if texts != ["n"]:
+                        if not heading_doc_words:
+                            heading_page_number = page.page_number
+                        heading_doc_words.extend(line)
+                idx += 1
+
+        flush_row()
+        flush_heading_doc()
+
+    return occurrences
