@@ -1,5 +1,6 @@
 import io
 
+import pytest
 from PIL import Image
 
 from citations.pdf_citation import crop_pdf_page
@@ -24,3 +25,23 @@ def test_crop_pdf_page_applies_padding_around_the_bbox():
     padded_image = Image.open(io.BytesIO(padded))
     assert padded_image.width > tight_image.width
     assert padded_image.height > tight_image.height
+
+
+def test_crop_pdf_page_rejects_negative_page_number():
+    with pytest.raises(ValueError) as excinfo:
+        crop_pdf_page(ANNEX_PDF, page_number=-1, bbox=(60.0, 60.0, 300.0, 120.0))
+
+    error_msg = str(excinfo.value)
+    assert "page_number=-1" in error_msg
+    assert "out of range" in error_msg
+    assert "262" in error_msg  # Real page count for this PDF
+
+
+def test_crop_pdf_page_rejects_out_of_range_page_number():
+    with pytest.raises(ValueError) as excinfo:
+        crop_pdf_page(ANNEX_PDF, page_number=99999, bbox=(60.0, 60.0, 300.0, 120.0))
+
+    error_msg = str(excinfo.value)
+    assert "page_number=99999" in error_msg
+    assert "out of range" in error_msg
+    assert "262" in error_msg  # Real page count for this PDF

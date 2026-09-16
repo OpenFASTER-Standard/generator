@@ -20,6 +20,11 @@ def crop_pdf_page(
 ) -> bytes:
     x0, top, x1, bottom = bbox
     with pdfplumber.open(pdf_path) as pdf:
+        if not (0 <= page_number < len(pdf.pages)):
+            raise ValueError(
+                f"page_number={page_number} out of range for {pdf_path} "
+                f"(has {len(pdf.pages)} pages, 0-indexed)"
+            )
         page = pdf.pages[page_number]
         padded_bbox = (
             max(0.0, x0 - padding),
