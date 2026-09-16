@@ -10,6 +10,7 @@ from rdflib import Dataset, Literal, URIRef
 from rdflib.term import Node
 
 from provenance.vocab import PROV
+from review.corrections import _reject_bnode_target
 from review.vocab import REVIEW
 
 
@@ -29,9 +30,26 @@ def get_correction_status(dataset: Dataset, graph_uri: str, correction_uri: str)
 def _find_approved_correction(
     dataset: Dataset, corrections_graph_uri: str, subject: Node, predicate: Node, language: str | None
 ) -> URIRef | None:
+    # Same injection shape review.corrections._reject_bnode_target guards
+    # against: a BNode interpolated into this SPARQL text below becomes a
+    # non-distinguished (wildcard-like) variable, not a fixed value, and
+    # could silently match the wrong correction.
+    _reject_bnode_target(subject, predicate)
+
     language_filter = f"review:targetLanguage {Literal(language).n3()} ;" if language is not None else ""
+    # Two independent corrections can each legitimately end up "approved"
+    # for the identical (subject, predicate, language): propose_correction's
+    # auto-supersession only ever supersedes an UNDECIDED prior correction
+    # (see _find_pending_correction's FILTER NOT EXISTS in review.corrections),
+    # so proposing a new correction for a target that already has an
+    # approved one leaves that older approval untouched -- nothing stops
+    # both from independently being approved later. Binding each approving
+    # Decision's own generatedAtTime and taking the most recent one applies
+    # the same "most recent wins" rule get_correction_status already uses,
+    # so the newest approval is always the one that counts as "current".
     results = list(dataset.query(f"""
     PREFIX review: <{REVIEW}>
+    PREFIX prov: <{PROV}>
     SELECT ?correction WHERE {{
       GRAPH <{corrections_graph_uri}> {{
         ?correction a review:Correction ;
@@ -39,9 +57,11 @@ def _find_approved_correction(
                     review:targetPredicate {predicate.n3()} ;
                     {language_filter}
                     review:proposedValue ?value .
-        ?decision review:decides ?correction ; review:outcome "approved" .
+        ?decision review:decides ?correction ; review:outcome "approved" ; prov:generatedAtTime ?time .
       }}
     }}
+    ORDER BY DESC(?time)
+    LIMIT 1
     """))
     if not results:
         return None

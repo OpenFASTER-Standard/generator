@@ -74,6 +74,21 @@ def _write_decision(
     dataset: Dataset, graph_uri: str, correction_uri: URIRef, outcome: str, decider: Node, reason: str, generated_at: str,
 ) -> str:
     graph = dataset.graph(URIRef(graph_uri))
+
+    # A correction may only ever be decided once -- without this guard,
+    # decide_correction could be called twice on the same correction_uri
+    # (e.g. approved, then later "rejected" too), leaving
+    # review.current_view.get_correction_status to resolve the ambiguity by
+    # generatedAtTime, which is undefined behavior on a timestamp tie (ties
+    # fall back to RDF-store subject-iteration order, which is not a
+    # specified ordering). Confirmed live: without this check, both calls
+    # silently succeeded. This check also runs for propose_correction's own
+    # internal auto-supersession call below, but is always a no-op there --
+    # _find_pending_correction's FILTER NOT EXISTS already guarantees the
+    # correction being superseded has no existing decision.
+    if any(graph.subjects(REVIEW.decides, correction_uri)):
+        raise ValueError(f"correction {correction_uri} has already been decided")
+
     proposer = graph.value(correction_uri, PROV.wasAttributedTo)
 
     decision_uri = REVIEW[f"decision-{uuid4()}"]
