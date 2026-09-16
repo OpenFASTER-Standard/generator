@@ -7,6 +7,7 @@ multi-source or correctable route through this module.
 """
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 
 from rdflib import Dataset, Literal, URIRef
@@ -25,6 +26,18 @@ def _n3(term: Node) -> str:
     return term.n3()
 
 
+def _record_uri(subject: Node, predicate: Node, obj: Node) -> str:
+    """Generate a deterministic, stable URI for the provenance record linked to this fact.
+
+    Uses SHA256 of the fact's canonical representation to ensure the same fact
+    always maps to the same record URI, enabling proper upsert semantics despite
+    RDF-star deduplication limitations in this pyoxigraph version.
+    """
+    key = f"{subject}|{predicate}|{obj}"
+    digest = hashlib.sha256(key.encode()).hexdigest()
+    return f"https://purl.openfaster.org/provenance/record/{digest}"
+
+
 def attach_provenance(
     dataset: Dataset,
     graph_uri: str,
@@ -35,48 +48,52 @@ def attach_provenance(
     generated_at: str,
 ) -> None:
     quoted = f"<< {_n3(subject)} {_n3(predicate)} {_n3(obj)} >>"
+    record = _record_uri(subject, predicate, obj)
     source_n3 = URIRef(source_uri).n3()
     timestamp_n3 = Literal(generated_at).n3()
 
-    # Delete existing provenance for this fact (upsert: replace old record).
-    # Query for existing provenance, then delete using concrete N3 serialization.
-    # This works around Oxigraph's limited RDF-star support in UPDATE statements.
-    results = list(dataset.query(f"""
+    # Clear any prior provenance values for this fact's record. Ordinary
+    # (non-RDF-star) triples -- DELETE/WHERE works reliably for these.
+    # RDF-star patterns inside a DELETE/WHERE template are rejected by
+    # this pyoxigraph version (confirmed live, "expected GRAPH" syntax
+    # error, regardless of GRAPH-wrapping or pattern count) -- that's
+    # why the RDF-star link below is never deleted/rewritten, only
+    # conditionally inserted once.
+    dataset.update(f"""
     PREFIX prov: <{PROV}>
-    SELECT ?src ?time WHERE {{
+    DELETE {{
       GRAPH <{graph_uri}> {{
-        {quoted} prov:wasDerivedFrom ?src .
-        {quoted} prov:generatedAtTime ?time .
+        <{record}> prov:wasDerivedFrom ?oldSrc .
+        <{record}> prov:generatedAtTime ?oldTime .
       }}
     }}
-    """))
+    WHERE {{
+      GRAPH <{graph_uri}> {{
+        OPTIONAL {{ <{record}> prov:wasDerivedFrom ?oldSrc . }}
+        OPTIONAL {{ <{record}> prov:generatedAtTime ?oldTime . }}
+      }}
+    }}
+    """)
 
-    # Delete each existing provenance record by constructing DELETE with concrete triples
-    for row in results:
-        src_n3 = row["src"].n3()
-        time_n3 = row["time"].n3()
-        try:
-            dataset.update(f"""
-            PREFIX prov: <{PROV}>
-            DELETE DATA {{
-              GRAPH <{graph_uri}> {{
-                {quoted} prov:wasDerivedFrom {src_n3} .
-                {quoted} prov:generatedAtTime {time_n3} .
-              }}
-            }}
-            """)
-        except Exception:
-            # If DELETE DATA fails (e.g., Oxigraph RDF-star limitations),
-            # continue. Duplicates may accumulate, but get_provenance returns first.
-            pass
+    # Link the fact to its stable, deterministic record -- only once ever.
+    # Re-inserting an identical RDF-star triple was confirmed live to
+    # create a true duplicate rather than deduplicating, so this must be
+    # conditional, not a plain repeated INSERT DATA.
+    dataset.update(f"""
+    PREFIX prov: <{PROV}>
+    INSERT {{ GRAPH <{graph_uri}> {{ {quoted} prov:hasProvenanceRecord <{record}> . }} }}
+    WHERE {{
+      FILTER NOT EXISTS {{ GRAPH <{graph_uri}> {{ {quoted} prov:hasProvenanceRecord <{record}> . }} }}
+    }}
+    """)
 
-    # Insert new provenance record
+    # Write the new provenance values (ordinary triples about the record).
     dataset.update(f"""
     PREFIX prov: <{PROV}>
     INSERT DATA {{
       GRAPH <{graph_uri}> {{
-        {quoted} prov:wasDerivedFrom {source_n3} .
-        {quoted} prov:generatedAtTime {timestamp_n3} .
+        <{record}> prov:wasDerivedFrom {source_n3} .
+        <{record}> prov:generatedAtTime {timestamp_n3} .
       }}
     }}
     """)
@@ -94,8 +111,8 @@ def get_provenance(
     PREFIX prov: <{PROV}>
     SELECT ?src ?time WHERE {{
       GRAPH <{graph_uri}> {{
-        {quoted} prov:wasDerivedFrom ?src .
-        {quoted} prov:generatedAtTime ?time .
+        {quoted} prov:hasProvenanceRecord ?record .
+        ?record prov:wasDerivedFrom ?src ; prov:generatedAtTime ?time .
       }}
     }}
     """))
