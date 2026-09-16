@@ -1,6 +1,7 @@
 import shutil
 
-from rdflib import Literal, Namespace, RDF, URIRef
+import pytest
+from rdflib import BNode, Literal, Namespace, RDF, URIRef
 
 from provenance.vocab import PROV
 from review.corrections import SYSTEM_AGENT, propose_correction, reviewer_uri
@@ -189,6 +190,26 @@ def test_a_third_proposal_only_supersedes_the_still_undecided_second_one():
         assert str(graph.value(second_decisions[0], REVIEW.outcome)) == "rejected"
         # third is still undecided
         assert list(graph.subjects(REVIEW.decides, URIRef(third))) == []
+    finally:
+        dataset.close()
+        shutil.rmtree(STORE_PATH, ignore_errors=True)
+
+
+def test_propose_correction_rejects_a_bnode_target_subject():
+    """A BNode interpolated into _find_pending_correction's SPARQL SELECT text
+    becomes a non-distinguished (wildcard-like) variable, not a fixed value --
+    it would silently match/supersede an unrelated correction instead of
+    erroring. Same injection shape provenance.record._reject_bnode already
+    guards against (Plan A); propose_correction must reject it up front too."""
+    dataset = _fresh_dataset()
+    try:
+        with pytest.raises(TypeError):
+            propose_correction(
+                dataset, graph_uri=GRAPH_URI,
+                target_subject=BNode(), target_predicate=EX.documentation, target_language="de",
+                proposed_value="x", prior_value=Literal("Original.", lang="de"),
+                proposer="julian", reason="r", generated_at="2026-09-15T15:00:00Z",
+            )
     finally:
         dataset.close()
         shutil.rmtree(STORE_PATH, ignore_errors=True)

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from uuid import uuid4
 
-from rdflib import RDF, Dataset, Graph, Literal, URIRef
+from rdflib import RDF, BNode, Dataset, Graph, Literal, URIRef
 from rdflib.namespace import XSD
 from rdflib.term import Node
 
@@ -26,9 +26,33 @@ def reviewer_uri(name: str) -> URIRef:
     return REVIEW[f"reviewer-{name}"]
 
 
+def _reject_bnode_target(target_subject: Node, target_predicate: Node) -> None:
+    """A blank node embedded in a SPARQL text pattern (as ``_find_pending_correction``'s
+    SELECT and ``propose_correction``'s ``wasRevisionOf`` INSERT DATA both build via
+    ``.n3()`` interpolation) is a non-distinguished variable, not a fixed value -- inside
+    the SELECT's WHERE clause it would silently match ANY term, potentially
+    auto-superseding the wrong correction instead of erroring. Same injection shape,
+    same fix, as ``provenance.record._reject_bnode`` (Plan A) -- see that module for the
+    original rationale; this only needs to guard ``target_subject``/``target_predicate``
+    since those are the terms this module ever interpolates into a *pattern* (as opposed
+    to the ``wasRevisionOf`` INSERT DATA's fixed-data ``prior_value``, which is not
+    matched against anything).
+    """
+    for name, term in (("target_subject", target_subject), ("target_predicate", target_predicate)):
+        if isinstance(term, BNode):
+            raise TypeError(
+                f"{name} is a BNode ({term!r}); propose_correction only supports "
+                "real, addressable subjects/predicates -- a BNode interpolated into "
+                "this module's SPARQL text becomes a non-distinguished (wildcard-like) "
+                "variable rather than a fixed value, and could silently match/supersede "
+                "the wrong correction."
+            )
+
+
 def _find_pending_correction(
     dataset: Dataset, graph_uri: str, target_subject: Node, target_predicate: Node, target_language: str
 ) -> URIRef | None:
+    _reject_bnode_target(target_subject, target_predicate)
     results = list(dataset.query(f"""
     PREFIX review: <{REVIEW}>
     SELECT ?correction WHERE {{
@@ -92,6 +116,7 @@ def propose_correction(
     reason: str,
     generated_at: str,
 ) -> str:
+    _reject_bnode_target(target_subject, target_predicate)
     pending = _find_pending_correction(dataset, graph_uri, target_subject, target_predicate, target_language)
     if pending is not None:
         _write_decision(
