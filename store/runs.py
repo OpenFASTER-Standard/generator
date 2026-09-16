@@ -10,6 +10,8 @@ import hashlib
 from dataclasses import dataclass
 
 from rdflib import Dataset, Graph, Literal, Namespace, URIRef
+from rdflib.compare import to_canonical_graph
+from rdflib.namespace import XSD
 
 RUNS = Namespace("https://purl.openfaster.org/runs/")
 
@@ -38,9 +40,23 @@ def write_run(
     pdf_path: str,
     created_at: str,
 ) -> RunInfo:
+    index = dataset.graph(URIRef(str(RUNS["index"])))
+    if any(index.subjects(RUNS.runId, Literal(run_id))):
+        raise ValueError(f"a run with run_id={run_id!r} already exists")
+
     graph_uri = str(RUNS[run_id])
+
+    # Canonicalize blank-node labels before copying into the named graph.
+    # extraction.extract()'s real output is heavily blank-node-shaped
+    # (freshly, randomly labeled per call) -- without this, diff_runs's
+    # FILTER NOT EXISTS never matches a blank-node triple across two runs
+    # of the identical corpus, reporting thousands of phantom changes.
+    # to_canonical_graph returns a read-only graph aggregate; iterating
+    # its .triples((None, None, None)) yields real, usable
+    # BNode/URIRef/Literal terms just like a normal Graph.
+    canonical_graph = to_canonical_graph(graph)
     run_graph = dataset.graph(URIRef(graph_uri))
-    for triple in graph.triples((None, None, None)):
+    for triple in canonical_graph.triples((None, None, None)):
         run_graph.add(triple)
 
     info = RunInfo(
@@ -53,14 +69,13 @@ def write_run(
         created_at=created_at,
     )
 
-    index = dataset.graph(URIRef(str(RUNS["index"])))
     subject = URIRef(graph_uri)
     index.add((subject, RUNS.runId, Literal(info.run_id)))
     index.add((subject, RUNS.xsdPath, Literal(info.xsd_path)))
     index.add((subject, RUNS.xsdHash, Literal(info.xsd_hash)))
     index.add((subject, RUNS.pdfPath, Literal(info.pdf_path)))
     index.add((subject, RUNS.pdfHash, Literal(info.pdf_hash)))
-    index.add((subject, RUNS.createdAt, Literal(info.created_at)))
+    index.add((subject, RUNS.createdAt, Literal(info.created_at, datatype=XSD.dateTime)))
 
     return info
 

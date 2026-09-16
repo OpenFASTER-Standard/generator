@@ -1,3 +1,5 @@
+import os
+
 import xmlschema
 
 from citations.xsd_citation import capture_xsd_fragment
@@ -15,3 +17,7 @@ def test_capture_xsd_fragment_returns_the_exact_real_source_fragment_and_file():
     assert "MeldepflichtigeStelleType" in citation.fragment
     assert citation.fragment.strip().startswith("<xs:complexType")
     assert citation.source_file.endswith("MiKaDiv_FM_Personentypen_1.02.xsd")
+    # source_file must be a real, openable filesystem path -- not a raw
+    # file://... URL -- so Plan C's design can use it directly with open().
+    assert not citation.source_file.startswith("file://")
+    assert os.path.exists(citation.source_file)

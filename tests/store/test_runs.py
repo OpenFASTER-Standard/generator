@@ -1,12 +1,16 @@
 import shutil
 
-from rdflib import Graph, Graph as PlainGraph, Literal, Namespace, URIRef
+import pytest
+from rdflib import BNode, Graph, Graph as PlainGraph, Literal, Namespace, URIRef
 
+from extraction.extract import extract
 from store.database import open_store
 from store.runs import diff_runs, list_runs, write_run
 
 STORE_PATH = "/tmp/test_provenance_store_task2"
 EX = Namespace("https://example.org/test#")
+ROOT_XSD = "/work/ontologies/mikadiv-fm/sources/xsd/MiKaDiv_FM_1.02.xsd"
+PDF_PATH = "/work/ontologies/mikadiv-fm/sources/khb/khb_mikadiv_fm_anlage_en_v3.pdf"
 
 
 def _fresh_dataset():
@@ -85,6 +89,100 @@ def test_diff_runs_reports_only_added_and_removed_triples_not_unchanged_ones():
         added_objects = {str(o) for (_, _, o) in diff.added}
         assert removed_objects == {"old text"}
         assert added_objects == {"new text", "brand new"}
+    finally:
+        dataset.close()
+        shutil.rmtree(STORE_PATH, ignore_errors=True)
+
+
+def test_diff_runs_between_two_identical_real_extractions_is_empty():
+    """Regression test for Critical Fix 1: extraction.extract()'s real output
+    is ~42% blank nodes, freshly and randomly labeled on every call. Before
+    write_run canonicalized blank-node labels via rdflib.compare.to_canonical_graph
+    before copying triples into the named graph, two extract() calls on the
+    identical corpus produced "added=1367, removed=1367" out of ~3270 triples
+    in diff_runs -- verified live -- when the real answer should be zero
+    changes. This uses the real extractor against the real root XSD, not a
+    synthetic fixture, since a synthetic fixture with hand-picked blank nodes
+    would not have caught this bug (it was invisible until real, heavily
+    blank-node-shaped extraction output was used).
+    """
+    dataset = _fresh_dataset()
+    try:
+        graph_1 = extract(ROOT_XSD)
+        graph_2 = extract(ROOT_XSD)
+
+        # Sanity: the real corpus really does produce a substantial,
+        # blank-node-heavy graph -- otherwise this test would pass
+        # vacuously even with the bug present.
+        assert len(graph_1) > 1000
+        bnode_subjects = {s for s in graph_1.subjects() if isinstance(s, BNode)}
+        assert len(bnode_subjects) > 0
+
+        write_run(
+            dataset, run_id="real-a", graph=graph_1,
+            xsd_path=ROOT_XSD, pdf_path=PDF_PATH, created_at="2026-09-15T10:00:00Z",
+        )
+        write_run(
+            dataset, run_id="real-b", graph=graph_2,
+            xsd_path=ROOT_XSD, pdf_path=PDF_PATH, created_at="2026-09-15T11:00:00Z",
+        )
+
+        diff = diff_runs(dataset, "real-a", "real-b")
+
+        assert diff.added == []
+        assert diff.removed == []
+    finally:
+        dataset.close()
+        shutil.rmtree(STORE_PATH, ignore_errors=True)
+
+
+def test_write_run_raises_on_duplicate_run_id():
+    """Regression test for Fix 6: write_run's own module docstring claims run
+    graphs are immutable and never mutated, but nothing enforced it -- writing
+    the same run_id twice used to silently merge both graphs' triples together
+    and leave the index with duplicate/conflicting metadata.
+    """
+    dataset = _fresh_dataset()
+    try:
+        write_run(
+            dataset, run_id="dup", graph=Graph(),
+            xsd_path="/work/ontologies/mikadiv-fm/sources/xsd/MiKaDiv_FM_1.02.xsd",
+            pdf_path="/work/ontologies/mikadiv-fm/sources/khb/khb_mikadiv_fm_anlage_en_v3.pdf",
+            created_at="2026-09-15T08:00:00Z",
+        )
+
+        with pytest.raises(ValueError, match="dup"):
+            write_run(
+                dataset, run_id="dup", graph=Graph(),
+                xsd_path="/work/ontologies/mikadiv-fm/sources/xsd/MiKaDiv_FM_1.02.xsd",
+                pdf_path="/work/ontologies/mikadiv-fm/sources/khb/khb_mikadiv_fm_anlage_en_v3.pdf",
+                created_at="2026-09-15T09:00:00Z",
+            )
+    finally:
+        dataset.close()
+        shutil.rmtree(STORE_PATH, ignore_errors=True)
+
+
+def test_write_run_stores_created_at_as_xsd_datetime_literal():
+    """Regression test for Fix 5: the spec's own data model specifies
+    prov:generatedAtTime "..."^^xsd:dateTime, but the code stored plain
+    untyped/string literals for created_at."""
+    from rdflib.namespace import XSD
+
+    from store.runs import RUNS
+
+    dataset = _fresh_dataset()
+    try:
+        info = write_run(
+            dataset, run_id="typed-ts", graph=Graph(),
+            xsd_path="/work/ontologies/mikadiv-fm/sources/xsd/MiKaDiv_FM_1.02.xsd",
+            pdf_path="/work/ontologies/mikadiv-fm/sources/khb/khb_mikadiv_fm_anlage_en_v3.pdf",
+            created_at="2026-09-15T08:00:00Z",
+        )
+
+        index = dataset.graph(URIRef(str(RUNS["index"])))
+        literal = index.value(URIRef(info.graph_uri), RUNS.createdAt)
+        assert literal.datatype == XSD.dateTime
     finally:
         dataset.close()
         shutil.rmtree(STORE_PATH, ignore_errors=True)
