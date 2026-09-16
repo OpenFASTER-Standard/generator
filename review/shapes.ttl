@@ -19,6 +19,11 @@ review:CorrectionShape a sh:NodeShape ;
         sh:path review:targetPredicate ;
         sh:minCount 1 ;
         sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path prov:wasAttributedTo ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
     ] .
 
 review:DecisionShape a sh:NodeShape ;
@@ -31,6 +36,11 @@ review:DecisionShape a sh:NodeShape ;
     ] ;
     sh:property [
         sh:path review:decides ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path prov:wasAttributedTo ;
         sh:minCount 1 ;
         sh:maxCount 1 ;
     ] ;
