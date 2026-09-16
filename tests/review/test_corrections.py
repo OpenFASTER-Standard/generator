@@ -4,7 +4,7 @@ import pytest
 from rdflib import BNode, Literal, Namespace, RDF, URIRef
 
 from provenance.vocab import PROV
-from review.corrections import SYSTEM_AGENT, propose_correction, reviewer_uri
+from review.corrections import SYSTEM_AGENT, propose_correction, reviewer_uri, decide_correction
 from review.vocab import REVIEW
 from store.database import open_store
 
@@ -209,6 +209,73 @@ def test_propose_correction_rejects_a_bnode_target_subject():
                 target_subject=BNode(), target_predicate=EX.documentation, target_language="de",
                 proposed_value="x", prior_value=Literal("Original.", lang="de"),
                 proposer="julian", reason="r", generated_at="2026-09-15T15:00:00Z",
+            )
+    finally:
+        dataset.close()
+        shutil.rmtree(STORE_PATH, ignore_errors=True)
+
+
+def test_decide_correction_approved_by_a_different_reviewer_succeeds():
+    dataset = _fresh_dataset()
+    try:
+        correction = propose_correction(
+            dataset, graph_uri=GRAPH_URI,
+            target_subject=EX.WIdNrTwo, target_predicate=EX.documentation, target_language="de",
+            proposed_value="Fixed text.", prior_value=Literal("Original.", lang="de"),
+            proposer="julian", reason="typo fix", generated_at="2026-09-15T15:00:00Z",
+        )
+
+        decision_uri = decide_correction(
+            dataset, graph_uri=GRAPH_URI, correction_uri=correction,
+            outcome="approved", decider="someone-else", reason="looks right",
+            generated_at="2026-09-16T09:00:00Z",
+        )
+
+        graph = dataset.graph(URIRef(GRAPH_URI))
+        # str(), not `== Literal("approved")`: same plain-literal round-trip
+        # normalization noted above.
+        assert str(graph.value(URIRef(decision_uri), REVIEW.outcome)) == "approved"
+    finally:
+        dataset.close()
+        shutil.rmtree(STORE_PATH, ignore_errors=True)
+
+
+def test_decide_correction_self_approval_is_rejected():
+    dataset = _fresh_dataset()
+    try:
+        correction = propose_correction(
+            dataset, graph_uri=GRAPH_URI,
+            target_subject=EX.WIdNrTwo, target_predicate=EX.documentation, target_language="de",
+            proposed_value="Fixed text.", prior_value=Literal("Original.", lang="de"),
+            proposer="julian", reason="typo fix", generated_at="2026-09-15T15:00:00Z",
+        )
+
+        with pytest.raises(ValueError):
+            decide_correction(
+                dataset, graph_uri=GRAPH_URI, correction_uri=correction,
+                outcome="approved", decider="julian", reason="self-approving",
+                generated_at="2026-09-16T09:00:00Z",
+            )
+    finally:
+        dataset.close()
+        shutil.rmtree(STORE_PATH, ignore_errors=True)
+
+
+def test_decide_correction_rejects_an_invalid_outcome():
+    dataset = _fresh_dataset()
+    try:
+        correction = propose_correction(
+            dataset, graph_uri=GRAPH_URI,
+            target_subject=EX.WIdNrTwo, target_predicate=EX.documentation, target_language="de",
+            proposed_value="Fixed text.", prior_value=Literal("Original.", lang="de"),
+            proposer="julian", reason="typo fix", generated_at="2026-09-15T15:00:00Z",
+        )
+
+        with pytest.raises(ValueError):
+            decide_correction(
+                dataset, graph_uri=GRAPH_URI, correction_uri=correction,
+                outcome="bogus", decider="someone-else", reason="",
+                generated_at="2026-09-16T09:00:00Z",
             )
     finally:
         dataset.close()

@@ -154,3 +154,13 @@ def propose_correction(
     """)
 
     return str(correction_uri)
+
+
+def decide_correction(
+    dataset: Dataset, graph_uri: str, correction_uri: str, outcome: str, decider: str, reason: str, generated_at: str,
+) -> str:
+    if outcome not in ("approved", "rejected"):
+        raise ValueError(f"invalid outcome: {outcome!r} (must be 'approved' or 'rejected')")
+    return _write_decision(
+        dataset, graph_uri, URIRef(correction_uri), outcome, reviewer_uri(decider), reason, generated_at,
+    )
