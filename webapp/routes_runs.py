@@ -1,3 +1,10 @@
+"""Run history and diffing straight off `store.runs`.
+
+An unknown `run_id` on the diff endpoint raises `store.runs`' own
+`ValueError`, which `webapp.errors` -- installed once on the app --
+turns into a 400; no per-route `except` here, see that module's
+docstring.
+"""
 from __future__ import annotations
 
 from fastapi import APIRouter, Request

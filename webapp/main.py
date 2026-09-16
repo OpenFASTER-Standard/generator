@@ -1,6 +1,11 @@
 """The FastAPI service: opens the persistent store, ensures at least one
 real run exists, and serves everything through it. Route modules
 (Tasks 14-17) register themselves onto the app returned here.
+
+Every route module's error handling is installed here too, exactly once
+(`webapp.errors.install_error_handlers`) rather than per endpoint -- see
+that module's own docstring for the exception-to-status mapping and why
+it lives in one place.
 """
 from __future__ import annotations
 
@@ -10,6 +15,7 @@ from fastapi import FastAPI
 
 from store.database import open_store
 from store.runs import list_runs
+from webapp.errors import install_error_handlers
 from webapp.pipeline import run_pipeline_and_store
 
 CORRECTIONS_GRAPH_URI = "https://purl.openfaster.org/review/graph/corrections"
@@ -41,5 +47,7 @@ def create_app(store_path: str, xsd_path: str, pdf_path: str) -> FastAPI:
 
     from webapp.routes_corrections import router as corrections_router
     app.include_router(corrections_router)
+
+    install_error_handlers(app)
 
     return app

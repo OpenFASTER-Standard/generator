@@ -3,6 +3,11 @@ against a live-materialized "current" graph -- no rewrite of that logic,
 just a new data source (the store's latest run + approved corrections,
 via review.current_view.materialize_current_graph) instead of a graph
 handed to it once by Phase 1's CLI.
+
+No per-route `try/except` here: every store-layer exception these four
+endpoints can hit is translated to a clean HTTP status by
+`webapp.errors`, installed once on the app -- see that module's
+docstring.
 """
 from __future__ import annotations
 
