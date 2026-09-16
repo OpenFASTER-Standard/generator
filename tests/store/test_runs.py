@@ -1,9 +1,9 @@
 import shutil
 
-from rdflib import Graph, Literal, Namespace, URIRef
+from rdflib import Graph, Graph as PlainGraph, Literal, Namespace, URIRef
 
 from store.database import open_store
-from store.runs import list_runs, write_run
+from store.runs import diff_runs, list_runs, write_run
 
 STORE_PATH = "/tmp/test_provenance_store_task2"
 EX = Namespace("https://example.org/test#")
@@ -60,6 +60,31 @@ def test_list_runs_returns_every_written_run_sorted_by_created_at():
         runs = list_runs(dataset)
 
         assert [r.run_id for r in runs] == ["run-a", "run-b"]
+    finally:
+        dataset.close()
+        shutil.rmtree(STORE_PATH, ignore_errors=True)
+
+
+def test_diff_runs_reports_only_added_and_removed_triples_not_unchanged_ones():
+    dataset = _fresh_dataset()
+    try:
+        graph_a = PlainGraph()
+        graph_a.add((EX.X, EX.doc, Literal("old text")))
+        graph_a.add((EX.Y, EX.doc, Literal("unchanged")))
+        write_run(dataset, run_id="a", graph=graph_a, xsd_path="/work/ontologies/mikadiv-fm/sources/xsd/MiKaDiv_FM_1.02.xsd", pdf_path="/work/ontologies/mikadiv-fm/sources/khb/khb_mikadiv_fm_anlage_en_v3.pdf", created_at="t1")
+
+        graph_b = PlainGraph()
+        graph_b.add((EX.X, EX.doc, Literal("new text")))
+        graph_b.add((EX.Y, EX.doc, Literal("unchanged")))
+        graph_b.add((EX.Z, EX.doc, Literal("brand new")))
+        write_run(dataset, run_id="b", graph=graph_b, xsd_path="/work/ontologies/mikadiv-fm/sources/xsd/MiKaDiv_FM_1.02.xsd", pdf_path="/work/ontologies/mikadiv-fm/sources/khb/khb_mikadiv_fm_anlage_en_v3.pdf", created_at="t2")
+
+        diff = diff_runs(dataset, "a", "b")
+
+        removed_objects = {str(o) for (_, _, o) in diff.removed}
+        added_objects = {str(o) for (_, _, o) in diff.added}
+        assert removed_objects == {"old text"}
+        assert added_objects == {"new text", "brand new"}
     finally:
         dataset.close()
         shutil.rmtree(STORE_PATH, ignore_errors=True)

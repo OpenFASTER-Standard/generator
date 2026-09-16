@@ -82,3 +82,37 @@ def list_runs(dataset: Dataset) -> list[RunInfo]:
         )
     runs.sort(key=lambda r: r.created_at)
     return runs
+
+
+@dataclass(frozen=True)
+class RunDiff:
+    added: list[tuple[str, str, str]]
+    removed: list[tuple[str, str, str]]
+
+
+def _run_graph_uri(dataset: Dataset, run_id: str) -> str:
+    index = dataset.graph(URIRef(str(RUNS["index"])))
+    for subject in index.subjects(RUNS.runId, Literal(run_id)):
+        return str(subject)
+    raise ValueError(f"no run with run_id={run_id!r}")
+
+
+def diff_runs(dataset: Dataset, run_id_a: str, run_id_b: str) -> RunDiff:
+    graph_uri_a = _run_graph_uri(dataset, run_id_a)
+    graph_uri_b = _run_graph_uri(dataset, run_id_b)
+
+    removed_query = f"""
+    SELECT ?s ?p ?o WHERE {{
+      GRAPH <{graph_uri_a}> {{ ?s ?p ?o }}
+      FILTER NOT EXISTS {{ GRAPH <{graph_uri_b}> {{ ?s ?p ?o }} }}
+    }}
+    """
+    added_query = f"""
+    SELECT ?s ?p ?o WHERE {{
+      GRAPH <{graph_uri_b}> {{ ?s ?p ?o }}
+      FILTER NOT EXISTS {{ GRAPH <{graph_uri_a}> {{ ?s ?p ?o }} }}
+    }}
+    """
+    removed = [(str(r["s"]), str(r["p"]), str(r["o"])) for r in dataset.query(removed_query)]
+    added = [(str(r["s"]), str(r["p"]), str(r["o"])) for r in dataset.query(added_query)]
+    return RunDiff(added=added, removed=removed)
