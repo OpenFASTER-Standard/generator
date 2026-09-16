@@ -29,11 +29,15 @@ def _n3(term: Node) -> str:
 def _record_uri(subject: Node, predicate: Node, obj: Node) -> str:
     """Generate a deterministic, stable URI for the provenance record linked to this fact.
 
-    Uses SHA256 of the fact's canonical representation to ensure the same fact
+    Uses SHA256 of the fact's canonical N3 representation to ensure the same fact
     always maps to the same record URI, enabling proper upsert semantics despite
     RDF-star deduplication limitations in this pyoxigraph version.
+
+    Uses .n3() serialization (not str()) to preserve language tags and datatypes
+    on Literals — str() would drop these, causing language variants of the same
+    documentation text to collide to the same record URI and overwrite provenance.
     """
-    key = f"{subject}|{predicate}|{obj}"
+    key = f"{subject.n3()}|{predicate.n3()}|{obj.n3()}"
     digest = hashlib.sha256(key.encode()).hexdigest()
     return f"https://purl.openfaster.org/provenance/record/{digest}"
 

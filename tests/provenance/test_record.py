@@ -159,3 +159,70 @@ def test_attach_provenance_escapes_special_characters():
     finally:
         dataset.close()
         shutil.rmtree(STORE_PATH, ignore_errors=True)
+
+
+def test_attach_provenance_distinguishes_language_variants():
+    """Verify that provenance for the same text in different languages is kept separate.
+
+    This is a regression test for the bug where _record_uri used str() instead of .n3(),
+    which caused Literal("text", lang="en") and Literal("text", lang="de") to collide
+    to the same record URI (since str() drops language tags), silently overwriting one
+    language's provenance with the other's.
+
+    The real-world scenario: attaching provenance to documentation that exists in
+    multiple languages on the same (subject, predicate) — e.g., German and English
+    versions of a field's documentation text.
+    """
+    dataset = _fresh_dataset()
+    try:
+        # Attach provenance to the same subject+predicate with German documentation
+        attach_provenance(
+            dataset,
+            graph_uri="urn:test:prov",
+            subject=EX.WIdNr,
+            predicate=EX.documentation,
+            obj=Literal("Kurze Wirtschafts-ID.", lang="de"),
+            source_uri="citation:german/spec",
+            generated_at="2026-09-15T10:00:00Z",
+        )
+
+        # Attach provenance to the same subject+predicate with English documentation
+        attach_provenance(
+            dataset,
+            graph_uri="urn:test:prov",
+            subject=EX.WIdNr,
+            predicate=EX.documentation,
+            obj=Literal("Short Business ID.", lang="en"),
+            source_uri="citation:english/spec",
+            generated_at="2026-09-15T11:00:00Z",
+        )
+
+        # Verify German provenance is still there (not overwritten)
+        german_record = get_provenance(
+            dataset,
+            graph_uri="urn:test:prov",
+            subject=EX.WIdNr,
+            predicate=EX.documentation,
+            obj=Literal("Kurze Wirtschafts-ID.", lang="de"),
+        )
+        assert german_record is not None
+        assert german_record.source_uri == "citation:german/spec"
+        assert german_record.generated_at == "2026-09-15T10:00:00Z"
+
+        # Verify English provenance is there (not lost)
+        english_record = get_provenance(
+            dataset,
+            graph_uri="urn:test:prov",
+            subject=EX.WIdNr,
+            predicate=EX.documentation,
+            obj=Literal("Short Business ID.", lang="en"),
+        )
+        assert english_record is not None
+        assert english_record.source_uri == "citation:english/spec"
+        assert english_record.generated_at == "2026-09-15T11:00:00Z"
+
+        # Verify they're different records (not collided)
+        assert german_record.source_uri != english_record.source_uri
+    finally:
+        dataset.close()
+        shutil.rmtree(STORE_PATH, ignore_errors=True)
