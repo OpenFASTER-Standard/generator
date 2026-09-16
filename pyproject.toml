@@ -17,6 +17,7 @@ dependencies = [
     "pdfplumber>=0.11",
     "pyoxigraph>=0.5",
     "oxrdflib>=0.5",
+    "pyshacl>=0.27",
 ]
 
 [project.optional-dependencies]

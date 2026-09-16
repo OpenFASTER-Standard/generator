@@ -1,0 +1,49 @@
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix review: <https://purl.openfaster.org/review/> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+
+review:CorrectionShape a sh:NodeShape ;
+    sh:targetClass review:Correction ;
+    sh:property [
+        sh:path review:status ;
+        sh:hasValue "proposed" ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path review:targetSubject ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path review:targetPredicate ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] .
+
+review:DecisionShape a sh:NodeShape ;
+    sh:targetClass review:Decision ;
+    sh:property [
+        sh:path review:outcome ;
+        sh:in ("approved" "rejected") ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path review:decides ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:sparql [
+        sh:message "A Decision's reviewer must differ from the Correction's proposer (no self-approval)." ;
+        sh:select """
+            PREFIX review: <https://purl.openfaster.org/review/>
+            PREFIX prov: <http://www.w3.org/ns/prov#>
+            SELECT $this WHERE {
+                $this review:decides ?correction ;
+                      prov:wasAttributedTo ?decider .
+                ?correction prov:wasAttributedTo ?proposer .
+                FILTER (?decider = ?proposer)
+            }
+        """ ;
+    ] .
