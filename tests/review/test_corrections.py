@@ -4,7 +4,13 @@ import pytest
 from rdflib import BNode, Literal, Namespace, RDF, URIRef
 
 from provenance.vocab import PROV
-from review.corrections import SYSTEM_AGENT, propose_correction, reviewer_uri, decide_correction
+from review.corrections import (
+    SYSTEM_AGENT,
+    _find_pending_corrections,
+    decide_correction,
+    propose_correction,
+    reviewer_uri,
+)
 from review.vocab import REVIEW
 from store.database import open_store
 
@@ -196,7 +202,7 @@ def test_a_third_proposal_only_supersedes_the_still_undecided_second_one():
 
 
 def test_propose_correction_rejects_a_bnode_target_subject():
-    """A BNode interpolated into _find_pending_correction's SPARQL SELECT text
+    """A BNode interpolated into _find_pending_corrections's SPARQL SELECT text
     becomes a non-distinguished (wildcard-like) variable, not a fixed value --
     it would silently match/supersede an unrelated correction instead of
     erroring. Same injection shape provenance.record._reject_bnode already
@@ -254,6 +260,113 @@ def test_decide_correction_self_approval_is_rejected():
             decide_correction(
                 dataset, graph_uri=GRAPH_URI, correction_uri=correction,
                 outcome="approved", decider="julian", reason="self-approving",
+                generated_at="2026-09-16T09:00:00Z",
+            )
+    finally:
+        dataset.close()
+        shutil.rmtree(STORE_PATH, ignore_errors=True)
+
+
+def test_propose_correction_failed_call_leaves_original_pending_correction_untouched():
+    """Critical whole-branch-review finding: the old propose_correction wrote
+    step (a) (supersede the prior pending correction, i.e. write a rejection
+    Decision) BEFORE steps (b)-(d) (build + SHACL-validate the new correction,
+    write its triples, write its wasRevisionOf link). Those later steps can
+    fail independently (e.g. prior_value isn't a real rdflib term and has no
+    .n3()) -- and by then step (a) had ALREADY committed, permanently
+    rejecting a legitimate pending correction with no replacement, since the
+    store is append-only and nothing can be un-written. Fixed by reordering so
+    ALL validation/term-coercion happens before ANY write, and supersession
+    happens LAST, only after the new correction is fully, successfully
+    written. This test proves a failed call leaves no trace at all."""
+    dataset = _fresh_dataset()
+    try:
+        original = propose_correction(
+            dataset, graph_uri=GRAPH_URI,
+            target_subject=EX.WIdNrTwo, target_predicate=EX.documentation, target_language="de",
+            proposed_value="Original fix.", prior_value=Literal("Original.", lang="de"),
+            proposer="julian", reason="first attempt", generated_at="2026-09-15T15:00:00Z",
+        )
+
+        with pytest.raises(TypeError):
+            propose_correction(
+                dataset, graph_uri=GRAPH_URI,
+                target_subject=EX.WIdNrTwo, target_predicate=EX.documentation, target_language="de",
+                proposed_value="Doomed fix.", prior_value="not a term",
+                proposer="julian", reason="malformed prior_value", generated_at="2026-09-15T16:00:00Z",
+            )
+
+        graph = dataset.graph(URIRef(GRAPH_URI))
+        # str(), not `== Literal("proposed")`: same plain-literal round-trip
+        # normalization noted above.
+        assert str(graph.value(URIRef(original), REVIEW.status)) == "proposed"
+        assert list(graph.subjects(REVIEW.decides, URIRef(original))) == []
+        pending = _find_pending_corrections(dataset, GRAPH_URI, EX.WIdNrTwo, EX.documentation, "de")
+        assert URIRef(original) in pending
+    finally:
+        dataset.close()
+        shutil.rmtree(STORE_PATH, ignore_errors=True)
+
+
+def test_a_third_proposal_supersedes_both_of_two_independently_pending_corrections():
+    """If two pending (undecided) corrections somehow exist for the identical
+    (subject, predicate, language) target -- reachable, before this fix wave,
+    via the exact non-atomicity bug the previous test covers, or via any
+    future concurrent-write scenario -- a third proposal must supersede BOTH,
+    not arbitrarily orphan one of them the way the old, singular
+    _find_pending_correction (no ORDER BY, results[0] taken) would have.
+    Constructed via direct graph writes since propose_correction's own
+    supersession would normally prevent two pending corrections from
+    coexisting in the first place."""
+    dataset = _fresh_dataset()
+    try:
+        graph = dataset.graph(URIRef(GRAPH_URI))
+
+        def _write_bare_pending_correction(uri, value):
+            graph.add((uri, RDF.type, REVIEW.Correction))
+            graph.add((uri, REVIEW.status, Literal("proposed")))
+            graph.add((uri, REVIEW.targetSubject, EX.WIdNrTwo))
+            graph.add((uri, REVIEW.targetPredicate, EX.documentation))
+            graph.add((uri, REVIEW.targetLanguage, Literal("de")))
+            graph.add((uri, REVIEW.proposedValue, Literal(value, lang="de")))
+            graph.add((uri, PROV.wasAttributedTo, reviewer_uri("julian")))
+            graph.add((uri, PROV.generatedAtTime, Literal("2026-09-15T15:00:00Z")))
+
+        pending_a = REVIEW["correction-manual-a"]
+        pending_b = REVIEW["correction-manual-b"]
+        _write_bare_pending_correction(pending_a, "Manual A.")
+        _write_bare_pending_correction(pending_b, "Manual B.")
+
+        third = propose_correction(
+            dataset, graph_uri=GRAPH_URI,
+            target_subject=EX.WIdNrTwo, target_predicate=EX.documentation, target_language="de",
+            proposed_value="Third.", prior_value=Literal("Original.", lang="de"),
+            proposer="julian", reason="r3", generated_at="2026-09-15T17:00:00Z",
+        )
+
+        for pending in (pending_a, pending_b):
+            decisions = list(graph.subjects(REVIEW.decides, pending))
+            assert len(decisions) == 1, f"{pending} should have exactly one (superseding) decision"
+            assert str(graph.value(decisions[0], REVIEW.outcome)) == "rejected"
+
+        assert list(graph.subjects(REVIEW.decides, URIRef(third))) == []
+    finally:
+        dataset.close()
+        shutil.rmtree(STORE_PATH, ignore_errors=True)
+
+
+def test_decide_correction_on_an_unknown_correction_raises_value_error_not_assertion_error():
+    """_write_decision does `graph.value(correction_uri, PROV.wasAttributedTo)`,
+    which returns None for a nonexistent (or unattributed) correction; adding
+    a triple with None as the object used to trip rdflib's own internal
+    assert -- a raw AssertionError, silently a no-op under `python -O`, and
+    not a distinguishable error type for an API layer."""
+    dataset = _fresh_dataset()
+    try:
+        with pytest.raises(ValueError):
+            decide_correction(
+                dataset, graph_uri=GRAPH_URI, correction_uri=str(REVIEW["correction-does-not-exist"]),
+                outcome="approved", decider="someone-else", reason="ok",
                 generated_at="2026-09-16T09:00:00Z",
             )
     finally:

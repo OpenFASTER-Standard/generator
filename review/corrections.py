@@ -27,7 +27,7 @@ def reviewer_uri(name: str) -> URIRef:
 
 
 def _reject_bnode_target(target_subject: Node, target_predicate: Node) -> None:
-    """A blank node embedded in a SPARQL text pattern (as ``_find_pending_correction``'s
+    """A blank node embedded in a SPARQL text pattern (as ``_find_pending_corrections``'s
     SELECT and ``propose_correction``'s ``wasRevisionOf`` INSERT DATA both build via
     ``.n3()`` interpolation) is a non-distinguished variable, not a fixed value -- inside
     the SELECT's WHERE clause it would silently match ANY term, potentially
@@ -49,9 +49,15 @@ def _reject_bnode_target(target_subject: Node, target_predicate: Node) -> None:
             )
 
 
-def _find_pending_correction(
+def _find_pending_corrections(
     dataset: Dataset, graph_uri: str, target_subject: Node, target_predicate: Node, target_language: str
-) -> URIRef | None:
+) -> list[URIRef]:
+    """Returns ALL undecided (pending) corrections for this exact target, not
+    just one -- more than one can exist (e.g. reachable via a failure window
+    in an older, non-atomic version of propose_correction, or any future
+    concurrent-write scenario), and a new proposal must supersede every one
+    of them, not arbitrarily orphan the rest.
+    """
     _reject_bnode_target(target_subject, target_predicate)
     results = list(dataset.query(f"""
     PREFIX review: <{REVIEW}>
@@ -65,9 +71,7 @@ def _find_pending_correction(
       }}
     }}
     """))
-    if not results:
-        return None
-    return URIRef(str(results[0]["correction"]))
+    return [URIRef(str(row["correction"])) for row in results]
 
 
 def _write_decision(
@@ -84,12 +88,21 @@ def _write_decision(
     # specified ordering). Confirmed live: without this check, both calls
     # silently succeeded. This check also runs for propose_correction's own
     # internal auto-supersession call below, but is always a no-op there --
-    # _find_pending_correction's FILTER NOT EXISTS already guarantees the
+    # _find_pending_corrections's FILTER NOT EXISTS already guarantees the
     # correction being superseded has no existing decision.
     if any(graph.subjects(REVIEW.decides, correction_uri)):
         raise ValueError(f"correction {correction_uri} has already been decided")
 
     proposer = graph.value(correction_uri, PROV.wasAttributedTo)
+    if proposer is None:
+        # graph.value(...) returns None both for "correction_uri doesn't exist
+        # at all" and "it exists but has no prov:wasAttributedTo" -- either way
+        # there is nothing valid to attribute the decision against. Without this
+        # check, `check.add((correction_uri, PROV.wasAttributedTo, None))` below
+        # trips rdflib's own internal assert (a raw, undocumented AssertionError
+        # -- silently a no-op under `python -O`, and not a distinguishable error
+        # type for an API layer to catch).
+        raise ValueError(f"no correction {correction_uri} (or it has no prov:wasAttributedTo) in <{graph_uri}>")
 
     decision_uri = REVIEW[f"decision-{uuid4()}"]
     check = Graph()
@@ -132,21 +145,37 @@ def propose_correction(
     generated_at: str,
 ) -> str:
     _reject_bnode_target(target_subject, target_predicate)
-    pending = _find_pending_correction(dataset, graph_uri, target_subject, target_predicate, target_language)
-    if pending is not None:
-        _write_decision(
-            dataset, graph_uri, pending, outcome="rejected", decider=SYSTEM_AGENT,
-            reason="superseded by a newer proposal", generated_at=generated_at,
-        )
+    if not isinstance(prior_value, Node) or isinstance(prior_value, BNode):
+        # prior_value is interpolated via .n3() below (both into the check
+        # graph's own SHACL-validated triples, indirectly, and directly into
+        # the wasRevisionOf INSERT DATA text) -- a non-Node (e.g. a plain
+        # Python str) has no .n3() and raises a raw AttributeError deep
+        # inside step (d) below, well after step (a) (supersession) used to
+        # already have committed. Reject it up front, before anything is
+        # written, so this is a clean, typed failure instead of a partial write.
+        raise TypeError(f"prior_value must be a non-BNode rdflib term, got {prior_value!r}")
 
+    # Build and SHACL-validate the new correction FIRST -- entirely before any
+    # write happens -- so a failure anywhere in this block (bad terms, SHACL
+    # violation) leaves the graph completely unchanged. Supersession of any
+    # prior pending correction(s) is deliberately the LAST thing this function
+    # does, after the new correction has been fully and successfully written,
+    # so a failure never permanently rejects a legitimate pending correction
+    # with no replacement (the store is append-only; nothing can be un-written).
     correction_uri = REVIEW[f"correction-{uuid4()}"]
+    revision_n3 = f"<< {target_subject.n3()} {target_predicate.n3()} {prior_value.n3()} >>"
+
     check = Graph()
     check.add((correction_uri, RDF.type, REVIEW.Correction))
     check.add((correction_uri, REVIEW.status, Literal("proposed")))
     check.add((correction_uri, REVIEW.targetSubject, target_subject))
     check.add((correction_uri, REVIEW.targetPredicate, target_predicate))
     check.add((correction_uri, REVIEW.targetLanguage, Literal(target_language)))
-    check.add((correction_uri, REVIEW.proposedValue, Literal(proposed_value)))
+    # lang=target_language (not a bare Literal): the value being corrected
+    # carries a real language tag, so the correction's replacement value must
+    # round-trip with the same tag instead of coming back as an untyped
+    # xsd:string.
+    check.add((correction_uri, REVIEW.proposedValue, Literal(proposed_value, lang=target_language)))
     check.add((correction_uri, REVIEW.reason, Literal(reason)))
     check.add((correction_uri, PROV.wasAttributedTo, reviewer_uri(proposer)))
     check.add((correction_uri, PROV.generatedAtTime, Literal(generated_at, datatype=XSD.dateTime)))
@@ -154,6 +183,10 @@ def propose_correction(
     conforms, results_text = validate_graph(check)
     if not conforms:
         raise ValueError(f"correction failed SHACL validation: {results_text}")
+
+    # Read-only lookup of what (if anything) needs superseding -- still no
+    # writes yet.
+    pending_list = _find_pending_corrections(dataset, graph_uri, target_subject, target_predicate, target_language)
 
     graph = dataset.graph(URIRef(graph_uri))
     for triple in check:
@@ -163,10 +196,19 @@ def propose_correction(
     PREFIX prov: <{PROV}>
     INSERT DATA {{
       GRAPH <{graph_uri}> {{
-        <{correction_uri}> prov:wasRevisionOf << {target_subject.n3()} {target_predicate.n3()} {prior_value.n3()} >> .
+        <{correction_uri}> prov:wasRevisionOf {revision_n3} .
       }}
     }}
     """)
+
+    # Only now, after the new correction is fully and successfully written,
+    # supersede every prior pending correction for this exact target (there
+    # may be more than one -- see _find_pending_corrections).
+    for pending in pending_list:
+        _write_decision(
+            dataset, graph_uri, pending, outcome="rejected", decider=SYSTEM_AGENT,
+            reason="superseded by a newer proposal", generated_at=generated_at,
+        )
 
     return str(correction_uri)
 

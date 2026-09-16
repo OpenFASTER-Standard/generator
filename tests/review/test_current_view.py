@@ -4,7 +4,8 @@ import pytest
 from rdflib import BNode, Graph as PlainGraph, Literal, Namespace, URIRef
 
 from review.corrections import decide_correction, propose_correction
-from review.current_view import get_correction_status, get_current_value
+from review.current_view import _find_approved_correction, get_correction_status, get_current_value
+from review.staleness import is_correction_stale
 from store.database import open_store
 from store.runs import write_run
 
@@ -174,6 +175,175 @@ def test_decide_correction_on_an_already_decided_correction_raises():
                 outcome="rejected", decider="reviewer-b", reason="actually no",
                 generated_at="2026-09-16T09:00:01Z",
             )
+    finally:
+        dataset.close()
+        shutil.rmtree(STORE_PATH, ignore_errors=True)
+
+
+def test_get_current_value_falls_back_to_raw_value_when_the_approved_correction_is_stale():
+    """Important whole-branch-review finding: get_current_value used to never
+    check staleness at all -- it applied whichever correction
+    _find_approved_correction returned, even if the real source value had
+    since changed underneath it, directly contradicting review.staleness's
+    own stated purpose ("never silently misapplied"). Fixed by checking
+    is_correction_stale against the run being asked about before applying an
+    approved correction; if stale, fall back to the raw (changed) run value."""
+    dataset = _fresh_dataset()
+    try:
+        run_graph = PlainGraph()
+        run_graph.add((EX.WIdNrTwo, EX.documentation, Literal("Original.", lang="de")))
+        run_info = write_run(
+            dataset, run_id="r1", graph=run_graph,
+            xsd_path="/work/ontologies/mikadiv-fm/sources/xsd/MiKaDiv_FM_1.02.xsd",
+            pdf_path="/work/ontologies/mikadiv-fm/sources/khb/khb_mikadiv_fm_anlage_en_v3.pdf",
+            created_at="t1",
+        )
+
+        correction = propose_correction(
+            dataset, graph_uri=CORRECTIONS_GRAPH,
+            target_subject=EX.WIdNrTwo, target_predicate=EX.documentation, target_language="de",
+            proposed_value="Fixed text.", prior_value=Literal("Original.", lang="de"),
+            proposer="julian", reason="typo fix", generated_at="2026-09-15T15:00:00Z",
+        )
+        decide_correction(
+            dataset, graph_uri=CORRECTIONS_GRAPH, correction_uri=correction,
+            outcome="approved", decider="someone-else", reason="ok",
+            generated_at="2026-09-16T09:00:00Z",
+        )
+
+        # Sanity check: against the ORIGINAL run, the approved correction still applies.
+        current_on_original_run = get_current_value(
+            dataset, run_info.graph_uri, CORRECTIONS_GRAPH, EX.WIdNrTwo, EX.documentation, "de",
+        )
+        assert str(current_on_original_run) == "Fixed text."
+
+        # Now a NEW run comes in where the underlying source value has changed
+        # from what the correction's prov:wasRevisionOf recorded -- the
+        # correction is stale against this new run.
+        new_run_graph = PlainGraph()
+        new_run_graph.add((EX.WIdNrTwo, EX.documentation, Literal("A completely different upstream value.", lang="de")))
+        new_run_info = write_run(
+            dataset, run_id="r2", graph=new_run_graph,
+            xsd_path="/work/ontologies/mikadiv-fm/sources/xsd/MiKaDiv_FM_1.02.xsd",
+            pdf_path="/work/ontologies/mikadiv-fm/sources/khb/khb_mikadiv_fm_anlage_en_v3.pdf",
+            created_at="t2",
+        )
+        assert is_correction_stale(dataset, CORRECTIONS_GRAPH, new_run_info.graph_uri, correction) is True
+
+        current_on_new_run = get_current_value(
+            dataset, new_run_info.graph_uri, CORRECTIONS_GRAPH, EX.WIdNrTwo, EX.documentation, "de",
+        )
+        # Must be the RAW (changed) value, NOT the now-stale correction's value.
+        assert str(current_on_new_run) == "A completely different upstream value."
+    finally:
+        dataset.close()
+        shutil.rmtree(STORE_PATH, ignore_errors=True)
+
+
+def test_proposed_value_round_trips_with_its_target_language_tag():
+    """Important whole-branch-review finding: review:proposedValue used to be
+    stored as a bare, untagged Literal even though the correction has a real
+    target_language -- a corrected German string came back as an untyped
+    xsd:string instead of a "..."@de literal, inconsistent with the raw value
+    it replaced and not round-trippable."""
+    dataset = _fresh_dataset()
+    try:
+        run_graph = PlainGraph()
+        run_graph.add((EX.WIdNrTwo, EX.documentation, Literal("Original.", lang="de")))
+        run_info = write_run(
+            dataset, run_id="r1", graph=run_graph,
+            xsd_path="/work/ontologies/mikadiv-fm/sources/xsd/MiKaDiv_FM_1.02.xsd",
+            pdf_path="/work/ontologies/mikadiv-fm/sources/khb/khb_mikadiv_fm_anlage_en_v3.pdf",
+            created_at="t1",
+        )
+
+        correction = propose_correction(
+            dataset, graph_uri=CORRECTIONS_GRAPH,
+            target_subject=EX.WIdNrTwo, target_predicate=EX.documentation, target_language="de",
+            proposed_value="Korrigierter deutscher Text.", prior_value=Literal("Original.", lang="de"),
+            proposer="julian", reason="typo fix", generated_at="2026-09-15T15:00:00Z",
+        )
+        decide_correction(
+            dataset, graph_uri=CORRECTIONS_GRAPH, correction_uri=correction,
+            outcome="approved", decider="someone-else", reason="ok",
+            generated_at="2026-09-16T09:00:00Z",
+        )
+
+        current = get_current_value(
+            dataset, run_info.graph_uri, CORRECTIONS_GRAPH, EX.WIdNrTwo, EX.documentation, "de",
+        )
+        assert isinstance(current, Literal)
+        assert current.language == "de"
+        assert str(current) == "Korrigierter deutscher Text."
+    finally:
+        dataset.close()
+        shutil.rmtree(STORE_PATH, ignore_errors=True)
+
+
+def test_find_approved_correction_is_deterministic_on_an_identical_generated_at_timestamp():
+    """Important whole-branch-review finding, confirmed live by the reviewer
+    across 6 trials: _find_approved_correction's `ORDER BY DESC(?time) LIMIT 1`
+    had no secondary sort key, so two different corrections approved with the
+    IDENTICAL timestamp produced a nondeterministic winner across repeated
+    queries. Fixed with a deterministic secondary sort key (the correction's
+    own URI). This test calls _find_approved_correction/get_current_value
+    repeatedly and asserts the SAME result every time."""
+    dataset = _fresh_dataset()
+    try:
+        run_graph = PlainGraph()
+        run_graph.add((EX.WIdNrFour, EX.documentation, Literal("Original.", lang="de")))
+        run_info = write_run(
+            dataset, run_id="r1", graph=run_graph,
+            xsd_path="/work/ontologies/mikadiv-fm/sources/xsd/MiKaDiv_FM_1.02.xsd",
+            pdf_path="/work/ontologies/mikadiv-fm/sources/khb/khb_mikadiv_fm_anlage_en_v3.pdf",
+            created_at="t1",
+        )
+
+        identical_timestamp = "2026-09-16T09:00:00Z"
+
+        correction_a = propose_correction(
+            dataset, graph_uri=CORRECTIONS_GRAPH,
+            target_subject=EX.WIdNrFour, target_predicate=EX.documentation, target_language="de",
+            proposed_value="Fix A.", prior_value=Literal("Original.", lang="de"),
+            proposer="julian", reason="first fix", generated_at="2026-09-15T15:00:00Z",
+        )
+        decide_correction(
+            dataset, graph_uri=CORRECTIONS_GRAPH, correction_uri=correction_a,
+            outcome="approved", decider="reviewer-a", reason="ok",
+            generated_at=identical_timestamp,
+        )
+
+        # B is proposed against the SAME original value -- since A is already
+        # approved (not pending), this does NOT supersede it.
+        correction_b = propose_correction(
+            dataset, graph_uri=CORRECTIONS_GRAPH,
+            target_subject=EX.WIdNrFour, target_predicate=EX.documentation, target_language="de",
+            proposed_value="Fix B.", prior_value=Literal("Original.", lang="de"),
+            proposer="julian", reason="second fix", generated_at="2026-09-15T15:05:00Z",
+        )
+        decide_correction(
+            dataset, graph_uri=CORRECTIONS_GRAPH, correction_uri=correction_b,
+            outcome="approved", decider="reviewer-b", reason="ok too",
+            generated_at=identical_timestamp,
+        )
+
+        first_result = _find_approved_correction(
+            dataset, CORRECTIONS_GRAPH, EX.WIdNrFour, EX.documentation, "de",
+        )
+        for _ in range(10):
+            repeat_result = _find_approved_correction(
+                dataset, CORRECTIONS_GRAPH, EX.WIdNrFour, EX.documentation, "de",
+            )
+            assert repeat_result == first_result, "the winner must be deterministic across repeated queries"
+
+        first_value = get_current_value(
+            dataset, run_info.graph_uri, CORRECTIONS_GRAPH, EX.WIdNrFour, EX.documentation, "de",
+        )
+        for _ in range(10):
+            repeat_value = get_current_value(
+                dataset, run_info.graph_uri, CORRECTIONS_GRAPH, EX.WIdNrFour, EX.documentation, "de",
+            )
+            assert str(repeat_value) == str(first_value), "the applied value must be deterministic across repeated calls"
     finally:
         dataset.close()
         shutil.rmtree(STORE_PATH, ignore_errors=True)
