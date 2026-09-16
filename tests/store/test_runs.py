@@ -3,9 +3,11 @@ import shutil
 import pytest
 from rdflib import BNode, Graph, Graph as PlainGraph, Literal, Namespace, URIRef
 
+from extraction.annex_pdf import AttachmentReport
 from extraction.extract import extract
+from extraction.translation_plausibility import CoverageReport, PlausibilityIssue
 from store.database import open_store
-from store.runs import diff_runs, list_runs, write_run
+from store.runs import diff_runs, list_runs, read_run_audit, write_run, write_run_audit
 
 STORE_PATH = "/tmp/test_provenance_store_task2"
 EX = Namespace("https://example.org/test#")
@@ -183,6 +185,24 @@ def test_write_run_stores_created_at_as_xsd_datetime_literal():
         index = dataset.graph(URIRef(str(RUNS["index"])))
         literal = index.value(URIRef(info.graph_uri), RUNS.createdAt)
         assert literal.datatype == XSD.dateTime
+    finally:
+        dataset.close()
+        shutil.rmtree(STORE_PATH, ignore_errors=True)
+
+
+def test_write_and_read_run_audit_round_trips_the_real_dataclasses():
+    dataset = _fresh_dataset()
+    try:
+        attachment = AttachmentReport(attached=["A", "B"], ambiguous=["C"], unmatched=["D"])
+        coverage = CoverageReport(total_documented_subjects=4, attached=2, ambiguous=1, unmatched=1)
+        issues = [PlausibilityIssue("length_ratio", "A", "ratio=9.99", subject_uri="urn:test:A")]
+
+        write_run_audit(dataset, run_id="run-1", attachment=attachment, coverage=coverage, issues=issues)
+        read_attachment, read_coverage, read_issues = read_run_audit(dataset, run_id="run-1")
+
+        assert read_attachment == attachment
+        assert read_coverage == coverage
+        assert read_issues == issues
     finally:
         dataset.close()
         shutil.rmtree(STORE_PATH, ignore_errors=True)
