@@ -4,7 +4,12 @@ import pytest
 from rdflib import BNode, Graph as PlainGraph, Literal, Namespace, URIRef
 
 from review.corrections import decide_correction, propose_correction
-from review.current_view import _find_approved_correction, get_correction_status, get_current_value
+from review.current_view import (
+    _find_approved_correction,
+    get_correction_status,
+    get_current_value,
+    materialize_current_graph,
+)
 from review.staleness import is_correction_stale
 from store.database import open_store
 from store.runs import write_run
@@ -368,6 +373,50 @@ def test_get_current_value_rejects_a_bnode_subject():
             get_current_value(
                 dataset, run_info.graph_uri, CORRECTIONS_GRAPH, BNode(), EX.documentation, "de",
             )
+    finally:
+        dataset.close()
+        shutil.rmtree(STORE_PATH, ignore_errors=True)
+
+
+def test_materialize_current_graph_substitutes_approved_corrections_in_place():
+    dataset = _fresh_dataset()
+    try:
+        run_graph = PlainGraph()
+        run_graph.add((EX.WIdNrTwo, EX.documentation, Literal("Original.", lang="de")))
+        run_graph.add((EX.Other, EX.name, Literal("Other")))
+        run_info = write_run(
+            dataset, run_id="r1", graph=run_graph,
+            xsd_path="/work/ontologies/mikadiv-fm/sources/xsd/MiKaDiv_FM_1.02.xsd",
+            pdf_path="/work/ontologies/mikadiv-fm/sources/khb/khb_mikadiv_fm_anlage_en_v3.pdf",
+            created_at="t1",
+        )
+
+        correction = propose_correction(
+            dataset, graph_uri=CORRECTIONS_GRAPH,
+            target_subject=EX.WIdNrTwo, target_predicate=EX.documentation, target_language="de",
+            proposed_value="Fixed text.", prior_value=Literal("Original.", lang="de"),
+            proposer="julian", reason="typo fix", generated_at="2026-09-15T15:00:00Z",
+        )
+        decide_correction(
+            dataset, graph_uri=CORRECTIONS_GRAPH, correction_uri=correction,
+            outcome="approved", decider="someone-else", reason="ok",
+            generated_at="2026-09-16T09:00:00Z",
+        )
+
+        current = materialize_current_graph(dataset, run_info.graph_uri, CORRECTIONS_GRAPH)
+
+        docs = list(current.objects(EX.WIdNrTwo, EX.documentation))
+        assert [str(d) for d in docs] == ["Fixed text."]
+        # Untouched facts pass through -- compared by value (str()), not raw
+        # Literal term equality: Oxigraph (RDF-1.1-compliant) always round-trips
+        # a plain/untyped literal with an explicit xsd:string datatype, while a
+        # freshly-constructed Literal("Other") here leaves .datatype as None.
+        # rdflib's Literal.__eq__ (what plain Graph.__contains__ uses) is strict
+        # term equality, not RDF-1.1 value equality (Literal.eq() agrees they're
+        # equal) -- so `(EX.Other, EX.name, Literal("Other")) in current` would
+        # fail here on a pure store round-trip artifact unrelated to
+        # materialize_current_graph's corrections-resolution logic.
+        assert [str(o) for o in current.objects(EX.Other, EX.name)] == ["Other"]
     finally:
         dataset.close()
         shutil.rmtree(STORE_PATH, ignore_errors=True)

@@ -6,7 +6,7 @@ Decision (if any) decides it.
 """
 from __future__ import annotations
 
-from rdflib import Dataset, Literal, URIRef
+from rdflib import Dataset, Graph, Literal, URIRef
 from rdflib.term import Node
 
 from provenance.vocab import PROV
@@ -115,3 +115,36 @@ def get_current_value(
         if language is None or (isinstance(obj, Literal) and obj.language == language):
             return obj
     return None
+
+
+def materialize_current_graph(dataset: Dataset, run_graph_uri: str, corrections_graph_uri: str) -> Graph:
+    run_graph = dataset.graph(URIRef(run_graph_uri))
+    current = Graph()
+    for triple in run_graph.triples((None, None, None)):
+        current.add(triple)
+
+    # Only the (subject, predicate, language) combinations that have ANY
+    # correction on record need special handling -- everything else is
+    # already correct as copied from the raw run graph above.
+    targets = list(dataset.query(f"""
+    PREFIX review: <{REVIEW}>
+    SELECT DISTINCT ?subject ?predicate ?language WHERE {{
+      GRAPH <{corrections_graph_uri}> {{
+        ?correction a review:Correction ;
+                    review:targetSubject ?subject ;
+                    review:targetPredicate ?predicate ;
+                    review:targetLanguage ?language .
+      }}
+    }}
+    """))
+    for row in targets:
+        subject = URIRef(str(row["subject"]))
+        predicate = URIRef(str(row["predicate"]))
+        language = str(row["language"])
+        resolved = get_current_value(dataset, run_graph_uri, corrections_graph_uri, subject, predicate, language)
+        for obj in list(current.objects(subject, predicate)):
+            if isinstance(obj, Literal) and obj.language == language:
+                current.remove((subject, predicate, obj))
+        if resolved is not None:
+            current.add((subject, predicate, resolved))
+    return current

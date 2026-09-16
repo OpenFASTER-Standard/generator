@@ -30,4 +30,7 @@ def create_app(store_path: str, xsd_path: str, pdf_path: str) -> FastAPI:
     app.state.latest_run = info
     app.state.corrections_graph_uri = CORRECTIONS_GRAPH_URI
 
+    from webapp.routes_structure import router as structure_router
+    app.include_router(structure_router)
+
     return app
