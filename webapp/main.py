@@ -33,4 +33,7 @@ def create_app(store_path: str, xsd_path: str, pdf_path: str) -> FastAPI:
     from webapp.routes_structure import router as structure_router
     app.include_router(structure_router)
 
+    from webapp.routes_provenance import router as provenance_router
+    app.include_router(provenance_router)
+
     return app
