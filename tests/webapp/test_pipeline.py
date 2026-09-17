@@ -88,3 +88,32 @@ def test_run_pipeline_and_store_attaches_real_xsd_provenance_for_a_global_constr
     finally:
         dataset.close()
         shutil.rmtree(STORE_PATH, ignore_errors=True)
+
+
+def test_run_pipeline_and_store_produces_the_same_source_uris_as_before_the_locator_refactor():
+    # Real, confirmed regression anchor from this plan's own spec work:
+    # AOrdNr's English citation is exactly this page/bbox on the real PDF.
+    # This must stay byte-identical after routing source_uri construction
+    # through citations.locator, since no store migration is planned --
+    # every fact Plans A-D already recorded must keep resolving.
+    shutil.rmtree(STORE_PATH, ignore_errors=True)
+    dataset = open_store(STORE_PATH, create=True)
+    try:
+        info = run_pipeline_and_store(
+            dataset, xsd_path=ROOT_XSD, pdf_path=ANNEX_PDF,
+            run_id="2026-09-17T00:00:00Z", created_at="2026-09-17T00:00:00Z",
+        )
+        graph = dataset.graph(URIRef(info.graph_uri))
+        subject = next(
+            s for s in graph.subjects(XSDO.name, Literal("AOrdNr"))
+            if any(o.language == "en" for o in graph.objects(s, XSDO.documentation))
+        )
+        english = next(o for o in graph.objects(subject, XSDO.documentation) if o.language == "en")
+        record = get_provenance(dataset, info.graph_uri, subject, XSDO.documentation, english)
+        assert record.source_uri == (
+            "citation:pdf?path=/work/ontologies/mikadiv-fm/sources/khb/khb_mikadiv_fm_anlage_en_v3.pdf"
+            "&page=196&x0=137.64&top=610.179&x1=223.878&bottom=619.179"
+        )
+    finally:
+        dataset.close()
+        shutil.rmtree(STORE_PATH, ignore_errors=True)

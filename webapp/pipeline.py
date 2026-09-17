@@ -9,6 +9,7 @@ from __future__ import annotations
 import xmlschema
 from rdflib import Dataset
 
+from citations.locator import PdfLocator, XsdLocator, locator_to_source_uri
 from citations.xsd_citation import capture_xsd_fragment
 from extraction.annex_pdf import XSDO, attach_english_documentation, extract_name_occurrences_with_pages
 from extraction.extract import extract
@@ -30,10 +31,8 @@ def _attach_english_provenance(dataset, graph_uri, graph, occurrences_with_pages
         )
         if matching is None:
             continue
-        x0, top, x1, bottom = matching.bbox
-        source_uri = (
-            f"citation:pdf?path={pdf_path}&page={matching.page_number}"
-            f"&x0={x0}&top={top}&x1={x1}&bottom={bottom}"
+        source_uri = locator_to_source_uri(
+            PdfLocator(path=pdf_path, page=matching.page_number, bbox=matching.bbox)
         )
         attach_provenance(dataset, graph_uri, subject, XSDO.documentation, english, source_uri, generated_at)
 
@@ -54,7 +53,7 @@ def _attach_german_provenance_for_global_constructs(dataset, graph_uri, graph, s
         if german is None:
             continue
         citation = capture_xsd_fragment(component)
-        source_uri = f"citation:xsd?file={citation.source_file}&component={qname}"
+        source_uri = locator_to_source_uri(XsdLocator(file=citation.source_file, component=qname))
         attach_provenance(dataset, graph_uri, subject, XSDO.documentation, german, source_uri, generated_at)
 
 
