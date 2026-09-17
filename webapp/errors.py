@@ -32,6 +32,7 @@ fault. It gets its own explicit 500 with an honest message instead.
 from __future__ import annotations
 
 import json
+import urllib.parse
 
 import xmlschema.exceptions
 from fastapi import FastAPI, HTTPException, Request
@@ -66,7 +67,21 @@ def validated_iri(value: str, field: str) -> URIRef:
 
     Validation is delegated to rdflib itself (construct, then attempt
     `.n3()`) rather than a hand-rolled regex, so this can never drift
-    from what the downstream code actually accepts.
+    from what the downstream code actually accepts -- with one addition:
+    rdflib's own `URIRef`/`.n3()` do NOT require the value to be an
+    *absolute* IRI (a bare word like "documentation" round-trips through
+    both with no error), but every one of this module's own SPARQL
+    consumers (`provenance.record`, `review.corrections`) embeds the
+    result directly into raw SPARQL query text, where Oxigraph's parser
+    DOES require an absolute IRI and raises a bare, uncaught `SyntaxError`
+    otherwise -- confirmed live: a real frontend bug (Task 22's
+    `ProvenanceMarker` call site passing the bare string "documentation"
+    instead of the real predicate URI) reached exactly this path and
+    crashed `GET /api/provenance` with a raw 500 in a real browser,
+    despite this function already existing. Rejecting a non-absolute IRI
+    here, at the one shared boundary, closes that class of bug for every
+    current and future caller, not just the one that happened to be
+    caught this time.
     """
     term = URIRef(value)
     try:
@@ -77,6 +92,10 @@ def validated_iri(value: str, field: str) -> URIRef:
         raise HTTPException(
             status_code=400, detail=f"{field}={value!r} is not a valid IRI"
         ) from exc
+    if not urllib.parse.urlparse(value).scheme:
+        raise HTTPException(
+            status_code=400, detail=f"{field}={value!r} is not an absolute IRI"
+        )
     return term
 
 

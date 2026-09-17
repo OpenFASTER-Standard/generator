@@ -131,6 +131,23 @@ def test_provenance_still_answers_a_well_formed_but_untracked_fact_with_null(cli
     assert response.json() is None
 
 
+def test_provenance_for_a_non_absolute_predicate_is_400_not_500(client):
+    # Real bug, caught live via a real browser during Plan D's Task 25
+    # manual E2E check: a bare word like "documentation" round-trips
+    # cleanly through rdflib's own URIRef/.n3() (validated_iri's original
+    # check), but Oxigraph's SPARQL parser requires an absolute IRI and
+    # raises a bare, uncaught SyntaxError when this value is embedded into
+    # query text in provenance.record.get_provenance -- surfacing as a raw
+    # 500. The frontend bug that triggered this (DocumentationView.tsx
+    # passing "documentation" instead of the real predicate URI) is fixed
+    # separately; this guards the server boundary itself for every caller.
+    response = client.get("/api/provenance", params={
+        "subject": str(EX.A), "predicate": "documentation", "value": "v", "lang": "de",
+    })
+    assert response.status_code == 400
+    assert "not an absolute IRI" in response.json()["detail"]
+
+
 # --- routes_runs.py -------------------------------------------------------
 
 

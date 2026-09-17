@@ -1,5 +1,14 @@
 const API_BASE = "/api"
 
+// The real predicate URI documentation facts are stored under -- matching
+// XSDO.documentation (extraction/*.py, reporting/data.py). A bare string
+// like "documentation" is not an absolute IRI: rdflib's own URIRef/.n3()
+// happily accept it, but Oxigraph's SPARQL parser rejects it at query
+// time with a raw, uncaught SyntaxError -- confirmed live, this crashed
+// GET /api/provenance with a 500 the moment a real Documentation-tab
+// citation marker was clicked in a real browser.
+export const XSDO_DOCUMENTATION = "https://purl.openfaster.org/xsdo/documentation"
+
 export async function apiGet<T>(path: string): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, undefined)
   if (!response.ok) {

@@ -1,6 +1,7 @@
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ProvenanceMarker } from "@/components/ProvenanceMarker"
+import { XSDO_DOCUMENTATION } from "@/lib/api"
 import type { DocEntry, DocumentationResponse } from "@/lib/api"
 
 interface DocumentationViewProps {
@@ -29,7 +30,7 @@ function DocEntryCard({ entry }: { entry: DocEntry }) {
         {Object.entries(entry.languages).map(([lang, text]) => (
           <div key={lang}>
             {lang.toUpperCase()}: {text}
-            <ProvenanceMarker subject={entry.uri} predicate="documentation" value={text} lang={lang} />
+            <ProvenanceMarker subject={entry.uri} predicate={XSDO_DOCUMENTATION} value={text} lang={lang} />
           </div>
         ))}
         {entry.issues?.map((issue, index) => (
