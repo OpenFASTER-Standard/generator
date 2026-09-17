@@ -42,22 +42,26 @@ export function GraphView({ structure, documentation, pending, search }: GraphVi
     })
   }
 
+  const statusFilters = (
+    <div className="mb-4 flex gap-4">
+      {(["matched", "unmatched", "ambiguous", "englishOnly"] as const).map((status) => (
+        <label key={status} className="flex items-center gap-1 text-sm">
+          <Checkbox
+            checked={visibleStatuses.has(status)}
+            onCheckedChange={() => toggleStatus(status)}
+            aria-label={status}
+          />
+          {status}
+        </label>
+      ))}
+    </div>
+  )
+
   if (namespace === null) {
     const namespaces = Object.keys(structure).filter((ns) => !search || ns.toLowerCase().includes(search.toLowerCase()))
     return (
       <div>
-        <div className="mb-4 flex gap-4">
-          {(["matched", "unmatched", "ambiguous", "englishOnly"] as const).map((status) => (
-            <label key={status} className="flex items-center gap-1 text-sm">
-              <Checkbox
-                checked={visibleStatuses.has(status)}
-                onCheckedChange={() => toggleStatus(status)}
-                aria-label={status}
-              />
-              {status}
-            </label>
-          ))}
-        </div>
+        {statusFilters}
         <div className="grid grid-cols-3 gap-4">
           {namespaces.map((ns) => (
             <button
@@ -84,6 +88,7 @@ export function GraphView({ structure, documentation, pending, search }: GraphVi
       <button onClick={() => setNamespace(null)} className="mb-4 text-sm text-primary underline">
         ← All namespaces
       </button>
+      {statusFilters}
       <div className="grid grid-cols-4 gap-3">
         {allTypes.map((type) => {
           const status = statusOf(type.uri, documentation)

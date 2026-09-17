@@ -58,4 +58,17 @@ describe("GraphView", () => {
 
     expect(screen.getByRole("checkbox", { name: /unmatched/i })).toBeInTheDocument()
   })
+
+  it("keeps the status filter toggles visible after zooming into a namespace", async () => {
+    render(
+      <MemoryRouter>
+        <GraphView structure={structure} documentation={documentation} audit={audit} pending={[]} search="" />
+      </MemoryRouter>,
+    )
+
+    await userEvent.click(screen.getByText("https://example.org/ns1"))
+    await screen.findByText("TypeA")
+
+    expect(screen.getByRole("checkbox", { name: /unmatched/i })).toBeInTheDocument()
+  })
 })
