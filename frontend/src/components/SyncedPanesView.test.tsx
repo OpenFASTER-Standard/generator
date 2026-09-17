@@ -37,4 +37,33 @@ describe("SyncedPanesView", () => {
 
     expect(await screen.findByText(/<xs:schema/)).toBeInTheDocument()
   })
+
+  it("does NOT leave stale derived facts when switching source", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation((url: string) => {
+        if (url.includes("/sources/lookup")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => [{ subject: "urn:s1", predicate: "urn:p", object: "Derived fact 1" }],
+          })
+        }
+        if (url.includes("/sources/xsd/file")) {
+          return Promise.resolve({ ok: true, json: async () => ({ content: "<xs:schema/>" }) })
+        }
+        return Promise.resolve({ ok: true, blob: async () => new Blob() })
+      }),
+    )
+
+    render(<SyncedPanesView pdfPath="/a.pdf" xsdPaths={["/a.xsd"]} />)
+
+    await userEvent.click(screen.getByRole("img", { name: /page 1/i }))
+    expect(await screen.findByText("Derived fact 1")).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole("combobox"))
+    await userEvent.click(screen.getByRole("option", { name: "/a.xsd" }))
+
+    await screen.findByText(/<xs:schema/)
+    expect(screen.queryByText("Derived fact 1")).not.toBeInTheDocument()
+  })
 })

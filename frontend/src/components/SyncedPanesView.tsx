@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { apiGet } from "@/lib/api"
 import { getPlugin } from "@/sourcePlugins/registry"
@@ -27,6 +27,15 @@ export function SyncedPanesView({ pdfPath, xsdPaths }: SyncedPanesViewProps) {
 
   const active = sources.find((source) => source.key === activeKey) ?? sources[0]
   const plugin = getPlugin(active.locator.kind)
+
+  // Switching the active source must clear any facts derived from a click
+  // in the *previous* source -- otherwise a stale right-pane result looks
+  // like it belongs to the newly active document even though nothing has
+  // been clicked there yet. Mirrors Inspector.tsx's own reset-on-identity-
+  // change pattern for its analogous `related` state.
+  useEffect(() => {
+    setDerived([])
+  }, [activeKey])
 
   async function handleLocatorClick(locator: SourceLocator) {
     const params =
