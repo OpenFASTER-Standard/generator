@@ -7,7 +7,6 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { apiGet } from "@/lib/api"
 import { useFocus } from "@/lib/focus"
-import { useReviewer } from "@/lib/reviewer"
 
 const MODES: { key: string; label: string }[] = [
   { key: "graph", label: "Graph" },
@@ -21,11 +20,12 @@ const REVIEWERS = ["julian", "someone-else"]
 interface ModeSwitcherProps {
   search: string
   onSearchChange: (value: string) => void
+  reviewer: string
+  onReviewerChange: (name: string) => void
   children: ReactNode
 }
 
-export function ModeSwitcher({ search, onSearchChange, children }: ModeSwitcherProps) {
-  const [reviewer, setReviewer] = useReviewer()
+export function ModeSwitcher({ search, onSearchChange, reviewer, onReviewerChange, children }: ModeSwitcherProps) {
   const { mode, setFocus } = useFocus()
   const [pendingCount, setPendingCount] = useState(0)
 
@@ -57,7 +57,7 @@ export function ModeSwitcher({ search, onSearchChange, children }: ModeSwitcherP
             onChange={(event) => onSearchChange(event.target.value)}
             className="ml-auto max-w-64"
           />
-          <Select value={reviewer} onValueChange={(value) => value && setReviewer(value)}>
+          <Select value={reviewer} onValueChange={(value) => value && onReviewerChange(value)}>
             <SelectTrigger className="w-40">
               <SelectValue placeholder="Reviewing as..." />
             </SelectTrigger>

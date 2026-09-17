@@ -16,7 +16,7 @@ describe("ModeSwitcher", () => {
           <Route
             path="/:mode/*"
             element={
-              <ModeSwitcher search="" onSearchChange={() => {}}>
+              <ModeSwitcher search="" onSearchChange={() => {}} reviewer="julian" onReviewerChange={() => {}}>
                 <div>content</div>
               </ModeSwitcher>
             }
@@ -40,7 +40,7 @@ describe("ModeSwitcher", () => {
           <Route
             path="/:mode/*"
             element={
-              <ModeSwitcher search="" onSearchChange={() => {}}>
+              <ModeSwitcher search="" onSearchChange={() => {}} reviewer="julian" onReviewerChange={() => {}}>
                 <div>content</div>
               </ModeSwitcher>
             }

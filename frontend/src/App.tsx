@@ -1,30 +1,23 @@
 import { useCallback, useEffect, useState } from "react"
-import { AuditView } from "@/components/AuditView"
-import { CorrectionsView } from "@/components/CorrectionsView"
-import { DocumentationView } from "@/components/DocumentationView"
-import { PageShell } from "@/components/PageShell"
+import { HashRouter, Navigate, Route, Routes } from "react-router-dom"
+import { GraphView } from "@/components/GraphView"
+import { HoverFocusProvider } from "@/lib/hoverFocus"
+import { LivingTextView } from "@/components/LivingTextView"
+import type { PendingCorrection } from "@/components/InlineCorrection"
+import { ModeSwitcher } from "@/components/ModeSwitcher"
 import { RunsView } from "@/components/RunsView"
-import { StructureView } from "@/components/StructureView"
+import { SyncedPanesView } from "@/components/SyncedPanesView"
 import { apiGet } from "@/lib/api"
 import { useReviewer } from "@/lib/reviewer"
 import type {
-  AuditResponse, DeclarationsResponse, DocumentationResponse, RunSummary, StructureResponse,
+  AuditResponse, DocumentationResponse, RunSummary, StructureResponse,
 } from "@/lib/api"
 
-interface PendingCorrection {
-  correctionUri: string
-  targetSubject: string
-  proposedValue: string
-  proposer: string
-}
-
 export default function App() {
-  const [activeTab, setActiveTab] = useState("structure")
   const [search, setSearch] = useState("")
-  const [reviewer] = useReviewer()
+  const [reviewer, setReviewer] = useReviewer()
 
   const [structure, setStructure] = useState<StructureResponse | null>(null)
-  const [declarations, setDeclarations] = useState<DeclarationsResponse | null>(null)
   const [documentation, setDocumentation] = useState<DocumentationResponse | null>(null)
   const [audit, setAudit] = useState<AuditResponse | null>(null)
   const [pending, setPending] = useState<PendingCorrection[]>([])
@@ -36,26 +29,53 @@ export default function App() {
 
   useEffect(() => {
     apiGet<StructureResponse>("/structure").then(setStructure)
-    apiGet<DeclarationsResponse>("/declarations").then(setDeclarations)
     apiGet<DocumentationResponse>("/documentation").then(setDocumentation)
     apiGet<AuditResponse>("/audit").then(setAudit)
     apiGet<RunSummary[]>("/runs").then(setRuns)
     refreshPending()
   }, [refreshPending])
 
+  const latestRun = runs[runs.length - 1]
+
   return (
-    <PageShell activeTab={activeTab} onTabChange={setActiveTab} search={search} onSearchChange={setSearch}>
-      {activeTab === "structure" && structure && declarations && (
-        <StructureView structure={structure} declarations={declarations} search={search} />
-      )}
-      {activeTab === "documentation" && documentation && (
-        <DocumentationView documentation={documentation} search={search} />
-      )}
-      {activeTab === "audit" && audit && <AuditView audit={audit} />}
-      {activeTab === "corrections" && (
-        <CorrectionsView pending={pending} reviewer={reviewer} onDecided={refreshPending} />
-      )}
-      {activeTab === "runs" && <RunsView runs={runs} />}
-    </PageShell>
+    <HashRouter>
+      <HoverFocusProvider>
+        <Routes>
+          <Route path="/" element={<Navigate to="/graph" replace />} />
+          <Route
+            path="/:mode/*"
+            element={
+              <ModeSwitcher search={search} onSearchChange={setSearch} reviewer={reviewer} onReviewerChange={setReviewer}>
+                <Routes>
+                  <Route
+                    path="graph/:subject?"
+                    element={
+                      structure && documentation && audit ? (
+                        <GraphView structure={structure} documentation={documentation} audit={audit} pending={pending} search={search} />
+                      ) : null
+                    }
+                  />
+                  <Route
+                    path="living-text/:subject?/:predicate?/:lang?"
+                    element={
+                      documentation ? (
+                        <LivingTextView documentation={documentation} pending={pending} reviewer={reviewer} search={search} onDecided={refreshPending} />
+                      ) : null
+                    }
+                  />
+                  <Route
+                    path="synced-panes"
+                    element={
+                      latestRun ? <SyncedPanesView pdfPath={latestRun.pdfPath} xsdPaths={[latestRun.xsdPath]} /> : null
+                    }
+                  />
+                  <Route path="runs" element={<RunsView runs={runs} />} />
+                </Routes>
+              </ModeSwitcher>
+            }
+          />
+        </Routes>
+      </HoverFocusProvider>
+    </HashRouter>
   )
 }
