@@ -1,5 +1,7 @@
 import { useState } from "react"
+import { Button } from "@/components/ui/button"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { LineageGraph } from "@/components/LineageGraph"
 import { apiGet } from "@/lib/api"
 import type { ProvenanceRecord } from "@/lib/api"
 
@@ -21,6 +23,7 @@ function parseCitationUrl(sourceUri: string): URL | null {
 export function ProvenanceMarker({ subject, predicate, value, lang }: ProvenanceMarkerProps) {
   const [open, setOpen] = useState(false)
   const [record, setRecord] = useState<ProvenanceRecord | null | undefined>(undefined)
+  const [lineageOpen, setLineageOpen] = useState(false)
 
   async function handleOpenChange(nextOpen: boolean) {
     setOpen(nextOpen)
@@ -70,7 +73,19 @@ export function ProvenanceMarker({ subject, predicate, value, lang }: Provenance
       />
       <CollapsibleContent className="mt-1 rounded border bg-muted/30 p-2">
         {renderCitation()}
+        {record !== undefined && (
+          <Button variant="link" size="sm" className="h-auto p-0 text-xs" onClick={() => setLineageOpen(true)}>
+            View lineage
+          </Button>
+        )}
       </CollapsibleContent>
+      <LineageGraph
+        open={lineageOpen}
+        onOpenChange={setLineageOpen}
+        subject={subject}
+        predicate={predicate}
+        sourceUri={record?.sourceUri ?? null}
+      />
     </Collapsible>
   )
 }
