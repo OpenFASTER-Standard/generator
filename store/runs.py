@@ -7,11 +7,15 @@ identical re-run of the same inputs.
 from __future__ import annotations
 
 import hashlib
-from dataclasses import dataclass
+import json
+from dataclasses import asdict, dataclass
 
 from rdflib import Dataset, Graph, Literal, Namespace, URIRef
 from rdflib.compare import to_canonical_graph
 from rdflib.namespace import XSD
+
+from extraction.annex_pdf import AttachmentReport
+from extraction.translation_plausibility import CoverageReport, PlausibilityIssue
 
 RUNS = Namespace("https://purl.openfaster.org/runs/")
 
@@ -59,6 +63,18 @@ def write_run(
     for triple in canonical_graph.triples((None, None, None)):
         run_graph.add(triple)
 
+    # rdflib's Literal(..., datatype=XSD.dateTime) parses the lexical form
+    # into a real Python datetime and re-serializes it on str() -- e.g.
+    # "...Z" round-trips as "...+00:00" -- independent of the store, purely
+    # an rdflib Literal-construction behavior (confirmed directly against a
+    # plain in-memory rdflib.Graph, no Oxigraph involved). list_runs()
+    # reconstructs RunInfo.created_at from that same re-serialized form, so
+    # constructing the Literal here first and feeding its own str() back
+    # into RunInfo keeps the value this function returns identical to what
+    # a later list_runs() call reads back, rather than the two silently
+    # disagreeing whenever created_at is passed in as "...Z".
+    created_at_literal = Literal(created_at, datatype=XSD.dateTime)
+
     info = RunInfo(
         run_id=run_id,
         graph_uri=graph_uri,
@@ -66,7 +82,7 @@ def write_run(
         xsd_hash=_sha256_of_file(xsd_path),
         pdf_path=pdf_path,
         pdf_hash=_sha256_of_file(pdf_path),
-        created_at=created_at,
+        created_at=str(created_at_literal),
     )
 
     subject = URIRef(graph_uri)
@@ -75,7 +91,7 @@ def write_run(
     index.add((subject, RUNS.xsdHash, Literal(info.xsd_hash)))
     index.add((subject, RUNS.pdfPath, Literal(info.pdf_path)))
     index.add((subject, RUNS.pdfHash, Literal(info.pdf_hash)))
-    index.add((subject, RUNS.createdAt, Literal(info.created_at, datatype=XSD.dateTime)))
+    index.add((subject, RUNS.createdAt, created_at_literal))
 
     return info
 
@@ -131,3 +147,25 @@ def diff_runs(dataset: Dataset, run_id_a: str, run_id_b: str) -> RunDiff:
     removed = [(str(r["s"]), str(r["p"]), str(r["o"])) for r in dataset.query(removed_query)]
     added = [(str(r["s"]), str(r["p"]), str(r["o"])) for r in dataset.query(added_query)]
     return RunDiff(added=added, removed=removed)
+
+
+def write_run_audit(
+    dataset: Dataset, run_id: str, attachment: AttachmentReport, coverage: CoverageReport,
+    issues: list[PlausibilityIssue],
+) -> None:
+    index = dataset.graph(URIRef(str(RUNS["index"])))
+    subject = URIRef(str(RUNS[run_id]))
+    index.add((subject, RUNS.attachmentJson, Literal(json.dumps(asdict(attachment)))))
+    index.add((subject, RUNS.coverageJson, Literal(json.dumps(asdict(coverage)))))
+    index.add((subject, RUNS.issuesJson, Literal(json.dumps([asdict(i) for i in issues]))))
+
+
+def read_run_audit(
+    dataset: Dataset, run_id: str
+) -> tuple[AttachmentReport, CoverageReport, list[PlausibilityIssue]]:
+    index = dataset.graph(URIRef(str(RUNS["index"])))
+    subject = URIRef(str(RUNS[run_id]))
+    attachment = AttachmentReport(**json.loads(str(index.value(subject, RUNS.attachmentJson))))
+    coverage = CoverageReport(**json.loads(str(index.value(subject, RUNS.coverageJson))))
+    issues = [PlausibilityIssue(**raw) for raw in json.loads(str(index.value(subject, RUNS.issuesJson)))]
+    return attachment, coverage, issues

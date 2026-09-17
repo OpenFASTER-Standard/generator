@@ -634,7 +634,15 @@ Expected: FAIL — `ImportError: cannot import name 'materialize_current_graph'`
 
 - [ ] **Step 3: Implement `materialize_current_graph`**
 
-Append to `review/current_view.py`:
+Append to `review/current_view.py`. **This must reuse `get_current_value`
+(already in this same file) for each target, not reimplement correction
+resolution as a second, separate bulk query** — `get_current_value` was
+already fixed, in Plan B's own final-review fix wave, to skip a stale
+approved correction (falling back to the raw value) and to break ties
+deterministically when more than one correction is approved for the same
+target. A parallel bulk-query implementation here would silently
+reintroduce both of those already-fixed bugs into the exact code path
+this whole platform's "current" report is served through:
 
 ```python
 from rdflib import Graph
@@ -648,27 +656,30 @@ def materialize_current_graph(dataset: Dataset, run_graph_uri: str, corrections_
     for triple in run_graph.triples((None, None, None)):
         current.add(triple)
 
-    approved = list(dataset.query(f"""
+    # Only the (subject, predicate, language) combinations that have ANY
+    # correction on record need special handling -- everything else is
+    # already correct as copied from the raw run graph above.
+    targets = list(dataset.query(f"""
     PREFIX review: <{REVIEW}>
-    SELECT ?subject ?predicate ?language ?value WHERE {{
+    SELECT DISTINCT ?subject ?predicate ?language WHERE {{
       GRAPH <{corrections_graph_uri}> {{
         ?correction a review:Correction ;
                     review:targetSubject ?subject ;
                     review:targetPredicate ?predicate ;
-                    review:targetLanguage ?language ;
-                    review:proposedValue ?value .
-        ?decision review:decides ?correction ; review:outcome "approved" .
+                    review:targetLanguage ?language .
       }}
     }}
     """))
-    for row in approved:
+    for row in targets:
         subject = URIRef(str(row["subject"]))
         predicate = URIRef(str(row["predicate"]))
         language = str(row["language"])
+        resolved = get_current_value(dataset, run_graph_uri, corrections_graph_uri, subject, predicate, language)
         for obj in list(current.objects(subject, predicate)):
             if isinstance(obj, Literal) and obj.language == language:
                 current.remove((subject, predicate, obj))
-        current.add((subject, predicate, Literal(str(row["value"]), lang=language)))
+        if resolved is not None:
+            current.add((subject, predicate, resolved))
     return current
 ```
 

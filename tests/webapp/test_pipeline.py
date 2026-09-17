@@ -1,0 +1,90 @@
+import shutil
+
+from rdflib import URIRef
+
+from store.database import open_store
+from store.runs import list_runs, read_run_audit
+from webapp.pipeline import run_pipeline_and_store
+
+STORE_PATH = "/tmp/test_webapp_store_task13"
+ROOT_XSD = "/work/ontologies/mikadiv-fm/sources/xsd/MiKaDiv_FM_1.02.xsd"
+ANNEX_PDF = "/work/ontologies/mikadiv-fm/sources/khb/khb_mikadiv_fm_anlage_en_v3.pdf"
+
+
+def test_run_pipeline_and_store_produces_a_real_run_with_real_audit_data():
+    shutil.rmtree(STORE_PATH, ignore_errors=True)
+    dataset = open_store(STORE_PATH, create=True)
+    try:
+        info = run_pipeline_and_store(
+            dataset, xsd_path=ROOT_XSD, pdf_path=ANNEX_PDF,
+            run_id="2026-09-15T18:00:00Z", created_at="2026-09-15T18:00:00Z",
+        )
+
+        assert info.run_id == "2026-09-15T18:00:00Z"
+        assert list_runs(dataset) == [info]
+
+        attachment, coverage, issues = read_run_audit(dataset, "2026-09-15T18:00:00Z")
+        assert coverage.total_documented_subjects > 0
+        assert len(attachment.attached) > 0
+    finally:
+        dataset.close()
+        shutil.rmtree(STORE_PATH, ignore_errors=True)
+
+
+from provenance.record import get_provenance
+from rdflib import Literal
+from extraction.annex_pdf import XSDO
+
+
+def test_run_pipeline_and_store_attaches_real_provenance_for_matched_english_text():
+    shutil.rmtree(STORE_PATH, ignore_errors=True)
+    dataset = open_store(STORE_PATH, create=True)
+    try:
+        info = run_pipeline_and_store(
+            dataset, xsd_path=ROOT_XSD, pdf_path=ANNEX_PDF,
+            run_id="2026-09-15T19:00:00Z", created_at="2026-09-15T19:00:00Z",
+        )
+
+        graph = dataset.graph(URIRef(info.graph_uri))
+        # WIdNrTwo is a real, confirmed subject with attached English text.
+        subject = next(
+            s for s in graph.subjects(XSDO.name, Literal("WIdNr"))
+            if any(o.language == "en" for o in graph.objects(s, XSDO.documentation))
+        )
+        english = next(o for o in graph.objects(subject, XSDO.documentation) if o.language == "en")
+
+        record = get_provenance(dataset, info.graph_uri, subject, XSDO.documentation, english)
+
+        assert record is not None
+        assert "citation:pdf" in record.source_uri
+    finally:
+        dataset.close()
+        shutil.rmtree(STORE_PATH, ignore_errors=True)
+
+
+def test_run_pipeline_and_store_attaches_real_xsd_provenance_for_a_global_construct():
+    shutil.rmtree(STORE_PATH, ignore_errors=True)
+    dataset = open_store(STORE_PATH, create=True)
+    try:
+        info = run_pipeline_and_store(
+            dataset, xsd_path=ROOT_XSD, pdf_path=ANNEX_PDF,
+            run_id="2026-09-15T19:00:00Z", created_at="2026-09-15T19:00:00Z",
+        )
+
+        graph = dataset.graph(URIRef(info.graph_uri))
+        subject = URIRef(
+            "http://www.itzbund.de/MiKaDiv/FMPers/1.02#PersonNatIdAusland45bType"
+        )
+        german = next(
+            (o for o in graph.objects(subject, XSDO.documentation) if o.language in (None, "de")),
+            None,
+        )
+        assert german is not None, "fixture assumption: this real global type has German documentation"
+
+        record = get_provenance(dataset, info.graph_uri, subject, XSDO.documentation, german)
+
+        assert record is not None
+        assert "citation:xsd" in record.source_uri
+    finally:
+        dataset.close()
+        shutil.rmtree(STORE_PATH, ignore_errors=True)
