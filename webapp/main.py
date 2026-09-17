@@ -48,6 +48,9 @@ def create_app(store_path: str, xsd_path: str, pdf_path: str) -> FastAPI:
     from webapp.routes_corrections import router as corrections_router
     app.include_router(corrections_router)
 
+    from webapp.routes_sources import router as sources_router
+    app.include_router(sources_router)
+
     install_error_handlers(app)
 
     from pathlib import Path
