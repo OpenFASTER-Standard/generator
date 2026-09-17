@@ -121,6 +121,18 @@ def materialize_current_graph(dataset: Dataset, run_graph_uri: str, corrections_
     run_graph = dataset.graph(URIRef(run_graph_uri))
     current = Graph()
     for triple in run_graph.triples((None, None, None)):
+        s, p, o = triple
+        if not (isinstance(s, Node) and isinstance(p, Node) and isinstance(o, Node)):
+            # An RDF-star quoted triple (provenance.record.attach_provenance's
+            # <<s p o>> prov:hasProvenanceRecord <record> link) is represented
+            # by rdflib/oxrdflib as a synthetic (BNode, rdf:reifies, (s, p, o))
+            # triple whose "object" is a plain Python tuple, not a real term --
+            # confirmed live, Graph.add() rejects it with "must be an rdflib
+            # term". Skip it here: reporting/data.py's shaping functions only
+            # ever need the substantive facts this graph carries, never
+            # provenance metadata (that's served separately via
+            # provenance.record.get_provenance), so there is nothing to copy.
+            continue
         current.add(triple)
 
     # Only the (subject, predicate, language) combinations that have ANY
