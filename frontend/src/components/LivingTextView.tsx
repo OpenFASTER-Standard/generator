@@ -1,12 +1,18 @@
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { ProvenanceMarker } from "@/components/ProvenanceMarker"
+import { InlineCorrection } from "@/components/InlineCorrection"
+import type { PendingCorrection } from "@/components/InlineCorrection"
+import { ProposeCorrectionInline } from "@/components/ProposeCorrectionInline"
+import { SourcePreviewPopover } from "@/components/SourcePreviewPopover"
 import { XSDO_DOCUMENTATION } from "@/lib/api"
 import type { DocEntry, DocumentationResponse } from "@/lib/api"
 
-interface DocumentationViewProps {
+interface LivingTextViewProps {
   documentation: DocumentationResponse
+  pending: PendingCorrection[]
+  reviewer: string
   search: string
+  onDecided: () => void
 }
 
 const GROUPS: { key: keyof DocumentationResponse; label: string; variant: "default" | "secondary" | "destructive" | "outline" }[] = [
@@ -20,19 +26,33 @@ function matchesSearch(name: string, search: string): boolean {
   return !search || name.toLowerCase().includes(search.toLowerCase())
 }
 
-function DocEntryCard({ entry }: { entry: DocEntry }) {
+function DocEntryCard({
+  entry, pending, reviewer, onDecided,
+}: { entry: DocEntry; pending: PendingCorrection[]; reviewer: string; onDecided: () => void }) {
   return (
     <Card id={`doc:${entry.uri}`} className="mb-3">
       <CardHeader>
         <CardTitle className="text-base">{entry.name}</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-1 text-sm">
+      <CardContent className="space-y-2 text-sm">
         {Object.entries(entry.languages).map(([lang, text]) => (
           <div key={lang}>
-            {lang.toUpperCase()}: {text}
-            <ProvenanceMarker subject={entry.uri} predicate={XSDO_DOCUMENTATION} value={text} lang={lang} />
+            {lang.toUpperCase()}:{" "}
+            <SourcePreviewPopover subject={entry.uri} predicate={XSDO_DOCUMENTATION} value={text} lang={lang} />{" "}
+            <ProposeCorrectionInline
+              subject={entry.uri} predicate={XSDO_DOCUMENTATION} language={lang} currentValue={text}
+              reviewer={reviewer} onProposed={onDecided}
+            />
           </div>
         ))}
+        {(() => {
+          const correctionForThisEntry = pending.find((c) => c.targetSubject === entry.uri)
+          return (
+            correctionForThisEntry && (
+              <InlineCorrection correction={correctionForThisEntry} reviewer={reviewer} onDecided={onDecided} />
+            )
+          )
+        })()}
         {entry.issues?.map((issue, index) => (
           <div key={index} className="text-destructive text-xs">
             {issue.kind}: {issue.detail}
@@ -50,7 +70,7 @@ function DocEntryCard({ entry }: { entry: DocEntry }) {
   )
 }
 
-export function DocumentationView({ documentation, search }: DocumentationViewProps) {
+export function LivingTextView({ documentation, pending, reviewer, search, onDecided }: LivingTextViewProps) {
   return (
     <div>
       {GROUPS.map(({ key, label, variant }) => {
@@ -62,7 +82,7 @@ export function DocumentationView({ documentation, search }: DocumentationViewPr
               {label} <Badge variant={variant}>{entries.length}</Badge>
             </h3>
             {entries.map((entry) => (
-              <DocEntryCard key={entry.uri} entry={entry} />
+              <DocEntryCard key={entry.uri} entry={entry} pending={pending} reviewer={reviewer} onDecided={onDecided} />
             ))}
           </section>
         )
