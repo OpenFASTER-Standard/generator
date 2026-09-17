@@ -24,7 +24,22 @@ from pydantic import BaseModel
 from rdflib import Literal
 
 from review.corrections import decide_correction, propose_correction
+from review.vocab import REVIEW
 from webapp.errors import validated_iri
+
+_REVIEWER_URI_PREFIX = str(REVIEW["reviewer-"])
+
+
+def _reviewer_name(reviewer_uri: str) -> str:
+    # reviewer_uri() (review.corrections) always builds REVIEW["reviewer-{name}"] --
+    # strip that exact, known prefix rather than rsplit("-", 1) on the last
+    # hyphen, which would mis-extract any name that itself contains a hyphen
+    # (e.g. "someone-else", used throughout this project's own tests and the
+    # frontend's own reviewer list: rsplit("-", 1) on
+    # "...reviewer-someone-else" yields "else", not "someone-else").
+    if reviewer_uri.startswith(_REVIEWER_URI_PREFIX):
+        return reviewer_uri[len(_REVIEWER_URI_PREFIX) :]
+    return reviewer_uri
 
 router = APIRouter(prefix="/api")
 
@@ -88,3 +103,27 @@ def approve(request: Request, correction_uri_b64: str, body: DecideCorrectionBod
 @router.post("/corrections/{correction_uri_b64}/reject")
 def reject(request: Request, correction_uri_b64: str, body: DecideCorrectionBody, x_reviewer: str = Header(...)):
     return _decide(request, correction_uri_b64, "rejected", body.reason, x_reviewer)
+
+
+@router.get("/corrections/pending")
+def list_pending(request: Request):
+    results = list(request.app.state.dataset.query(f"""
+    PREFIX review: <{REVIEW}>
+    PREFIX prov: <http://www.w3.org/ns/prov#>
+    SELECT ?correction ?subject ?value ?proposer WHERE {{
+      GRAPH <{request.app.state.corrections_graph_uri}> {{
+        ?correction a review:Correction ;
+                    review:targetSubject ?subject ;
+                    review:proposedValue ?value ;
+                    prov:wasAttributedTo ?proposer .
+        FILTER NOT EXISTS {{ ?decision review:decides ?correction }}
+      }}
+    }}
+    """))
+    return [
+        {
+            "correctionUri": str(row["correction"]), "targetSubject": str(row["subject"]),
+            "proposedValue": str(row["value"]), "proposer": _reviewer_name(str(row["proposer"])),
+        }
+        for row in results
+    ]
