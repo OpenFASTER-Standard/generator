@@ -268,10 +268,14 @@ and safe rather than ad hoc.
   mode-switching-preserves-focus, and both directions of Synced Panes
   syncing, against the actual built-and-served app.
 
-## Suggested implementation sequencing
+## Implementation sequencing
 
-Mirroring how the original design was split into Plans A-D, this likely
-decomposes into sequenced sub-plans:
+Built as a single implementation plan, not split across multiple plans the
+way Plans A-D were (explicit direction: this design is one coherent,
+interlocking vision, and its pieces — the focus model, the locator
+abstraction, the three modes — don't stand alone as independently valuable
+increments the way Plans A-D each did). The plan's own task ordering still
+follows the natural dependency chain:
 
 1. **Foundation** — client-side routing, the shared focus model, the
    `SourceLocator` type and plugin registry (backend + frontend), the
@@ -283,5 +287,4 @@ decomposes into sequenced sub-plans:
 4. **Synced Panes mode** — the PDF and XSD plugins on the generic
    abstraction, bidirectional sync.
 
-Each sub-plan gets its own spec-derived implementation plan, per this
-project's existing Subagent-Driven Development workflow.
+Executed via this project's existing Subagent-Driven Development workflow.
