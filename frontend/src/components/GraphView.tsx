@@ -47,9 +47,10 @@ function SubjectLineage({ subjectUri, languages }: { subjectUri: string; languag
     }
   }, [subjectUri, languages])
 
-  const setContainer = (node: HTMLDivElement | null) => {
-    containerRef.current = node
+  useEffect(() => {
+    const node = containerRef.current
     if (!node) return
+
     const elements: cytoscape.ElementDefinition[] = [{ data: { id: subjectUri, label: subjectUri } }]
     for (const [lang, record] of Object.entries(records)) {
       if (!record) continue
@@ -57,7 +58,7 @@ function SubjectLineage({ subjectUri, languages }: { subjectUri: string; languag
       elements.push({ data: { id: sourceId, label: sourceId } })
       elements.push({ data: { id: `${lang}-edge`, source: sourceId, target: subjectUri, label: "wasDerivedFrom" } })
     }
-    cytoscape({
+    const cy = cytoscape({
       container: node,
       elements,
       style: [
@@ -66,9 +67,12 @@ function SubjectLineage({ subjectUri, languages }: { subjectUri: string; languag
       ],
       layout: { name: "breadthfirst", directed: true },
     })
-  }
+    return () => {
+      cy.destroy()
+    }
+  }, [subjectUri, records])
 
-  return <div ref={setContainer} data-testid="lineage-graph-container" className="h-96 w-full rounded border" />
+  return <div ref={containerRef} data-testid="lineage-graph-container" className="h-96 w-full rounded border" />
 }
 
 export function GraphView({ structure, documentation, pending, search }: GraphViewProps) {
