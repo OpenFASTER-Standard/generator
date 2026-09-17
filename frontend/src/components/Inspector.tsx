@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
-import { Link } from "react-router-dom"
 import { apiGet } from "@/lib/api"
+import { useFocus } from "@/lib/focus"
 import { getPlugin } from "@/sourcePlugins/registry"
 import { parseSourceUri } from "@/lib/sourceLocator"
 import type { ProvenanceRecord } from "@/lib/api"
@@ -21,6 +21,7 @@ interface InspectorProps {
 export function Inspector({ subject, predicate, value, lang }: InspectorProps) {
   const [record, setRecord] = useState<ProvenanceRecord | null | undefined>(undefined)
   const [related, setRelated] = useState<ReverseLookupRow[]>([])
+  const { setFocus } = useFocus()
 
   useEffect(() => {
     setRecord(undefined)
@@ -58,9 +59,13 @@ export function Inspector({ subject, predicate, value, lang }: InspectorProps) {
           <ul className="mt-1 space-y-1">
             {related.map((row, index) => (
               <li key={index}>
-                <Link to={`/living-text/${encodeURIComponent(row.subject)}`} className="text-xs text-primary underline">
+                <button
+                  type="button"
+                  className="text-xs text-primary underline"
+                  onClick={() => setFocus({ mode: "living-text", subject: row.subject, predicate: row.predicate })}
+                >
                   {row.object}
-                </Link>
+                </button>
               </li>
             ))}
           </ul>
