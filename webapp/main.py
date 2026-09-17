@@ -50,4 +50,12 @@ def create_app(store_path: str, xsd_path: str, pdf_path: str) -> FastAPI:
 
     install_error_handlers(app)
 
+    from pathlib import Path
+
+    from fastapi.staticfiles import StaticFiles
+
+    frontend_dist = Path(__file__).resolve().parent.parent / "frontend" / "dist"
+    if frontend_dist.exists():
+        app.mount("/", StaticFiles(directory=str(frontend_dist), html=True), name="frontend")
+
     return app

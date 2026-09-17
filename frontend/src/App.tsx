@@ -3,10 +3,13 @@ import { AuditView } from "@/components/AuditView"
 import { CorrectionsView } from "@/components/CorrectionsView"
 import { DocumentationView } from "@/components/DocumentationView"
 import { PageShell } from "@/components/PageShell"
+import { RunsView } from "@/components/RunsView"
 import { StructureView } from "@/components/StructureView"
 import { apiGet } from "@/lib/api"
 import { useReviewer } from "@/lib/reviewer"
-import type { AuditResponse, DeclarationsResponse, DocumentationResponse, StructureResponse } from "@/lib/api"
+import type {
+  AuditResponse, DeclarationsResponse, DocumentationResponse, RunSummary, StructureResponse,
+} from "@/lib/api"
 
 interface PendingCorrection {
   correctionUri: string
@@ -25,6 +28,7 @@ export default function App() {
   const [documentation, setDocumentation] = useState<DocumentationResponse | null>(null)
   const [audit, setAudit] = useState<AuditResponse | null>(null)
   const [pending, setPending] = useState<PendingCorrection[]>([])
+  const [runs, setRuns] = useState<RunSummary[]>([])
 
   const refreshPending = useCallback(() => {
     apiGet<PendingCorrection[]>("/corrections/pending").then(setPending)
@@ -35,6 +39,7 @@ export default function App() {
     apiGet<DeclarationsResponse>("/declarations").then(setDeclarations)
     apiGet<DocumentationResponse>("/documentation").then(setDocumentation)
     apiGet<AuditResponse>("/audit").then(setAudit)
+    apiGet<RunSummary[]>("/runs").then(setRuns)
     refreshPending()
   }, [refreshPending])
 
@@ -50,9 +55,7 @@ export default function App() {
       {activeTab === "corrections" && (
         <CorrectionsView pending={pending} reviewer={reviewer} onDecided={refreshPending} />
       )}
-      {activeTab !== "structure" && activeTab !== "documentation" && activeTab !== "audit" && activeTab !== "corrections" && (
-        <p className="text-muted-foreground">{activeTab} page -- wired up in later tasks.</p>
-      )}
+      {activeTab === "runs" && <RunsView runs={runs} />}
     </PageShell>
   )
 }
