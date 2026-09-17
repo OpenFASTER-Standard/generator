@@ -5,3 +5,5 @@ __pycache__/
 .venv/
 frontend/node_modules/
 frontend/dist/
+.demo_store/
+.demo_server.log

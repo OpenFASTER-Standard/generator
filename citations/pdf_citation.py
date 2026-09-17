@@ -18,14 +18,24 @@ def crop_pdf_page(
     padding: float = 5.0,
     resolution: int = 150,
 ) -> bytes:
+    """`page_number` is 1-indexed, matching pdfplumber's own `Page.page_number`
+    attribute -- the same convention `extraction.annex_pdf.TextOccurrence`
+    (the only real producer of a citation's page_number) already uses and
+    documents. Confirmed live as a genuine, previously-shipped off-by-one:
+    this function used to index `pdf.pages` directly with the 1-indexed
+    value, silently cropping the page AFTER the intended one for every
+    citation in the system -- invisible to every existing test here, since
+    none of them checked cropped *content*, only that some non-empty PNG
+    came back.
+    """
     x0, top, x1, bottom = bbox
     with pdfplumber.open(pdf_path) as pdf:
-        if not (0 <= page_number < len(pdf.pages)):
+        if not (1 <= page_number <= len(pdf.pages)):
             raise ValueError(
                 f"page_number={page_number} out of range for {pdf_path} "
-                f"(has {len(pdf.pages)} pages, 0-indexed)"
+                f"(has {len(pdf.pages)} pages, 1-indexed)"
             )
-        page = pdf.pages[page_number]
+        page = pdf.pages[page_number - 1]
         padded_bbox = (
             max(0.0, x0 - padding),
             max(0.0, top - padding),

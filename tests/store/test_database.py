@@ -31,6 +31,33 @@ def test_open_store_creates_a_new_store_and_persists_data_across_reopen():
         shutil.rmtree(path, ignore_errors=True)
 
 
+def test_open_store_with_create_true_on_an_already_existing_store_reopens_it():
+    # Real, confirmed friction: oxrdflib's own open(create=True) rejects a
+    # path that already exists, even when it's a perfectly valid store the
+    # same code created moments earlier -- confirmed live via
+    # webapp.main.create_app, which always calls open_store(..., create=True)
+    # unconditionally, so a real caller can never restart against an
+    # already-populated store without deleting and regenerating it from
+    # scratch first. `create=True` should mean "create it if it doesn't
+    # exist yet, otherwise just open what's there" -- not "fail unless this
+    # is the very first time."
+    path = _fresh_path()
+    try:
+        first = open_store(path, create=True)
+        graph = first.graph(URIRef("urn:test:g1"))
+        graph.add((URIRef("urn:test:s"), URIRef("urn:test:p"), Literal("hello")))
+        first.close()
+
+        second = open_store(path, create=True)
+        reopened_graph = second.graph(URIRef("urn:test:g1"))
+        triples = list(reopened_graph.triples((None, None, None)))
+        assert len(triples) == 1
+        assert str(triples[0][2]) == "hello"
+        second.close()
+    finally:
+        shutil.rmtree(path, ignore_errors=True)
+
+
 def test_open_store_without_create_on_a_missing_path_raises():
     path = _fresh_path()
     import pytest

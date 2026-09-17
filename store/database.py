@@ -46,5 +46,11 @@ def open_store(path: str, create: bool = False, read_only: bool = False) -> Data
         return dataset
 
     dataset = Dataset(store="Oxigraph")
-    dataset.open(path, create=create)
+    # oxrdflib's own open(create=True) rejects a path that already exists,
+    # even a perfectly valid store this same function created moments
+    # earlier (confirmed live, "The directory ... already exist") -- so a
+    # caller's create=True must only reach oxrdflib as True the first time.
+    # "create" here means "create it if missing, otherwise just open it,"
+    # not "fail unless this is the very first call."
+    dataset.open(path, create=create and not os.path.exists(path))
     return dataset
