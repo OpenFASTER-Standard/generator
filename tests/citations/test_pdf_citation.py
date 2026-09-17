@@ -4,7 +4,7 @@ import pdfplumber
 import pytest
 from PIL import Image
 
-from citations.pdf_citation import crop_pdf_page
+from citations.pdf_citation import crop_pdf_page, render_pdf_page
 
 ANNEX_PDF = "/work/ontologies/mikadiv-fm/sources/khb/khb_mikadiv_fm_anlage_en_v3.pdf"
 
@@ -83,3 +83,28 @@ def test_crop_pdf_page_uses_the_1_indexed_convention_pdfplumber_itself_uses():
         expected_bytes = buffer.getvalue()
 
     assert result == expected_bytes
+
+
+def test_render_pdf_page_returns_the_full_uncropped_page():
+    png_bytes = render_pdf_page(ANNEX_PDF, page_number=5)
+
+    assert len(png_bytes) > 100
+    image = Image.open(io.BytesIO(png_bytes))
+    assert image.format == "PNG"
+
+    with pdfplumber.open(ANNEX_PDF) as pdf:
+        page = pdf.pages[4]
+        expected_width_px = round(page.width * 150 / 72)
+        expected_height_px = round(page.height * 150 / 72)
+    # pdfplumber/Pillow rounding can be off by a pixel; allow that, not more.
+    assert abs(image.width - expected_width_px) <= 1
+    assert abs(image.height - expected_height_px) <= 1
+
+
+def test_render_pdf_page_rejects_out_of_range_page_number():
+    with pytest.raises(ValueError) as excinfo:
+        render_pdf_page(ANNEX_PDF, page_number=99999)
+
+    error_msg = str(excinfo.value)
+    assert "page_number=99999" in error_msg
+    assert "262" in error_msg
