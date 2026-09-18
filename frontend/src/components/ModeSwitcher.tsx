@@ -9,6 +9,7 @@ const MODES: { key: string; label: string }[] = [
   { key: "graph", label: "Graph" },
   { key: "living-text", label: "Living Text" },
   { key: "synced-panes", label: "Synced Panes" },
+  { key: "sources", label: "Sources" },
   { key: "runs", label: "Runs" },
 ]
 

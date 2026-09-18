@@ -12,7 +12,7 @@ function LocationProbe() {
 describe("ModeSwitcher", () => {
   afterEach(() => vi.unstubAllGlobals())
 
-  it("renders all 3 mode tabs and a pending-corrections badge", async () => {
+  it("renders all mode tabs and a pending-corrections badge", async () => {
     render(
       <MemoryRouter initialEntries={["/graph"]}>
         <Routes>
@@ -28,7 +28,7 @@ describe("ModeSwitcher", () => {
       </MemoryRouter>,
     )
 
-    for (const label of ["Graph", "Living Text", "Synced Panes"]) {
+    for (const label of ["Graph", "Living Text", "Synced Panes", "Sources", "Runs"]) {
       expect(screen.getByRole("tab", { name: label })).toBeInTheDocument()
     }
     expect(await screen.findByText("1")).toBeInTheDocument()

@@ -13,9 +13,17 @@ from fastapi import APIRouter, Request, Response
 
 from citations.locator import PdfLocator, XsdLocator
 from citations.pdf_citation import count_pdf_pages, render_pdf_page
+from citations.source_files import list_source_files
 from provenance.reverse_lookup import find_facts_by_locator
 
 router = APIRouter(prefix="/api/sources")
+
+
+@router.get("/files")
+def get_source_files(request: Request):
+    latest_run = request.app.state.latest_run
+    files = list_source_files(latest_run.xsd_path, latest_run.pdf_path)
+    return [{"path": f.path, "kind": f.kind, "githubUrl": f.github_url} for f in files]
 
 
 @router.get("/lookup")

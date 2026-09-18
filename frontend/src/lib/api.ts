@@ -139,6 +139,12 @@ export interface ProvenanceRecord {
   generatedAt: string
 }
 
+export interface SourceFileInfo {
+  path: string
+  kind: "pdf" | "xsd"
+  githubUrl: string | null
+}
+
 export interface RunSummary {
   runId: string
   createdAt: string

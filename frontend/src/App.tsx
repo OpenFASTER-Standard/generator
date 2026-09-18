@@ -7,6 +7,7 @@ import type { PendingCorrection } from "@/components/InlineCorrection"
 import { useFocus } from "@/lib/focus"
 import { ModeSwitcher } from "@/components/ModeSwitcher"
 import { RunsView } from "@/components/RunsView"
+import { SourcesView } from "@/components/SourcesView"
 import { SyncedPanesView } from "@/components/SyncedPanesView"
 import { apiGet } from "@/lib/api"
 import { useReviewer } from "@/lib/reviewer"
@@ -22,7 +23,6 @@ interface ModeContentProps {
   search: string
   reviewer: string
   onDecided: () => void
-  latestRun: RunSummary | undefined
   runs: RunSummary[]
 }
 
@@ -41,7 +41,7 @@ interface ModeContentProps {
 // resolve, and only "/living-text/living-text" (the doubled, unintended
 // shape) actually rendered LivingTextView.
 function ModeContent({
-  structure, documentation, audit, pending, search, reviewer, onDecided, latestRun, runs,
+  structure, documentation, audit, pending, search, reviewer, onDecided, runs,
 }: ModeContentProps) {
   const { mode } = useFocus()
   switch (mode) {
@@ -54,7 +54,9 @@ function ModeContent({
         <LivingTextView documentation={documentation} pending={pending} reviewer={reviewer} search={search} onDecided={onDecided} />
       ) : null
     case "synced-panes":
-      return latestRun ? <SyncedPanesView pdfPath={latestRun.pdfPath} xsdPaths={[latestRun.xsdPath]} /> : null
+      return <SyncedPanesView />
+    case "sources":
+      return <SourcesView />
     case "runs":
       return <RunsView runs={runs} />
     default:
@@ -92,8 +94,6 @@ export default function App() {
     refreshPending()
   }, [refreshPending])
 
-  const latestRun = runs[runs.length - 1]
-
   return (
     <HashRouter>
       <HoverFocusProvider>
@@ -117,7 +117,6 @@ export default function App() {
                   search={search}
                   reviewer={reviewer}
                   onDecided={refreshPending}
-                  latestRun={latestRun}
                   runs={runs}
                 />
               </ModeSwitcher>

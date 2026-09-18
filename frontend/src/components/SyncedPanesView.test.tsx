@@ -3,12 +3,20 @@ import userEvent from "@testing-library/user-event"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { SyncedPanesView } from "@/components/SyncedPanesView"
 
+const FILES = [
+  { path: "/repo/a.pdf", kind: "pdf", githubUrl: "https://github.com/Org/repo/blob/main/a.pdf" },
+  { path: "/repo/a.xsd", kind: "xsd", githubUrl: "https://github.com/Org/repo/blob/main/a.xsd" },
+]
+
 function stubFetch(overrides: (url: string) => Response | Promise<Response> | undefined) {
   vi.stubGlobal(
     "fetch",
     vi.fn().mockImplementation((url: string) => {
       const overridden = overrides(url)
       if (overridden !== undefined) return Promise.resolve(overridden)
+      if (url.includes("/sources/files")) {
+        return Promise.resolve({ ok: true, json: async () => FILES })
+      }
       if (url.includes("/sources/pdf/info")) {
         return Promise.resolve({ ok: true, json: async () => ({ totalPages: 262 }) })
       }
@@ -28,6 +36,19 @@ function stubFetch(overrides: (url: string) => Response | Promise<Response> | un
 describe("SyncedPanesView", () => {
   afterEach(() => vi.unstubAllGlobals())
 
+  it("shows the first real source file's repo-relative path, not the local path or a kind prefix", async () => {
+    stubFetch(() => undefined)
+
+    render(<SyncedPanesView />)
+
+    // Not "/repo/a.pdf" (the local filesystem path) and not "pdf:/repo/a.pdf"
+    // (a kind prefix leaking into the display) -- the real GitHub-relative
+    // path, derived from the file's own real githubUrl.
+    expect(await screen.findByRole("combobox")).toHaveTextContent("a.pdf")
+    expect(screen.queryByText(/^pdf:/)).not.toBeInTheDocument()
+    expect(screen.queryByText("/repo/a.pdf")).not.toBeInTheDocument()
+  })
+
   it("shows the PDF source by default and lists real derived facts immediately, with no click needed", async () => {
     stubFetch((url) => {
       if (url.includes("/sources/lookup")) {
@@ -36,7 +57,7 @@ describe("SyncedPanesView", () => {
       return undefined
     })
 
-    render(<SyncedPanesView pdfPath="/a.pdf" xsdPaths={["/a.xsd"]} />)
+    render(<SyncedPanesView />)
 
     // Not "click the image to see facts" -- both plugins now look up their
     // starting location automatically, so the right pane should already
@@ -50,7 +71,7 @@ describe("SyncedPanesView", () => {
       return undefined
     })
 
-    render(<SyncedPanesView pdfPath="/a.pdf" xsdPaths={["/a.xsd"]} />)
+    render(<SyncedPanesView />)
 
     expect(await screen.findByText(/nothing was derived from this exact location/i)).toBeInTheDocument()
   })
@@ -67,7 +88,7 @@ describe("SyncedPanesView", () => {
       return undefined
     })
 
-    render(<SyncedPanesView pdfPath="/a.pdf" xsdPaths={["/a.xsd"]} />)
+    render(<SyncedPanesView />)
 
     expect(await screen.findByText("Fact for page 1")).toBeInTheDocument()
     expect(screen.getByRole("button", { name: /prev/i })).toBeDisabled()
@@ -79,16 +100,16 @@ describe("SyncedPanesView", () => {
     expect(screen.getByText(/page 2 of 262/i)).toBeInTheDocument()
   })
 
-  it("lets you switch to an XSD source via the source picker", async () => {
+  it("lets you switch to an XSD source via the source picker, shown by its repo-relative path", async () => {
     stubFetch((url) => {
       if (url.includes("/sources/xsd/file")) return { ok: true, json: async () => ({ content: "<xs:schema/>" }) } as Response
       return undefined
     })
 
-    render(<SyncedPanesView pdfPath="/a.pdf" xsdPaths={["/a.xsd"]} />)
+    render(<SyncedPanesView />)
 
-    await userEvent.click(screen.getByRole("combobox"))
-    await userEvent.click(screen.getByRole("option", { name: "/a.xsd" }))
+    await userEvent.click(await screen.findByRole("combobox"))
+    await userEvent.click(screen.getByRole("option", { name: "a.xsd" }))
 
     expect(await screen.findByText(/<xs:schema/)).toBeInTheDocument()
   })
@@ -102,12 +123,12 @@ describe("SyncedPanesView", () => {
       return undefined
     })
 
-    render(<SyncedPanesView pdfPath="/a.pdf" xsdPaths={["/a.xsd"]} />)
+    render(<SyncedPanesView />)
 
     expect(await screen.findByText("Derived fact 1")).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole("combobox"))
-    await userEvent.click(screen.getByRole("option", { name: "/a.xsd" }))
+    await userEvent.click(screen.getByRole("option", { name: "a.xsd" }))
 
     await screen.findByText(/<xs:schema/)
     expect(screen.queryByText("Derived fact 1")).not.toBeInTheDocument()

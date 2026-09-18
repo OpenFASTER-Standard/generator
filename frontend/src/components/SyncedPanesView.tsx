@@ -2,12 +2,9 @@ import { useEffect, useState } from "react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { apiGet } from "@/lib/api"
 import { getPlugin } from "@/sourcePlugins/registry"
+import { repoRelativePath } from "@/lib/sourceFileLabel"
+import type { SourceFileInfo } from "@/lib/api"
 import type { SourceLocator } from "@/lib/sourceLocator"
-
-interface SyncedPanesViewProps {
-  pdfPath: string
-  xsdPaths: string[]
-}
 
 interface DerivedFactRow {
   subject: string
@@ -15,14 +12,15 @@ interface DerivedFactRow {
   object: string
 }
 
-export function SyncedPanesView({ pdfPath, xsdPaths }: SyncedPanesViewProps) {
-  const sources = [
-    { key: `pdf:${pdfPath}`, label: pdfPath, locator: { kind: "pdf", path: pdfPath, page: 1 } as SourceLocator },
-    ...xsdPaths.map((file) => ({
-      key: `xsd:${file}`, label: file, locator: { kind: "xsd", file, component: "" } as SourceLocator,
-    })),
-  ]
-  const [activeKey, setActiveKey] = useState(sources[0].key)
+function locatorFor(file: SourceFileInfo): SourceLocator {
+  return file.kind === "pdf"
+    ? { kind: "pdf", path: file.path, page: 1 }
+    : { kind: "xsd", file: file.path, component: "" }
+}
+
+export function SyncedPanesView() {
+  const [files, setFiles] = useState<SourceFileInfo[] | undefined>(undefined)
+  const [activePath, setActivePath] = useState<string | undefined>(undefined)
   // undefined = "haven't heard back yet for the current location" (either
   // just switched source, or the auto-lookup on load/page-change hasn't
   // resolved) -- kept distinct from [] ("asked, and this exact location
@@ -31,8 +29,14 @@ export function SyncedPanesView({ pdfPath, xsdPaths }: SyncedPanesViewProps) {
   // redundant by looking something up the moment they show a location.
   const [derived, setDerived] = useState<DerivedFactRow[] | undefined>(undefined)
 
-  const active = sources.find((source) => source.key === activeKey) ?? sources[0]
-  const plugin = getPlugin(active.locator.kind)
+  useEffect(() => {
+    apiGet<SourceFileInfo[]>("/sources/files").then((result) => {
+      setFiles(result)
+      setActivePath((current) => current ?? result[0]?.path)
+    })
+  }, [])
+
+  const active = files?.find((file) => file.path === activePath)
 
   // Switching the active source must clear any facts derived from a click
   // in the *previous* source -- otherwise a stale right-pane result looks
@@ -41,7 +45,7 @@ export function SyncedPanesView({ pdfPath, xsdPaths }: SyncedPanesViewProps) {
   // change pattern for its analogous `related` state.
   useEffect(() => {
     setDerived(undefined)
-  }, [activeKey])
+  }, [activePath])
 
   async function handleLocatorClick(locator: SourceLocator) {
     const params =
@@ -52,22 +56,33 @@ export function SyncedPanesView({ pdfPath, xsdPaths }: SyncedPanesViewProps) {
     setDerived(rows)
   }
 
+  if (files === undefined || !active) {
+    return <p className="text-sm text-muted-foreground">Loading sources…</p>
+  }
+
+  const plugin = getPlugin(active.kind)
+
   return (
     <div className="grid grid-cols-2 gap-4">
       <div>
-        <Select value={activeKey} onValueChange={(value) => value && setActiveKey(value)}>
+        <Select value={activePath} onValueChange={(value) => value && setActivePath(value)}>
           <SelectTrigger className="mb-2 w-full">
-            <SelectValue />
+            <SelectValue>
+              {(value: string | null) => {
+                const file = files.find((f) => f.path === value)
+                return file ? repoRelativePath(file) : null
+              }}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
-            {sources.map((source) => (
-              <SelectItem key={source.key} value={source.key}>
-                {source.label}
+            {files.map((file) => (
+              <SelectItem key={file.path} value={file.path}>
+                {repoRelativePath(file)}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
-        {plugin && plugin.renderWhole(active.locator, handleLocatorClick)}
+        {plugin && plugin.renderWhole(locatorFor(active), handleLocatorClick)}
       </div>
       <div>
         <h4 className="mb-2 text-sm font-semibold">Derived from this location</h4>

@@ -9,6 +9,43 @@ ROOT_XSD = "/work/ontologies/mikadiv-fm/sources/xsd/MiKaDiv_FM_1.02.xsd"
 ANNEX_PDF = "/work/ontologies/mikadiv-fm/sources/khb/khb_mikadiv_fm_anlage_en_v3.pdf"
 
 
+def test_files_endpoint_lists_every_real_source_file_with_kind_and_github_url():
+    # Real, confirmed necessary: the root XSD (MiKaDiv_FM_1.02.xsd) defines
+    # nothing itself -- it only xs:imports 12 other real files everything
+    # actually lives in. Listing just the root path (RunInfo/RunSummary's
+    # own scope) made those 12 files -- and every citation pointing into
+    # them -- unreachable from any "list of source files" view.
+    store_path = STORE_PATH + "_files"
+    shutil.rmtree(store_path, ignore_errors=True)
+    try:
+        app = create_app(store_path, ROOT_XSD, ANNEX_PDF)
+        client = TestClient(app)
+
+        response = client.get("/api/sources/files")
+
+        assert response.status_code == 200
+        files = response.json()
+        paths = {f["path"] for f in files}
+        assert ROOT_XSD in paths
+        assert ANNEX_PDF in paths
+        assert "/work/ontologies/mikadiv-fm/sources/xsd/MiKaDiv_FM_Personentypen_1.02.xsd" in paths
+        assert len(files) == 14  # 13 real XSD files (root + 12 imported) + the annex PDF
+
+        by_path = {f["path"]: f for f in files}
+        assert by_path[ROOT_XSD]["kind"] == "xsd"
+        assert by_path[ROOT_XSD]["githubUrl"] == (
+            "https://github.com/OpenFASTER-Standard/ontologies/blob/main/"
+            "mikadiv-fm/sources/xsd/MiKaDiv_FM_1.02.xsd"
+        )
+        assert by_path[ANNEX_PDF]["kind"] == "pdf"
+        assert by_path[ANNEX_PDF]["githubUrl"] == (
+            "https://github.com/OpenFASTER-Standard/ontologies/blob/main/"
+            "mikadiv-fm/sources/khb/khb_mikadiv_fm_anlage_en_v3.pdf"
+        )
+    finally:
+        shutil.rmtree(store_path, ignore_errors=True)
+
+
 def test_lookup_pdf_finds_real_facts_on_a_real_page():
     # Own store path suffix -- create_app()/open_store() never explicitly
     # close the underlying Oxigraph store, so running multiple tests back
