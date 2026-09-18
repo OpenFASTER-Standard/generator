@@ -30,9 +30,21 @@ test("hover on a documentation value shows a real source preview", async ({ page
 
 test("clicking a documentation value pins it into the URL-addressable focus", async ({ page }) => {
   await page.goto("/#/living-text")
-  const firstValue = page.locator("span.underline").first()
-  await firstValue.click()
+  // Same known-good English span as the hover test above (real provenance,
+  // not the German AOrdNr span that legitimately has none) -- so the
+  // Inspector this click should mount has real, deterministic content to
+  // assert on instead of just "some element exists".
+  const englishValue = page.locator("span.underline").filter({ hasText: "Official serial number" }).first()
+  await englishValue.click()
   await expect(page).toHaveURL(/#\/living-text\/.+/)
+
+  // Assert the Inspector actually mounted and rendered its real citation
+  // content -- not just that the URL changed. Scoped to LivingTextView's
+  // own `data-testid="inspector-panel"` wrapper (not a bare "img, code"
+  // page-wide query) so this can't pass off the leftover hover-preview
+  // popover instead of the real Inspector component.
+  const inspector = page.getByTestId("inspector-panel")
+  await expect(inspector.locator("img, code")).toBeVisible({ timeout: 10_000 })
 })
 
 test("switching modes after a click preserves the same focused subject", async ({ page }) => {

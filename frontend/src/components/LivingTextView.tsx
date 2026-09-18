@@ -2,10 +2,22 @@ import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { InlineCorrection } from "@/components/InlineCorrection"
 import type { PendingCorrection } from "@/components/InlineCorrection"
+import { Inspector } from "@/components/Inspector"
 import { ProposeCorrectionInline } from "@/components/ProposeCorrectionInline"
 import { SourcePreviewPopover } from "@/components/SourcePreviewPopover"
+import { useFocus } from "@/lib/focus"
 import { XSDO_DOCUMENTATION } from "@/lib/api"
 import type { DocEntry, DocumentationResponse } from "@/lib/api"
+
+const GROUP_KEYS: (keyof DocumentationResponse)[] = ["matched", "unmatched", "ambiguous", "englishOnly"]
+
+function findEntry(documentation: DocumentationResponse, subject: string): DocEntry | undefined {
+  for (const key of GROUP_KEYS) {
+    const entry = documentation[key].find((candidate) => candidate.uri === subject)
+    if (entry) return entry
+  }
+  return undefined
+}
 
 interface LivingTextViewProps {
   documentation: DocumentationResponse
@@ -71,8 +83,24 @@ function DocEntryCard({
 }
 
 export function LivingTextView({ documentation, pending, reviewer, search, onDecided }: LivingTextViewProps) {
+  const { subject, predicate, lang } = useFocus()
+
+  // Click-to-pin (SourcePreviewPopover's onClick) puts {subject, predicate,
+  // lang} into the URL-addressable focus, but the Inspector itself needs
+  // the actual documented `value` text too (the /provenance lookup is
+  // keyed on subject+predicate+value+lang, same as the hover preview) --
+  // look it up from the documentation payload already in hand rather than
+  // stashing value in the URL/focus model.
+  const focusedEntry = subject ? findEntry(documentation, subject) : undefined
+  const focusedValue = focusedEntry && lang ? focusedEntry.languages[lang] : undefined
+
   return (
     <div>
+      {subject && predicate && lang && focusedValue !== undefined && (
+        <div data-testid="inspector-panel" className="mb-6">
+          <Inspector subject={subject} predicate={predicate} value={focusedValue} lang={lang} />
+        </div>
+      )}
       {GROUPS.map(({ key, label, variant }) => {
         const entries = documentation[key].filter((entry) => matchesSearch(entry.name, search))
         if (entries.length === 0) return null

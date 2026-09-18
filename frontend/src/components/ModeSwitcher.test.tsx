@@ -13,15 +13,13 @@ describe("ModeSwitcher", () => {
   afterEach(() => vi.unstubAllGlobals())
 
   it("renders all 3 mode tabs and a pending-corrections badge", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => [{ correctionUri: "urn:c1" }] }))
-
     render(
       <MemoryRouter initialEntries={["/graph"]}>
         <Routes>
           <Route
             path="/:mode/*"
             element={
-              <ModeSwitcher search="" onSearchChange={() => {}} reviewer="julian" onReviewerChange={() => {}}>
+              <ModeSwitcher search="" onSearchChange={() => {}} reviewer="julian" onReviewerChange={() => {}} pendingCount={1}>
                 <div>content</div>
               </ModeSwitcher>
             }
@@ -37,15 +35,13 @@ describe("ModeSwitcher", () => {
   })
 
   it("clicking a mode tab navigates there, preserving no stale content", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => [] }))
-
     render(
       <MemoryRouter initialEntries={["/graph"]}>
         <Routes>
           <Route
             path="/:mode/*"
             element={
-              <ModeSwitcher search="" onSearchChange={() => {}} reviewer="julian" onReviewerChange={() => {}}>
+              <ModeSwitcher search="" onSearchChange={() => {}} reviewer="julian" onReviewerChange={() => {}} pendingCount={0}>
                 <div>content</div>
               </ModeSwitcher>
             }
@@ -73,15 +69,13 @@ describe("ModeSwitcher", () => {
   // use for their own narrower purposes -- that flat pattern is what
   // actually carries `subject` across a mode switch.
   it("clicking a mode tab preserves the currently focused subject", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => [] }))
-
     render(
       <MemoryRouter initialEntries={["/living-text/urn%3Asubject-1"]}>
         <Routes>
           <Route
             path="/:mode/:subject?/:predicate?/:lang?"
             element={
-              <ModeSwitcher search="" onSearchChange={() => {}} reviewer="julian" onReviewerChange={() => {}}>
+              <ModeSwitcher search="" onSearchChange={() => {}} reviewer="julian" onReviewerChange={() => {}} pendingCount={0}>
                 <LocationProbe />
               </ModeSwitcher>
             }

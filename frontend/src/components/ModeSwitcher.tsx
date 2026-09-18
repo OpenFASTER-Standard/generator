@@ -1,11 +1,9 @@
-import { useEffect, useState } from "react"
 import type { ReactNode } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { TooltipProvider } from "@/components/ui/tooltip"
-import { apiGet } from "@/lib/api"
 import { useFocus } from "@/lib/focus"
 
 const MODES: { key: string; label: string }[] = [
@@ -22,16 +20,12 @@ interface ModeSwitcherProps {
   onSearchChange: (value: string) => void
   reviewer: string
   onReviewerChange: (name: string) => void
+  pendingCount: number
   children: ReactNode
 }
 
-export function ModeSwitcher({ search, onSearchChange, reviewer, onReviewerChange, children }: ModeSwitcherProps) {
+export function ModeSwitcher({ search, onSearchChange, reviewer, onReviewerChange, pendingCount, children }: ModeSwitcherProps) {
   const { mode, subject, setFocus } = useFocus()
-  const [pendingCount, setPendingCount] = useState(0)
-
-  useEffect(() => {
-    apiGet<unknown[]>("/corrections/pending").then((rows) => setPendingCount(rows.length))
-  }, [])
 
   return (
     <TooltipProvider>

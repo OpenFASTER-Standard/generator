@@ -72,14 +72,22 @@ export default function App() {
   const [pending, setPending] = useState<PendingCorrection[]>([])
   const [runs, setRuns] = useState<RunSummary[]>([])
 
+  // Approving/rejecting a correction changes not just the pending queue but
+  // also the corrected text itself: /documentation reflects approved
+  // corrections, and /audit's issue list can shift too (e.g. an
+  // ambiguous/unmatched entry resolving). Refetch all three together so the
+  // displayed text/audit state doesn't go stale the moment the pending
+  // badge disappears -- previously this only refetched /corrections/pending,
+  // leaving on-screen text pinned to whatever it was at initial load until a
+  // full page reload.
   const refreshPending = useCallback(() => {
     apiGet<PendingCorrection[]>("/corrections/pending").then(setPending)
+    apiGet<DocumentationResponse>("/documentation").then(setDocumentation)
+    apiGet<AuditResponse>("/audit").then(setAudit)
   }, [])
 
   useEffect(() => {
     apiGet<StructureResponse>("/structure").then(setStructure)
-    apiGet<DocumentationResponse>("/documentation").then(setDocumentation)
-    apiGet<AuditResponse>("/audit").then(setAudit)
     apiGet<RunSummary[]>("/runs").then(setRuns)
     refreshPending()
   }, [refreshPending])
@@ -94,7 +102,13 @@ export default function App() {
           <Route
             path="/:mode/:subject?/:predicate?/:lang?"
             element={
-              <ModeSwitcher search={search} onSearchChange={setSearch} reviewer={reviewer} onReviewerChange={setReviewer}>
+              <ModeSwitcher
+                search={search}
+                onSearchChange={setSearch}
+                reviewer={reviewer}
+                onReviewerChange={setReviewer}
+                pendingCount={pending.length}
+              >
                 <ModeContent
                   structure={structure}
                   documentation={documentation}

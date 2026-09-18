@@ -30,6 +30,7 @@ const STATUS_COLOR: Record<DocStatus, string> = {
 function SubjectLineage({ subjectUri, languages }: { subjectUri: string; languages: Record<string, string> }) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const [records, setRecords] = useState<Record<string, ProvenanceRecord | null>>({})
+  const { setFocus } = useFocus()
 
   useEffect(() => {
     let cancelled = false
@@ -72,7 +73,17 @@ function SubjectLineage({ subjectUri, languages }: { subjectUri: string; languag
     }
   }, [subjectUri, records])
 
-  return <div ref={containerRef} data-testid="lineage-graph-container" className="h-96 w-full rounded border" />
+  return (
+    <div>
+      <button
+        onClick={() => setFocus({ mode: "graph" })}
+        className="mb-4 text-sm text-primary underline"
+      >
+        ← All namespaces
+      </button>
+      <div ref={containerRef} data-testid="lineage-graph-container" className="h-96 w-full rounded border" />
+    </div>
+  )
 }
 
 export function GraphView({ structure, documentation, pending, search }: GraphViewProps) {
