@@ -46,8 +46,36 @@ test("switching modes after a click preserves the same focused subject", async (
   await expect(page).toHaveURL(new RegExp(`#/graph/${encodeURIComponent(subject).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
 })
 
-test("Synced Panes: clicking a PDF page shows real derived facts, both directions", async ({ page }) => {
+test("Synced Panes: clicking a real XSD component shows its actual derived facts", async ({ page }) => {
   await page.goto("/#/synced-panes")
-  await page.getByRole("img").first().click()
-  await expect(page.getByText(/derived from this location/i)).toBeVisible()
+  // Not "click the first PDF page image": SyncedPanesView always starts on
+  // the PDF source, and its page 1 has zero attached provenance in the
+  // real corpus -- confirmed live: GET /api/sources/lookup?kind=pdf&
+  // path=<real pdf>&page=1 returns `[]`. SyncedPanesView's own "Derived
+  // from this location" <h4> is unconditionally rendered regardless of
+  // whether any facts were found, so asserting only on that heading's
+  // visibility (the brief's own literal spec) passes vacuously here --
+  // confirmed it would pass identically even with the sync feature
+  // entirely deleted (see this repo's own git history for the before/
+  // after `setDerived` sanity check).
+  //
+  // Switch to the XSD source instead and click its own first clickable
+  // component span. XsdWhole renders one clickable span per top-level
+  // named component in the real XSD file, in file order -- the first one,
+  // "MiKaDivFMRoot", is a real globally-scoped construct with an attached
+  // German documentation provenance record. Confirmed live: GET
+  // /api/sources/lookup?kind=xsd&file=<real xsd path>&
+  // component={http://www.itzbund.de/MiKaDiv/FM/1.02}MiKaDivFMRoot
+  // returns exactly 1 real derived fact (its xsdo:documentation, "Root-
+  // Element für die Nutzdaten."). Asserting on that specific, real content
+  // -- not just the always-visible heading -- gives this test real
+  // signal: it fails if the reverse-lookup wiring is ever broken.
+  await page.locator("main").getByRole("combobox").click()
+  await page.getByRole("option", { name: "MiKaDiv_FM_1.02.xsd" }).click()
+
+  await page.locator("pre span.cursor-pointer").first().click()
+
+  const derivedItems = page.getByRole("listitem")
+  await expect(derivedItems).toHaveCount(1)
+  await expect(derivedItems.first()).toHaveText(/Root-Element für die Nutzdaten/)
 })
