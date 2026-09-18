@@ -48,6 +48,108 @@ def test_provenance_endpoint_returns_a_recorded_fact_and_null_for_an_untracked_o
         shutil.rmtree(store_path, ignore_errors=True)
 
 
+def test_provenance_endpoint_finds_an_untagged_literal_when_queried_with_lang_de():
+    # Real, confirmed bug (2026-09-18): FM's own 410 real xs:documentation
+    # blocks carry no xml:lang at all (extraction/documentation.py stores
+    # those as a PLAIN, untagged Literal), but reporting.data displays an
+    # untagged value under the "de" key regardless (this corpus's untagged
+    # docs are always German) -- so the frontend always queries this
+    # endpoint with lang=de for such a value. This route used to
+    # reconstruct the query as Literal(value, lang="de") unconditionally,
+    # a different RDF term from the untagged one actually stored, so the
+    # lookup silently returned null for every one of those 410 real
+    # constructs. The prior test in this file only ever exercises an
+    # explicitly de-TAGGED fixture literal, which is why this went
+    # uncaught -- this one specifically stores an UNTAGGED literal, the
+    # real shape this corpus actually produces.
+    store_path = STORE_PATH + "_provenance_untagged"
+    shutil.rmtree(store_path, ignore_errors=True)
+    try:
+        app = create_app(store_path, ROOT_XSD, ANNEX_PDF)
+        from rdflib import Namespace
+        EX = Namespace("https://example.org/test#")
+        attach_provenance(
+            app.state.dataset, graph_uri=app.state.latest_run.graph_uri,
+            subject=EX.AOrdNr, predicate=EX.documentation, obj=Literal("Amtliche Ordnungsnummer"),
+            source_uri="citation:xsd/frag-untagged", generated_at="2026-09-15T14:00:00Z",
+        )
+        client = TestClient(app)
+
+        found = client.get("/api/provenance", params={
+            "subject": str(EX.AOrdNr), "predicate": str(EX.documentation),
+            "value": "Amtliche Ordnungsnummer", "lang": "de",
+        })
+
+        assert found.status_code == 200
+        assert found.json()["sourceUri"] == "citation:xsd/frag-untagged"
+    finally:
+        shutil.rmtree(store_path, ignore_errors=True)
+
+
+def test_provenance_endpoint_still_prefers_a_real_de_tagged_literal_when_both_exist():
+    # The untagged fallback must not shadow a genuinely de-tagged literal
+    # (MiKaDiv-VIB/KaFE's real documentation IS xml:lang-tagged) -- if a
+    # subject somehow has both an untagged and a de-tagged value, the
+    # exact-tagged match must win, not silently prefer the fallback.
+    store_path = STORE_PATH + "_provenance_de_preferred"
+    shutil.rmtree(store_path, ignore_errors=True)
+    try:
+        app = create_app(store_path, ROOT_XSD, ANNEX_PDF)
+        from rdflib import Namespace
+        EX = Namespace("https://example.org/test#")
+        attach_provenance(
+            app.state.dataset, graph_uri=app.state.latest_run.graph_uri,
+            subject=EX.Both, predicate=EX.documentation, obj=Literal("Text", lang="de"),
+            source_uri="citation:xsd/frag-tagged", generated_at="2026-09-15T14:00:00Z",
+        )
+        attach_provenance(
+            app.state.dataset, graph_uri=app.state.latest_run.graph_uri,
+            subject=EX.Both, predicate=EX.documentation, obj=Literal("Text"),
+            source_uri="citation:xsd/frag-untagged", generated_at="2026-09-15T14:00:00Z",
+        )
+        client = TestClient(app)
+
+        found = client.get("/api/provenance", params={
+            "subject": str(EX.Both), "predicate": str(EX.documentation), "value": "Text", "lang": "de",
+        })
+
+        assert found.status_code == 200
+        assert found.json()["sourceUri"] == "citation:xsd/frag-tagged"
+    finally:
+        shutil.rmtree(store_path, ignore_errors=True)
+
+
+def test_provenance_endpoint_finds_the_real_aordnr_german_citation_end_to_end():
+    # The real, full reproduction of what the live UI does: a real
+    # pipeline run against the real corpus, queried through the exact
+    # same HTTP route and params SourcePreviewPopover/Inspector send when
+    # a user hovers AOrdNr's German documentation value -- this is the
+    # concrete case that was reported broken and is now fixed by two
+    # independent changes together: resolve_xsd_component (local-scope
+    # citation capture) and this route's untagged-literal fallback (the
+    # language-tag mismatch). Neither fix alone was sufficient for this
+    # real case; this test is the one place that exercises both at once.
+    store_path = STORE_PATH + "_aordnr_e2e"
+    shutil.rmtree(store_path, ignore_errors=True)
+    try:
+        app = create_app(store_path, ROOT_XSD, ANNEX_PDF)
+        client = TestClient(app)
+
+        response = client.get("/api/provenance", params={
+            "subject": "http://www.itzbund.de/MiKaDiv/FMMa23/1.02#AmtlicheOrdnungsnummerMa23ListeType.AOrdNr",
+            "predicate": "https://purl.openfaster.org/xsdo/documentation",
+            "value": "Amtliche Ordnungsnummer",
+            "lang": "de",
+        })
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body is not None, "AOrdNr's German documentation must resolve to a real citation"
+        assert "citation:xsd" in body["sourceUri"]
+    finally:
+        shutil.rmtree(store_path, ignore_errors=True)
+
+
 def test_pdf_citation_endpoint_returns_real_png_bytes():
     store_path = STORE_PATH + "_pdf"
     shutil.rmtree(store_path, ignore_errors=True)

@@ -34,11 +34,39 @@ def get_provenance_route(request: Request, subject: str, predicate: str, value: 
     # SPARQL construction was separately confirmed non-exploitable.
     subject_term = validated_iri(subject, "subject")
     predicate_term = validated_iri(predicate, "predicate")
-    obj = Literal(value, lang=lang) if lang else Literal(value)
-    record = get_provenance(request.app.state.dataset, graph_uri, subject_term, predicate_term, obj)
-    if record is None:
-        return None
-    return {"sourceUri": record.source_uri, "generatedAt": record.generated_at}
+    dataset = request.app.state.dataset
+
+    # Real, confirmed bug found live (2026-09-18): FM's own 410 real
+    # xs:documentation blocks carry no xml:lang at all (see
+    # extraction/documentation.py's own docstring) -- extraction stores
+    # those as a plain, untagged rdflib.Literal, and
+    # reporting.data._documentation_by_language deliberately displays an
+    # untagged value under the "de" key anyway (this corpus's untagged
+    # docs are always German). webapp.pipeline._attach_german_provenance
+    # already accounts for this on the WRITE side (it matches
+    # `o.language in (None, "de")`), but this route used to reconstruct
+    # the query literal as ALWAYS `Literal(value, lang="de")` when the
+    # frontend sends `lang=de` (which it always does for a value it
+    # displays under that key) -- a real, different RDF term from the
+    # untagged one actually stored, so the lookup silently returned null
+    # for every FM construct whose German text is untagged. Confirmed
+    # live against AmtlicheOrdnungsnummerMa23ListeType.AOrdNr: the
+    # provenance record exists (stored against the untagged literal,
+    # since that's the real term `_attach_german_provenance` matched),
+    # but the old query -- built from `lang=de` -- could never find it.
+    # Trying the untagged literal as a fallback (not a replacement --
+    # MiKaDiv-VIB/KaFE's real de-tagged text must still match first) is
+    # the same leniency already established everywhere else in this
+    # codebase for exactly this corpus quirk, applied on the read side.
+    candidates = [Literal(value, lang=lang) if lang else Literal(value)]
+    if lang == "de":
+        candidates.append(Literal(value))
+
+    for obj in candidates:
+        record = get_provenance(dataset, graph_uri, subject_term, predicate_term, obj)
+        if record is not None:
+            return {"sourceUri": record.source_uri, "generatedAt": record.generated_at}
+    return None
 
 
 @router.get("/citations/pdf")
