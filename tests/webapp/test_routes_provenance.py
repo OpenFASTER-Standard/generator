@@ -84,3 +84,54 @@ def test_xsd_citation_endpoint_returns_the_real_fragment_and_source_file():
         assert body["sourceFile"].endswith("MiKaDiv_FM_Personentypen_1.02.xsd")
     finally:
         shutil.rmtree(store_path, ignore_errors=True)
+
+
+def test_xsd_citation_endpoint_resolves_a_real_global_element_not_just_types():
+    # Real, confirmed bug fixed alongside the local-scope resolution work:
+    # this endpoint used to check ONLY schema.maps.types, so a global
+    # ELEMENT's own citation (MiKaDivFMRoot -- this corpus's one real
+    # global element) 404'd even though it was never locally-scoped.
+    store_path = STORE_PATH + "_xsd_element"
+    shutil.rmtree(store_path, ignore_errors=True)
+    try:
+        app = create_app(store_path, ROOT_XSD, ANNEX_PDF)
+        client = TestClient(app)
+
+        response = client.get("/api/citations/xsd", params={
+            "file": ROOT_XSD,
+            "type_qname": "{http://www.itzbund.de/MiKaDiv/FM/1.02}MiKaDivFMRoot",
+        })
+
+        assert response.status_code == 200
+        body = response.json()
+        assert "MiKaDivFMRoot" in body["fragment"]
+    finally:
+        shutil.rmtree(store_path, ignore_errors=True)
+
+
+def test_xsd_citation_endpoint_resolves_a_real_locally_scoped_element():
+    # Real, confirmed regression anchor: AOrdNr is a local xs:element
+    # declaration nested inside a global complex type -- previously
+    # unconditionally unresolvable by this endpoint (dotted qnames were
+    # never handled at all, not even attempted).
+    store_path = STORE_PATH + "_xsd_local"
+    shutil.rmtree(store_path, ignore_errors=True)
+    try:
+        app = create_app(store_path, ROOT_XSD, ANNEX_PDF)
+        client = TestClient(app)
+
+        response = client.get("/api/citations/xsd", params={
+            "file": ROOT_XSD,
+            "type_qname": (
+                "{http://www.itzbund.de/MiKaDiv/FMMa23/1.02}"
+                "AmtlicheOrdnungsnummerMa23ListeType.AOrdNr"
+            ),
+        })
+
+        assert response.status_code == 200
+        body = response.json()
+        assert 'name="AOrdNr"' in body["fragment"]
+        assert "Amtliche Ordnungsnummer" in body["fragment"]
+        assert body["sourceFile"].endswith("MiKaDiv_FM_Meldeart23_1.02.xsd")
+    finally:
+        shutil.rmtree(store_path, ignore_errors=True)

@@ -1,8 +1,13 @@
 """Runs the real extraction pipeline end to end, persists everything it
 produces (graph + audit artifacts) as one immutable run, and attaches
-real provenance to every fact this plan can honestly source -- see this
-module's own Task 18 in the plan for the exact, confirmed scope split
-between global and local constructs.
+real provenance to every fact this plan can honestly source. German/XSD
+provenance originally covered only globally-named constructs (Plan C's
+own Task 18 scope limit); citations.xsd_citation.resolve_xsd_component
+closed that gap by resolving locally-scoped declarations (element/
+attribute declarations, and anonymous types, nested inside a global
+type) back to their real xmlschema object too -- see that function's own
+docstring for the real, confirmed scale of what was excluded before
+(239 of 377 documented subjects in this corpus).
 """
 from __future__ import annotations
 
@@ -10,7 +15,7 @@ import xmlschema
 from rdflib import Dataset
 
 from citations.locator import PdfLocator, XsdLocator, locator_to_source_uri
-from citations.xsd_citation import capture_xsd_fragment
+from citations.xsd_citation import capture_xsd_fragment, resolve_xsd_component
 from extraction.annex_pdf import XSDO, attach_english_documentation, extract_name_occurrences_with_pages
 from extraction.extract import extract
 from extraction.translation_plausibility import check_translation_coverage, check_translation_plausibility
@@ -37,16 +42,22 @@ def _attach_english_provenance(dataset, graph_uri, graph, occurrences_with_pages
         attach_provenance(dataset, graph_uri, subject, XSDO.documentation, english, source_uri, generated_at)
 
 
-def _attach_german_provenance_for_global_constructs(dataset, graph_uri, graph, schema, generated_at):
+def _attach_german_provenance(dataset, graph_uri, graph, schema, generated_at):
+    # Covers both globally-named constructs (a bare qname, e.g.
+    # "{ns}SomeType") and locally-scoped declarations nested inside one
+    # (a dotted qname, e.g. "{ns}SomeType.LocalElement.@LocalAttribute")
+    # -- resolve_xsd_component (citations/xsd_citation.py) walks either
+    # shape back to the real xmlschema object. Previously this only
+    # handled the bare-qname case and unconditionally skipped anything
+    # with a "." in it, which -- confirmed real -- was the majority of
+    # this corpus's documented subjects (239 of 377), not an edge case.
     for subject in set(graph.subjects(XSDO.documentation, None)):
         uri = str(subject)
         if "#" not in uri:
             continue
         namespace, fragment = uri.split("#", 1)
-        if "." in fragment:
-            continue  # locally-scoped declaration -- out of scope, see this task's own scope note
         qname = f"{{{namespace}}}{fragment}"
-        component = schema.maps.types.get(qname) or schema.maps.elements.get(qname)
+        component = resolve_xsd_component(schema, qname)
         if component is None:
             continue
         german = next((o for o in graph.objects(subject, XSDO.documentation) if o.language in (None, "de")), None)
@@ -71,6 +82,6 @@ def run_pipeline_and_store(
 
     _attach_english_provenance(dataset, info.graph_uri, graph, occurrences_with_pages, pdf_path, created_at)
     schema = xmlschema.XMLSchema(xsd_path)
-    _attach_german_provenance_for_global_constructs(dataset, info.graph_uri, graph, schema, created_at)
+    _attach_german_provenance(dataset, info.graph_uri, graph, schema, created_at)
 
     return info

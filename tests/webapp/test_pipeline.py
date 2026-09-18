@@ -90,6 +90,52 @@ def test_run_pipeline_and_store_attaches_real_xsd_provenance_for_a_global_constr
         shutil.rmtree(STORE_PATH, ignore_errors=True)
 
 
+def test_run_pipeline_and_store_attaches_real_german_provenance_for_a_locally_scoped_declaration():
+    # Real, confirmed regression anchor: AmtlicheOrdnungsnummerMa23ListeType.AOrdNr
+    # is a local xs:element declaration (nested inside a global complex
+    # type, not itself globally named) -- its German documentation used
+    # to be unconditionally skipped by pipeline.py's own "." in fragment
+    # check, reported as "no source recorded" in the live UI even though
+    # its English documentation (a separate, PDF-based attachment path)
+    # always resolved correctly. resolve_xsd_component
+    # (citations/xsd_citation.py) closes this gap.
+    shutil.rmtree(STORE_PATH, ignore_errors=True)
+    dataset = open_store(STORE_PATH, create=True)
+    try:
+        info = run_pipeline_and_store(
+            dataset, xsd_path=ROOT_XSD, pdf_path=ANNEX_PDF,
+            run_id="2026-09-18T09:00:00Z", created_at="2026-09-18T09:00:00Z",
+        )
+
+        graph = dataset.graph(URIRef(info.graph_uri))
+        subject = URIRef(
+            "http://www.itzbund.de/MiKaDiv/FMMa23/1.02#AmtlicheOrdnungsnummerMa23ListeType.AOrdNr"
+        )
+        german = next(
+            (o for o in graph.objects(subject, XSDO.documentation) if o.language in (None, "de")),
+            None,
+        )
+        assert german is not None, "fixture assumption: this real local element has German documentation"
+        assert str(german) == "Amtliche Ordnungsnummer"
+
+        record = get_provenance(dataset, info.graph_uri, subject, XSDO.documentation, german)
+
+        assert record is not None
+        # attach_provenance percent-encodes source_uri before storing it as
+        # a real URIRef (curly braces aren't valid unescaped URI
+        # characters) -- pre-existing behavior, not introduced here; every
+        # XSD citation's qname has braces, so this applied to the
+        # already-working global-construct case too, just never asserted
+        # on the full string before.
+        assert record.source_uri == (
+            "citation:xsd?file=/work/ontologies/mikadiv-fm/sources/xsd/MiKaDiv_FM_Meldeart23_1.02.xsd"
+            "&component=%7Bhttp://www.itzbund.de/MiKaDiv/FMMa23/1.02%7DAmtlicheOrdnungsnummerMa23ListeType.AOrdNr"
+        )
+    finally:
+        dataset.close()
+        shutil.rmtree(STORE_PATH, ignore_errors=True)
+
+
 def test_run_pipeline_and_store_produces_the_same_source_uris_as_before_the_locator_refactor():
     # Real, confirmed regression anchor from this plan's own spec work:
     # AOrdNr's English citation is exactly this page/bbox on the real PDF.
