@@ -181,12 +181,26 @@ region.
   already, in effect, a serialized locator — it needs formalizing into this
   plugin shape, not reinventing.
 
-Interaction, both directions:
+Interaction, both directions (design intent — see the implementation note
+immediately below for what actually shipped in the first cut):
 
 - **Derived → source**: hover a fact in the right pane, the left pane
   auto-scrolls to and highlights the exact region it came from.
 - **Source → derived**: scroll or click in the source pane itself, the right
   pane filters/highlights to only what was derived from that exact spot.
+
+**Implementation note (added post-merge-review, 2026-09-18):** the first
+cut ships **source → derived only**. Derived → source (hovering a
+right-pane fact to highlight/scroll the left pane to its source region)
+needs a real interface addition (`SourcePlugin` currently has no way to
+express "highlight this locator in an already-rendered whole-document
+view") and was never scheduled as a task in this design's own
+implementation plan — a plan-authoring gap caught only by the final
+whole-branch review, after all 16 scheduled tasks were already complete.
+Rather than design and ship a from-scratch bidirectional-highlighting
+feature inside a time-boxed final-review fix wave with no dedicated task
+brief or test-first design, it's tracked here as real, explicit follow-up
+work instead. See "Known gaps" below.
 
 A small switcher at the top of the source pane picks which real source file
 is in view (this corpus has one PDF but multiple XSD files). Facts with no
@@ -240,6 +254,27 @@ and safe rather than ad hoc.
   approve/reject exist. This design adds it (inline, in Living Text), but
   flagging it here as a real, previously-unaddressed gap this spec closes,
   not one it introduces.
+- **Added post-merge-review, 2026-09-18 — real, tracked follow-up work,
+  not silently dropped:** three pieces of this design's own
+  "interconnected, interlinked" vision didn't make this first cut, each for
+  the same reason (a genuine feature needing its own design/task, not a
+  shortfall in how a scheduled task was executed — the original 16-task
+  plan never scheduled a task for any of the three):
+  - **Synced Panes' derived → source direction** (see the implementation
+    note in that section above) — only source → derived shipped.
+  - **Graph mode has no hover-brushing** — `HoverFocusProvider` exists and
+    is mounted, but no component (Graph's Cytoscape nodes in particular)
+    actually calls `useHoverFocus()` yet, so the "hover lights up related
+    elements everywhere on screen" interaction rule from Research grounding
+    is unimplemented outside Living Text's own hover-preview popover.
+  - **Living Text and Synced Panes don't yet react to the shared focus
+    model** when it's set from elsewhere (e.g. focusing a subject in Graph
+    mode doesn't scroll Living Text to that entry or pre-select the
+    matching source/locator in Synced Panes) — Graph mode is currently the
+    only one of the three that reads `useFocus()`'s `subject`.
+  These are additive: the interfaces this design introduced
+  (`SourcePlugin`, `useFocus`, `HoverFocusProvider`) were built to make
+  each of these an incremental addition later, not a rework.
 
 ## Non-goals
 
@@ -263,10 +298,14 @@ and safe rather than ad hoc.
 - The reverse-lookup endpoint is real, tested against the real corpus, and
   used by Synced Panes' source→derived direction.
 - The `SourceLocator`/plugin abstraction has two real implementations (PDF,
-  XSD) and a passing plugin-conformance test suite.
+  XSD) and a passing plugin-conformance test suite, including a click
+  round-trip assertion per plugin (render a locator's whole view, click it,
+  assert the resulting locator matches).
 - A live Playwright walkthrough exercises hover-preview, click-to-pin,
-  mode-switching-preserves-focus, and both directions of Synced Panes
-  syncing, against the actual built-and-served app.
+  mode-switching-preserves-focus, and Synced Panes' source→derived
+  syncing, against the actual built-and-served app. (Derived→source
+  syncing is not yet implemented — see "Known gaps" above — so it is not
+  part of this Definition of Done's walkthrough.)
 
 ## Implementation sequencing
 
