@@ -12,7 +12,7 @@ from pathlib import Path
 from fastapi import APIRouter, Request, Response
 
 from citations.locator import PdfLocator, XsdLocator
-from citations.pdf_citation import render_pdf_page
+from citations.pdf_citation import count_pdf_pages, render_pdf_page
 from provenance.reverse_lookup import find_facts_by_locator
 
 router = APIRouter(prefix="/api/sources")
@@ -39,6 +39,11 @@ def lookup(
 def get_pdf_page(path: str, page: int):
     png_bytes = render_pdf_page(path, page_number=page)
     return Response(content=png_bytes, media_type="image/png")
+
+
+@router.get("/pdf/info")
+def get_pdf_info(path: str):
+    return {"totalPages": count_pdf_pages(path)}
 
 
 @router.get("/xsd/file")

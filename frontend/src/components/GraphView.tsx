@@ -3,10 +3,10 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { Checkbox } from "@/components/ui/checkbox"
 import { useFocus } from "@/lib/focus"
+import { DOC_STATUS_LABELS } from "@/lib/docStatusLabels"
+import type { DocStatus } from "@/lib/docStatusLabels"
 import { apiGet, XSDO_DOCUMENTATION } from "@/lib/api"
 import type { AuditResponse, DocumentationResponse, ProvenanceRecord, StructureResponse } from "@/lib/api"
-
-type DocStatus = "matched" | "unmatched" | "ambiguous" | "englishOnly"
 
 interface GraphViewProps {
   structure: StructureResponse
@@ -127,13 +127,13 @@ export function GraphView({ structure, documentation, pending, search }: GraphVi
   const statusFilters = (
     <div className="mb-4 flex gap-4">
       {(["matched", "unmatched", "ambiguous", "englishOnly"] as const).map((status) => (
-        <label key={status} className="flex items-center gap-1 text-sm">
+        <label key={status} className="flex items-center gap-1 text-sm" title={DOC_STATUS_LABELS[status].description}>
           <Checkbox
             checked={visibleStatuses.has(status)}
             onCheckedChange={() => toggleStatus(status)}
             aria-label={status}
           />
-          {status}
+          {DOC_STATUS_LABELS[status].label}
         </label>
       ))}
     </div>

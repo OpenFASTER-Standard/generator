@@ -4,7 +4,7 @@ import pdfplumber
 import pytest
 from PIL import Image
 
-from citations.pdf_citation import crop_pdf_page, render_pdf_page
+from citations.pdf_citation import count_pdf_pages, crop_pdf_page, render_pdf_page
 
 ANNEX_PDF = "/work/ontologies/mikadiv-fm/sources/khb/khb_mikadiv_fm_anlage_en_v3.pdf"
 
@@ -108,3 +108,7 @@ def test_render_pdf_page_rejects_out_of_range_page_number():
     error_msg = str(excinfo.value)
     assert "page_number=99999" in error_msg
     assert "262" in error_msg
+
+
+def test_count_pdf_pages_returns_the_real_page_count():
+    assert count_pdf_pages(ANNEX_PDF) == 262

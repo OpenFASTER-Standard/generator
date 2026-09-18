@@ -23,7 +23,13 @@ export function SyncedPanesView({ pdfPath, xsdPaths }: SyncedPanesViewProps) {
     })),
   ]
   const [activeKey, setActiveKey] = useState(sources[0].key)
-  const [derived, setDerived] = useState<DerivedFactRow[]>([])
+  // undefined = "haven't heard back yet for the current location" (either
+  // just switched source, or the auto-lookup on load/page-change hasn't
+  // resolved) -- kept distinct from [] ("asked, and this exact location
+  // really produced nothing") so the empty state can say something honest
+  // instead of a generic "click to see" prompt that both plugins now make
+  // redundant by looking something up the moment they show a location.
+  const [derived, setDerived] = useState<DerivedFactRow[] | undefined>(undefined)
 
   const active = sources.find((source) => source.key === activeKey) ?? sources[0]
   const plugin = getPlugin(active.locator.kind)
@@ -34,7 +40,7 @@ export function SyncedPanesView({ pdfPath, xsdPaths }: SyncedPanesViewProps) {
   // been clicked there yet. Mirrors Inspector.tsx's own reset-on-identity-
   // change pattern for its analogous `related` state.
   useEffect(() => {
-    setDerived([])
+    setDerived(undefined)
   }, [activeKey])
 
   async function handleLocatorClick(locator: SourceLocator) {
@@ -65,9 +71,14 @@ export function SyncedPanesView({ pdfPath, xsdPaths }: SyncedPanesViewProps) {
       </div>
       <div>
         <h4 className="mb-2 text-sm font-semibold">Derived from this location</h4>
-        {derived.length === 0 && <p className="text-xs text-muted-foreground">Click the source to see what it produced.</p>}
+        {derived === undefined && <p className="text-xs text-muted-foreground">Loading…</p>}
+        {derived !== undefined && derived.length === 0 && (
+          <p className="text-xs text-muted-foreground">
+            Nothing was derived from this exact location. Click elsewhere in the source to check another spot.
+          </p>
+        )}
         <ul className="space-y-1">
-          {derived.map((row, index) => (
+          {derived?.map((row, index) => (
             <li key={index} className="text-sm">
               {row.object}
             </li>

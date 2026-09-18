@@ -66,3 +66,13 @@ def render_pdf_page(pdf_path: str, page_number: int, resolution: int = 150) -> b
         buffer = io.BytesIO()
         page_image.original.save(buffer, format="PNG")
         return buffer.getvalue()
+
+
+def count_pdf_pages(pdf_path: str) -> int:
+    """So Synced Panes' page-navigation controls can bound Prev/Next and
+    show "page X of N" instead of letting a caller request an
+    out-of-range page and get a raw 400. Opening a PDF with pdfplumber
+    just to read `len(pdf.pages)` is cheap (no per-page rendering).
+    """
+    with pdfplumber.open(pdf_path) as pdf:
+        return len(pdf.pages)

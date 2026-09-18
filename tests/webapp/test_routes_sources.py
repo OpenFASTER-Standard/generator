@@ -97,6 +97,24 @@ def test_xsd_file_endpoint_returns_the_real_raw_text():
         shutil.rmtree(store_path, ignore_errors=True)
 
 
+def test_pdf_info_endpoint_returns_the_real_page_count():
+    store_path = STORE_PATH + "_pdf_info"
+    shutil.rmtree(store_path, ignore_errors=True)
+    try:
+        app = create_app(store_path, ROOT_XSD, ANNEX_PDF)
+        client = TestClient(app)
+
+        response = client.get("/api/sources/pdf/info", params={"path": ANNEX_PDF})
+
+        assert response.status_code == 200
+        # Real, known page count for this exact corpus PDF -- confirmed
+        # directly via pdfplumber elsewhere in this project's own tests
+        # (tests/citations/test_pdf_citation.py).
+        assert response.json() == {"totalPages": 262}
+    finally:
+        shutil.rmtree(store_path, ignore_errors=True)
+
+
 def test_xsd_file_endpoint_404s_for_a_nonexistent_file():
     store_path = STORE_PATH + "_xsd_file_404"
     shutil.rmtree(store_path, ignore_errors=True)

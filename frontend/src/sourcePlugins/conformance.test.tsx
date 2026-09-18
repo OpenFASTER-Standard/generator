@@ -68,6 +68,11 @@ describe("source plugin conformance", () => {
         expect(element).not.toBeNull()
         return element as HTMLElement
       })
+      // Both plugins now also auto-fire onLocatorClick once on mount (so
+      // Synced Panes shows something real immediately, without requiring a
+      // click first) -- clear that call so this test isolates the actual
+      // click round-trip it's named for, rather than conflating the two.
+      onLocatorClick.mockClear()
       fireEvent.click(target)
 
       expect(onLocatorClick).toHaveBeenCalledTimes(1)

@@ -1,7 +1,6 @@
 import type { ReactNode } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { useFocus } from "@/lib/focus"
@@ -12,8 +11,6 @@ const MODES: { key: string; label: string }[] = [
   { key: "synced-panes", label: "Synced Panes" },
   { key: "runs", label: "Runs" },
 ]
-
-const REVIEWERS = ["julian", "someone-else"]
 
 interface ModeSwitcherProps {
   search: string
@@ -63,18 +60,13 @@ export function ModeSwitcher({ search, onSearchChange, reviewer, onReviewerChang
             onChange={(event) => onSearchChange(event.target.value)}
             className="ml-auto max-w-64"
           />
-          <Select value={reviewer} onValueChange={(value) => value && onReviewerChange(value)}>
-            <SelectTrigger className="w-40">
-              <SelectValue placeholder="Reviewing as..." />
-            </SelectTrigger>
-            <SelectContent>
-              {REVIEWERS.map((name) => (
-                <SelectItem key={name} value={name}>
-                  {name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <Input
+            placeholder="Reviewing as..."
+            value={reviewer}
+            onChange={(event) => onReviewerChange(event.target.value)}
+            aria-label="Reviewing as"
+            className="w-40"
+          />
         </nav>
         <main className="flex-1 p-6">{children}</main>
       </div>

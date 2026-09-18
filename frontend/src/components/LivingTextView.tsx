@@ -6,6 +6,7 @@ import { Inspector } from "@/components/Inspector"
 import { ProposeCorrectionInline } from "@/components/ProposeCorrectionInline"
 import { SourcePreviewPopover } from "@/components/SourcePreviewPopover"
 import { useFocus } from "@/lib/focus"
+import { DOC_STATUS_LABELS } from "@/lib/docStatusLabels"
 import { XSDO_DOCUMENTATION } from "@/lib/api"
 import type { DocEntry, DocumentationResponse } from "@/lib/api"
 
@@ -27,11 +28,11 @@ interface LivingTextViewProps {
   onDecided: () => void
 }
 
-const GROUPS: { key: keyof DocumentationResponse; label: string; variant: "default" | "secondary" | "destructive" | "outline" }[] = [
-  { key: "matched", label: "Matched", variant: "default" },
-  { key: "unmatched", label: "Unmatched", variant: "secondary" },
-  { key: "ambiguous", label: "Ambiguous", variant: "destructive" },
-  { key: "englishOnly", label: "English-only", variant: "outline" },
+const GROUPS: { key: keyof DocumentationResponse; variant: "default" | "secondary" | "destructive" | "outline" }[] = [
+  { key: "matched", variant: "default" },
+  { key: "unmatched", variant: "secondary" },
+  { key: "ambiguous", variant: "destructive" },
+  { key: "englishOnly", variant: "outline" },
 ]
 
 function matchesSearch(name: string, search: string): boolean {
@@ -101,14 +102,16 @@ export function LivingTextView({ documentation, pending, reviewer, search, onDec
           <Inspector subject={subject} predicate={predicate} value={focusedValue} lang={lang} />
         </div>
       )}
-      {GROUPS.map(({ key, label, variant }) => {
+      {GROUPS.map(({ key, variant }) => {
         const entries = documentation[key].filter((entry) => matchesSearch(entry.name, search))
         if (entries.length === 0) return null
+        const { label, description } = DOC_STATUS_LABELS[key]
         return (
           <section key={key} className="mb-8">
-            <h3 className="mb-2 flex items-center gap-2 text-lg font-semibold">
+            <h3 className="mb-1 flex items-center gap-2 text-lg font-semibold">
               {label} <Badge variant={variant}>{entries.length}</Badge>
             </h3>
+            <p className="mb-2 text-xs text-muted-foreground">{description}</p>
             {entries.map((entry) => (
               <DocEntryCard key={entry.uri} entry={entry} pending={pending} reviewer={reviewer} onDecided={onDecided} />
             ))}

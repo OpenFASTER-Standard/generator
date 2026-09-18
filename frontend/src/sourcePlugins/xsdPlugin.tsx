@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { apiGet } from "@/lib/api"
 import type { XsdLocator } from "@/lib/sourceLocator"
 import type { SourcePlugin } from "@/sourcePlugins/types"
@@ -44,18 +44,36 @@ function findComponentSpans(xml: string, targetNamespace: string): ComponentSpan
 
 function XsdWhole({ locator, onLocatorClick }: { locator: XsdLocator; onLocatorClick: (l: XsdLocator) => void }) {
   const [content, setContent] = useState<string | null>(null)
+  const [selectedQname, setSelectedQname] = useState<string | null>(null)
 
   useEffect(() => {
     setContent(null)
+    setSelectedQname(null)
     apiGet<{ content: string }>(`/sources/xsd/file?file=${encodeURIComponent(locator.file)}`).then((result) =>
       setContent(result.content),
     )
   }, [locator.file])
 
-  if (content === null) return <p className="text-xs text-muted-foreground">Loading...</p>
+  const spans = useMemo(() => {
+    if (content === null) return []
+    const targetNamespace = findTargetNamespace(content)
+    return findComponentSpans(content, targetNamespace)
+  }, [content])
 
-  const targetNamespace = findTargetNamespace(content)
-  const spans = findComponentSpans(content, targetNamespace)
+  // Show something real the moment the file loads, instead of an empty
+  // "click to see what it produced" prompt -- the first component is as
+  // good a default as any, and clicking any other one still replaces it.
+  useEffect(() => {
+    if (spans.length === 0) return
+    setSelectedQname(spans[0].qname)
+    onLocatorClick({ kind: "xsd", file: locator.file, component: spans[0].qname })
+    // onLocatorClick's identity isn't stable across renders (SyncedPanesView
+    // defines it inline), so it's deliberately excluded here -- only a real
+    // file/span-set change should re-trigger the auto-select.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [spans])
+
+  if (content === null) return <p className="text-xs text-muted-foreground">Loading...</p>
 
   const pieces: { text: string; qname: string | null }[] = []
   let cursor = 0
@@ -66,14 +84,23 @@ function XsdWhole({ locator, onLocatorClick }: { locator: XsdLocator; onLocatorC
   }
   if (cursor < content.length) pieces.push({ text: content.slice(cursor), qname: null })
 
+  function selectSpan(qname: string) {
+    setSelectedQname(qname)
+    onLocatorClick({ kind: "xsd", file: locator.file, component: qname })
+  }
+
   return (
     <pre className="max-h-[80vh] overflow-auto rounded border bg-muted/30 p-2 text-xs">
       {pieces.map((piece, index) =>
         piece.qname ? (
           <span
             key={index}
-            className="cursor-pointer hover:bg-accent"
-            onClick={() => onLocatorClick({ kind: "xsd", file: locator.file, component: piece.qname! })}
+            className={
+              piece.qname === selectedQname
+                ? "cursor-pointer bg-accent"
+                : "cursor-pointer hover:bg-accent"
+            }
+            onClick={() => selectSpan(piece.qname!)}
           >
             {piece.text}
           </span>

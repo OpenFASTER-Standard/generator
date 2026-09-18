@@ -34,6 +34,33 @@ describe("ModeSwitcher", () => {
     expect(await screen.findByText("1")).toBeInTheDocument()
   })
 
+  // Regression test: the "Reviewing as" field used to be a fixed 2-option
+  // dropdown (`["julian", "someone-else"]`) -- a hardcoded guest list that
+  // makes no sense for a real maker-checker workflow with more than one
+  // real reviewer. It's a free-text field now so any real name works
+  // without needing to be baked into the source.
+  it("lets you type any reviewer name into the free-text 'Reviewing as' field", async () => {
+    const onReviewerChange = vi.fn()
+    render(
+      <MemoryRouter initialEntries={["/graph"]}>
+        <Routes>
+          <Route
+            path="/:mode/*"
+            element={
+              <ModeSwitcher search="" onSearchChange={() => {}} reviewer="" onReviewerChange={onReviewerChange} pendingCount={0}>
+                <div>content</div>
+              </ModeSwitcher>
+            }
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await userEvent.type(screen.getByLabelText("Reviewing as"), "a")
+
+    expect(onReviewerChange).toHaveBeenCalledWith("a")
+  })
+
   it("clicking a mode tab navigates there, preserving no stale content", async () => {
     render(
       <MemoryRouter initialEntries={["/graph"]}>
