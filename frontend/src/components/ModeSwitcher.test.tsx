@@ -1,8 +1,13 @@
 import { render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { MemoryRouter, Route, Routes } from "react-router-dom"
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom"
 import { ModeSwitcher } from "@/components/ModeSwitcher"
+
+function LocationProbe() {
+  const location = useLocation()
+  return <div data-testid="location">{location.pathname}</div>
+}
 
 describe("ModeSwitcher", () => {
   afterEach(() => vi.unstubAllGlobals())
@@ -55,5 +60,40 @@ describe("ModeSwitcher", () => {
     // reserved for Select/Combobox items in this library) -- confirmed by
     // inspecting the rendered DOM.
     expect(screen.getByRole("tab", { name: "Living Text" })).toHaveAttribute("aria-selected", "true")
+  })
+
+  // Regression test for a real bug this plan's Task 16 E2E suite caught
+  // live: switching modes via these header tabs used to call
+  // `setFocus({ mode: value })`, dropping the currently focused `subject`
+  // entirely -- defeating the DoD's own "mode-switch-preserves-focus"
+  // requirement (a click-to-pin focus was silently lost the moment you
+  // switched tabs). Uses the app's own real route shape
+  // (`/:mode/:subject?/:predicate?/:lang?`, see App.tsx/lib/focus.ts)
+  // rather than the old `/:mode/*` shape this file's other two tests still
+  // use for their own narrower purposes -- that flat pattern is what
+  // actually carries `subject` across a mode switch.
+  it("clicking a mode tab preserves the currently focused subject", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => [] }))
+
+    render(
+      <MemoryRouter initialEntries={["/living-text/urn%3Asubject-1"]}>
+        <Routes>
+          <Route
+            path="/:mode/:subject?/:predicate?/:lang?"
+            element={
+              <ModeSwitcher search="" onSearchChange={() => {}} reviewer="julian" onReviewerChange={() => {}}>
+                <LocationProbe />
+              </ModeSwitcher>
+            }
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByTestId("location").textContent).toBe("/living-text/urn%3Asubject-1")
+
+    await userEvent.click(screen.getByRole("tab", { name: "Graph" }))
+
+    expect(screen.getByTestId("location").textContent).toBe("/graph/urn%3Asubject-1")
   })
 })

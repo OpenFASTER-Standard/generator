@@ -12,6 +12,13 @@ dist
 dist-ssr
 *.local
 
+# Playwright's own run artifacts (frontend/playwright.config.ts) -- never
+# meant to be checked in, only the spec files under e2e/ are.
+test-results
+playwright-report
+blob-report
+playwright/.cache
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

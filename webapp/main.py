@@ -62,3 +62,20 @@ def create_app(store_path: str, xsd_path: str, pdf_path: str) -> FastAPI:
         app.mount("/", StaticFiles(directory=str(frontend_dist), html=True), name="frontend")
 
     return app
+
+
+def _e2e_app():
+    """A zero-argument factory for Playwright's own webServer config
+    (frontend/playwright.config.ts) -- uvicorn's --factory flag requires
+    a callable with no arguments, unlike create_app's own real
+    (store_path, xsd_path, pdf_path) signature every other caller uses.
+    """
+    import shutil
+
+    store_path = "/tmp/e2e_test_store"
+    shutil.rmtree(store_path, ignore_errors=True)
+    return create_app(
+        store_path,
+        "/work/ontologies/mikadiv-fm/sources/xsd/MiKaDiv_FM_1.02.xsd",
+        "/work/ontologies/mikadiv-fm/sources/khb/khb_mikadiv_fm_anlage_en_v3.pdf",
+    )
