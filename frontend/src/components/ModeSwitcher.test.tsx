@@ -28,7 +28,7 @@ describe("ModeSwitcher", () => {
       </MemoryRouter>,
     )
 
-    for (const label of ["Graph", "Living Text", "Synced Panes", "Sources", "Runs"]) {
+    for (const label of ["Graph", "Living Text", "Synced Panes", "Sources", "Triples", "Runs"]) {
       expect(screen.getByRole("tab", { name: label })).toBeInTheDocument()
     }
     expect(await screen.findByText("1")).toBeInTheDocument()

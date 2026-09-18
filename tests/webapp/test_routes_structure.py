@@ -30,6 +30,13 @@ def test_structure_declarations_documentation_audit_endpoints_return_real_data()
         audit = client.get("/api/audit")
         assert audit.status_code == 200
         assert audit.json()["coverage"]["total"] > 0
+
+        triple_counts = client.get("/api/triple-counts")
+        assert triple_counts.status_code == 200
+        body = triple_counts.json()
+        assert body["total"] > 0
+        assert {c["key"] for c in body["categories"]} == {"documentation", "provenance", "structural"}
+        assert sum(c["count"] for c in body["categories"]) == body["total"]
     finally:
         shutil.rmtree(STORE_PATH, ignore_errors=True)
 

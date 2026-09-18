@@ -17,6 +17,7 @@ from extraction.annex_pdf import extract_name_occurrences
 from reporting.data import build_audit, build_declarations, build_documentation_texts, build_structure
 from review.current_view import materialize_current_graph
 from store.runs import read_run_audit
+from store.stats import build_triple_count_summary
 
 router = APIRouter(prefix="/api")
 
@@ -56,3 +57,12 @@ def get_documentation(request: Request):
 def get_audit(request: Request):
     attachment, coverage, issues = read_run_audit(request.app.state.dataset, request.app.state.latest_run.run_id)
     return build_audit(attachment, coverage, issues)
+
+
+@router.get("/triple-counts")
+def get_triple_counts(request: Request):
+    # Deliberately NOT scoped to `_current_graph`'s materialized single-run
+    # view -- store.stats.build_triple_count_summary answers "what does
+    # this whole store actually hold," querying every named graph in the
+    # real dataset directly (see that module's own docstring).
+    return build_triple_count_summary(request.app.state.dataset)

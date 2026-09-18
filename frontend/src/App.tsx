@@ -9,6 +9,7 @@ import { ModeSwitcher } from "@/components/ModeSwitcher"
 import { RunsView } from "@/components/RunsView"
 import { SourcesView } from "@/components/SourcesView"
 import { SyncedPanesView } from "@/components/SyncedPanesView"
+import { TripleCountsView } from "@/components/TripleCountsView"
 import { apiGet } from "@/lib/api"
 import { useReviewer } from "@/lib/reviewer"
 import type {
@@ -57,6 +58,8 @@ function ModeContent({
       return <SyncedPanesView />
     case "sources":
       return <SourcesView />
+    case "triples":
+      return <TripleCountsView />
     case "runs":
       return <RunsView runs={runs} />
     default:

@@ -145,6 +145,24 @@ export interface SourceFileInfo {
   githubUrl: string | null
 }
 
+export interface TriplePredicateCount {
+  predicate: string
+  label: string
+  count: number
+}
+
+export interface TripleCategoryCount {
+  key: "documentation" | "provenance" | "structural"
+  label: string
+  count: number
+  predicates: TriplePredicateCount[]
+}
+
+export interface TripleCountSummary {
+  total: number
+  categories: TripleCategoryCount[]
+}
+
 export interface RunSummary {
   runId: string
   createdAt: string
