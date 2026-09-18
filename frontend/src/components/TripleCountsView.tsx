@@ -39,6 +39,22 @@ function formatPercent(count: number, total: number): string {
   return `${((count / total) * 100).toFixed(1)}%`
 }
 
+const LABEL_FONT_SIZE = 11
+const LABEL_PADDING = 8
+// A plain average-character-width estimate (no real DOM text measurement
+// available for an SVG label laid out ahead of render) -- deliberately
+// conservative for this UI's actual sans-serif body font at this size,
+// so a label is only shown when it demonstrably fits, per this method's
+// own "measure first, don't clip" rule. Every predicate.label in this
+// app is plain ASCII (a Clark-notation-derived `prefix:localName`), so a
+// flat per-character estimate is a reasonable stand-in, not a rough
+// guess across arbitrary Unicode text.
+const ESTIMATED_CHAR_WIDTH = 6.4
+
+function estimatedLabelWidth(label: string): number {
+  return label.length * ESTIMATED_CHAR_WIDTH + LABEL_PADDING
+}
+
 interface Tile {
   category: TripleCategoryCount
   predicate: TriplePredicateCount
@@ -172,7 +188,16 @@ export function TripleCountsView() {
           <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} className="w-full rounded border" role="img" aria-label="Treemap of triples by predicate">
             {tiles.map((tile) => {
               const fill = CATEGORY_COLOR[tile.category.key].light
-              const labelFits = tile.width > 50 && tile.height > 24
+              // "Measure first" -- a label only renders once its own
+              // estimated width actually fits inside this tile, so it
+              // never bleeds into a neighboring tile's fill. A tile too
+              // small for its label shows nothing inline; the exact
+              // predicate and count are still reachable via the hover
+              // tooltip and the table view, per this method's own
+              // "value pushed off its mark lives in the tooltip" rule.
+              const labelFits =
+                tile.height > LABEL_FONT_SIZE + 6 && tile.width > estimatedLabelWidth(tile.predicate.label)
+              const clipId = `clip-${tile.predicate.predicate.replace(/[^a-zA-Z0-9]/g, "")}`
               return (
                 <g
                   key={tile.predicate.predicate}
@@ -190,15 +215,25 @@ export function TripleCountsView() {
                     opacity={hovered === tile ? 1 : 0.85}
                   />
                   {labelFits && (
-                    <text
-                      x={tile.x + 4}
-                      y={tile.y + 14}
-                      fontSize={11}
-                      fill={isDark(fill) ? "#ffffff" : "#0b0b0b"}
-                      className="pointer-events-none select-none"
-                    >
-                      {tile.predicate.label}
-                    </text>
+                    <>
+                      {/* Belt-and-suspenders against the estimate above being
+                          slightly off in a real, unusual font-rendering
+                          environment -- a hard clip means a label can never
+                          visually bleed into a neighboring tile even then. */}
+                      <clipPath id={clipId}>
+                        <rect x={tile.x} y={tile.y} width={tile.width} height={tile.height} />
+                      </clipPath>
+                      <text
+                        x={tile.x + 4}
+                        y={tile.y + 14}
+                        fontSize={LABEL_FONT_SIZE}
+                        fill={isDark(fill) ? "#ffffff" : "#0b0b0b"}
+                        clipPath={`url(#${clipId})`}
+                        className="pointer-events-none select-none"
+                      >
+                        {tile.predicate.label}
+                      </text>
+                    </>
                   )}
                 </g>
               )

@@ -1,5 +1,8 @@
 import shutil
 
+from rdflib import Literal, Namespace
+
+from review.corrections import propose_correction
 from store.database import open_store
 from store.stats import build_triple_count_summary, categorize_predicate
 from webapp.pipeline import run_pipeline_and_store
@@ -7,6 +10,7 @@ from webapp.pipeline import run_pipeline_and_store
 STORE_PATH = "/tmp/test_store_stats"
 ROOT_XSD = "/work/ontologies/mikadiv-fm/sources/xsd/MiKaDiv_FM_1.02.xsd"
 ANNEX_PDF = "/work/ontologies/mikadiv-fm/sources/khb/khb_mikadiv_fm_anlage_en_v3.pdf"
+EX = Namespace("https://example.org/test#")
 
 
 def test_categorize_predicate_puts_every_real_kind_where_it_belongs():
@@ -66,6 +70,51 @@ def test_build_triple_count_summary_against_the_real_running_corpus():
         # And every predicate's own count sums to its category's count.
         for category in summary["categories"]:
             assert sum(p["count"] for p in category["predicates"]) == category["count"]
+    finally:
+        dataset.close()
+        shutil.rmtree(STORE_PATH, ignore_errors=True)
+
+
+def test_build_triple_count_summary_covers_every_real_stored_triple_not_a_subset():
+    # The whole point of this view is "does this account for everything
+    # actually in the store" -- so this test verifies that claim directly,
+    # against a COMPLETELY INDEPENDENT count that shares no code path with
+    # build_triple_count_summary's own SPARQL query: plain
+    # dataset.contexts() (the real rdflib/oxrdflib Python API, not SPARQL
+    # at all) enumerating every named graph and summing len(graph) per
+    # graph. If the two ever disagree, the SPARQL query itself (not just
+    # the categorization logic the other test above already covers) has a
+    # real gap -- e.g. missing a graph, or a GRAPH ?g pattern silently
+    # excluding the default graph if something were ever written there.
+    #
+    # Exercises three real graphs, not just one: the run's own extraction
+    # graph, the runs index, AND a genuine corrections graph (a real,
+    # separate named graph a documented run alone never touches) -- this
+    # is deliberately the scenario a narrower single-graph test would miss.
+    shutil.rmtree(STORE_PATH, ignore_errors=True)
+    dataset = open_store(STORE_PATH, create=True)
+    try:
+        run_pipeline_and_store(
+            dataset, xsd_path=ROOT_XSD, pdf_path=ANNEX_PDF,
+            run_id="2026-09-18T13:00:00Z", created_at="2026-09-18T13:00:00Z",
+        )
+        propose_correction(
+            dataset, graph_uri="https://purl.openfaster.org/review/graph/corrections",
+            target_subject=EX.SomeSubject, target_predicate=EX.documentation, target_language="de",
+            proposed_value="A test correction.", prior_value=Literal("Original.", lang="de"),
+            proposer="test-proposer", reason="covering the corrections graph too",
+            generated_at="2026-09-18T13:05:00Z",
+        )
+
+        summary = build_triple_count_summary(dataset)
+
+        independent_total = sum(len(graph) for graph in dataset.contexts())
+        # Sanity: this really did exercise more than one named graph --
+        # otherwise this test wouldn't be testing what it claims to.
+        real_graph_count = sum(1 for graph in dataset.contexts() if len(graph) > 0)
+        assert real_graph_count >= 3
+
+        assert summary["total"] == independent_total
     finally:
         dataset.close()
         shutil.rmtree(STORE_PATH, ignore_errors=True)
