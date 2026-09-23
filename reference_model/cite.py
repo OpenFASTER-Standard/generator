@@ -47,10 +47,15 @@ def cite(subject_document: SubjectDocument, selector: Any) -> Leaf:
 
 
 def cite_union(parts: list[Reference]) -> Union:
-    # No further resolution check is needed here: every element of `parts`
-    # is already either a Leaf built by a successful cite() call, or a
-    # Union built the same recursive way -- there is no way to construct an
-    # unresolved Reference to put in this list in the first place.
+    # No further resolution check is needed for non-empty parts: every
+    # element is already either a Leaf built by a successful cite() call,
+    # or a Union built the same recursive way -- there is no way to
+    # construct an unresolved Reference to put in this list. An *empty*
+    # list is the one gap that guarantee doesn't close: it would produce a
+    # well-formed, permanently-"healthy" Reference backed by nothing, which
+    # a staleness sweep could never flag -- reject it explicitly instead.
+    if not parts:
+        raise CitationError("cite_union() requires at least one part; an empty Union can never be flagged as stale")
     return Union(parts=tuple(parts))
 
 

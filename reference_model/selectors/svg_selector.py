@@ -13,7 +13,7 @@ import re
 from dataclasses import dataclass
 
 import pdfplumber
-from shapely.geometry import Point, Polygon
+from shapely.geometry import Point, Polygon, box
 
 from reference_model.model import ResolutionOutcome, Status
 from reference_model.registry import Resolver, register
@@ -45,30 +45,46 @@ class SvgSelector:
         return Polygon(coords)
 
 
+def _overlaps_any(polygon: Polygon, objects) -> bool:
+    for obj in objects:
+        bbox = box(obj["x0"], obj["top"], obj["x1"], obj["bottom"])
+        if polygon.intersects(bbox):
+            return True
+    return False
+
+
 def resolve(selector: SvgSelector, retrieval_uri: str) -> ResolutionOutcome:
-    with pdfplumber.open(retrieval_uri) as pdf:
+    try:
+        pdf = pdfplumber.open(retrieval_uri)
+    except OSError:
+        return ResolutionOutcome(status=Status.NOT_FOUND)
+
+    with pdf:
         if selector.page < 1 or selector.page > len(pdf.pages):
             return ResolutionOutcome(status=Status.NOT_FOUND)
 
         page = pdf.pages[selector.page - 1]
-        words = page.extract_words()
-        if not words:
-            # The whole page has no text layer at all -- a scanned/image-only
-            # page, not merely an empty region on an otherwise textful page.
-            return ResolutionOutcome(status=Status.UNCITABLE)
-
         polygon = selector.polygon()
+        words = page.extract_words()
         matched = [
             w
             for w in words
             if polygon.contains(Point((w["x0"] + w["x1"]) / 2, (w["top"] + w["bottom"]) / 2))
         ]
-        if not matched:
-            return ResolutionOutcome(status=Status.NOT_FOUND)
+        if matched:
+            matched.sort(key=lambda w: (round(w["top"], 1), w["x0"]))
+            text = " ".join(w["text"] for w in matched)
+            return ResolutionOutcome(status=Status.RESOLVED, raw_content=text)
 
-        matched.sort(key=lambda w: (round(w["top"], 1), w["x0"]))
-        text = " ".join(w["text"] for w in matched)
-        return ResolutionOutcome(status=Status.RESOLVED, raw_content=text)
+        # No text under the polygon -- distinguish "genuinely nothing here"
+        # (NOT_FOUND) from "there's real content here, just not
+        # machine-checkable text" (UNCITABLE: an image, or a scanned page
+        # rendered as a filled shape). Checked at polygon granularity, not
+        # whole-page: a page can have real text elsewhere and still have an
+        # uncitable image under this specific polygon.
+        if _overlaps_any(polygon, page.images) or _overlaps_any(polygon, page.rects):
+            return ResolutionOutcome(status=Status.UNCITABLE)
+        return ResolutionOutcome(status=Status.NOT_FOUND)
 
 
 def canonicalize_and_hash(raw_content: str) -> str:

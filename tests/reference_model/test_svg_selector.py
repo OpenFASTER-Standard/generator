@@ -83,6 +83,22 @@ def test_page_with_no_text_layer_is_uncitable(tmp_path: Path):
     assert outcome.status == Status.UNCITABLE
 
 
+def test_missing_source_file_is_not_found():
+    selector = SvgSelector.create(PAGE_12, HEADING_POINTS)
+    outcome = _resolver().resolve(selector, "/nonexistent/path/does-not-exist.pdf")
+    assert outcome.status == Status.NOT_FOUND
+
+
+def test_image_region_on_a_page_with_text_elsewhere_is_uncitable():
+    # Real page 1 has an image at x [16.2, 178.0], top [29.6, 127.6], and
+    # 29 words of real text elsewhere on the same page -- so "the whole
+    # page has zero words" is not a sufficient UNCITABLE test; a polygon
+    # over the image specifically must be UNCITABLE too, not NOT_FOUND.
+    selector = SvgSelector.create(1, "16,30 178,30 178,127 16,127")
+    outcome = _resolver().resolve(selector, REAL_PDF)
+    assert outcome.status == Status.UNCITABLE
+
+
 def test_malformed_points_raises_a_clear_error():
     selector = SvgSelector(type="SvgSelector", page=PAGE_12, value="<svg:polygon xmlns:svg='http://www.w3.org/2000/svg'/>")
     try:

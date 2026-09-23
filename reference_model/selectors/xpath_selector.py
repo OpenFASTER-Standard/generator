@@ -25,8 +25,29 @@ class XPathSelector:
 
 
 def resolve(selector: XPathSelector, retrieval_uri: str) -> ResolutionOutcome:
-    tree = etree.parse(retrieval_uri)
-    matches = tree.xpath(selector.value, namespaces=_NSMAP)
+    try:
+        tree = etree.parse(retrieval_uri)
+    except OSError:
+        # Missing/unreadable file -- the source is gone, same bucket as
+        # "selector no longer matches anything" from the caller's view.
+        return ResolutionOutcome(status=Status.NOT_FOUND)
+    except etree.XMLSyntaxError:
+        # Corrupt/unparsable XML -- also nothing to resolve against.
+        return ResolutionOutcome(status=Status.NOT_FOUND)
+
+    try:
+        matches = tree.xpath(selector.value, namespaces=_NSMAP)
+    except etree.XPathEvalError:
+        return ResolutionOutcome(status=Status.UNCITABLE)
+
+    if not isinstance(matches, list):
+        # tree.xpath() only returns a node list for node-set expressions --
+        # string()/count()/boolean() etc. return a str/float/bool instead,
+        # and len() on those measures characters, not matches (a real bug:
+        # it previously misreported string(...) results as AMBIGUOUS based
+        # on string length). None of these are element-addressable the way
+        # this selector type promises, regardless of their length/value.
+        return ResolutionOutcome(status=Status.UNCITABLE)
 
     if len(matches) == 0:
         return ResolutionOutcome(status=Status.NOT_FOUND)

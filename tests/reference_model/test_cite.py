@@ -66,6 +66,15 @@ def test_cite_raises_when_region_is_uncitable(tmp_path: Path):
         cite(subject_document, selector)
 
 
+def test_cite_union_raises_for_an_empty_parts_list():
+    # An empty Union would be a well-formed Reference backed by nothing --
+    # a staleness sweep asking "did any part fail?" over zero parts always
+    # says no, forever. That's the one case the "by construction" guarantee
+    # (see the next test) doesn't close on its own.
+    with pytest.raises(CitationError):
+        cite_union([])
+
+
 def test_a_union_can_only_ever_contain_already_resolved_leaves():
     # There is no way to construct a Leaf that failed to resolve -- cite()
     # already raised before one could exist -- so a Union is guaranteed by
@@ -100,6 +109,35 @@ def test_check_reference_on_a_union_reports_each_part_independently(tmp_path: Pa
     assert results_by_family["MiKaDiv_FM_Meldeart23"].outcome.status == Status.NOT_FOUND
     assert results_by_family["khb_mikadiv_fm_de"].outcome.status == Status.RESOLVED
     assert results_by_family["khb_mikadiv_fm_de"].hash_changed is False
+
+
+def test_check_leaf_detects_a_changed_hash_for_a_changed_pdf_region(tmp_path: Path):
+    # The XSD path already has hash_changed coverage above; SvgSelector's
+    # canonicalize_and_hash is entirely different code (whitespace-collapsed
+    # text, not C14N bytes) and had none -- this is the one place the
+    # branch didn't actually demonstrate the property the model exists to
+    # provide, for the PDF selector kind specifically.
+    from reportlab.pdfgen import canvas as reportlab_canvas
+
+    def make_pdf(path: Path, text: str) -> None:
+        c = reportlab_canvas.Canvas(str(path), pagesize=(300, 100))
+        c.drawString(20, 50, text)
+        c.showPage()
+        c.save()
+
+    original_path = tmp_path / "sample.pdf"
+    make_pdf(original_path, "Hello World")
+
+    subject_document = SubjectDocument(family="synthetic-pdf", version="1", retrieval_uri=str(original_path))
+    selector = SvgSelector.create(1, "0,0 300,0 300,100 0,100")
+    leaf = cite(subject_document, selector)
+
+    changed_path = tmp_path / "sample-changed.pdf"
+    make_pdf(changed_path, "Goodbye World")
+
+    result = check_leaf(leaf, retrieval_uri=str(changed_path))
+    assert result.outcome.status == Status.RESOLVED
+    assert result.hash_changed is True
 
 
 def test_check_leaf_detects_a_changed_hash_without_a_status_change(tmp_path: Path):

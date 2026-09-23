@@ -84,3 +84,32 @@ def test_xpath_resolving_to_an_attribute_is_uncitable():
     selector = XPathSelector.create(AORDNR_XPATH + "/@name")
     outcome = _resolver().resolve(selector, REAL_XSD)
     assert outcome.status == Status.UNCITABLE
+
+
+def test_missing_source_file_is_not_found():
+    selector = XPathSelector.create(AORDNR_XPATH)
+    outcome = _resolver().resolve(selector, "/nonexistent/path/does-not-exist.xsd")
+    assert outcome.status == Status.NOT_FOUND
+
+
+def test_malformed_xml_is_not_found(tmp_path: Path):
+    malformed_path = tmp_path / "malformed.xsd"
+    malformed_path.write_text("<xs:schema><unclosed>", encoding="utf-8")
+
+    selector = XPathSelector.create(AORDNR_XPATH)
+    outcome = _resolver().resolve(selector, str(malformed_path))
+    assert outcome.status == Status.NOT_FOUND
+
+
+def test_xpath_returning_a_string_is_uncitable_not_ambiguous():
+    # tree.xpath() returns a str (not a node list) for string(...) --
+    # len() on that string previously miscounted characters as matches.
+    selector = XPathSelector.create("string(/xs:schema/@targetNamespace)")
+    outcome = _resolver().resolve(selector, REAL_XSD)
+    assert outcome.status == Status.UNCITABLE
+
+
+def test_xpath_count_function_is_uncitable():
+    selector = XPathSelector.create("count(//xs:element)")
+    outcome = _resolver().resolve(selector, REAL_XSD)
+    assert outcome.status == Status.UNCITABLE
