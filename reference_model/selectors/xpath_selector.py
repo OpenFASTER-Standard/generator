@@ -16,6 +16,15 @@ _NSMAP = {"xs": "http://www.w3.org/2001/XMLSchema"}
 
 @dataclass(frozen=True)
 class XPathSelector:
+    """`retrieval_uri` (passed to resolve(), not stored here) works as
+    either a local filesystem path or a `file://`/`http://` URL -- lxml's
+    own `etree.parse()` accepts both. This is inconsistent with
+    SvgSelector, whose pdfplumber-backed resolve() only accepts a local
+    path; each selector documents its own retrieval_uri contract rather
+    than a shared one, since a general fetch abstraction isn't something
+    either selector's real, current use needs yet.
+    """
+
     type: str
     value: str
 
@@ -63,6 +72,21 @@ def resolve(selector: XPathSelector, retrieval_uri: str) -> ResolutionOutcome:
 
 
 def canonicalize_and_hash(raw_content: "etree._Element") -> str:
+    # The design spec says "Canonical XML 1.1"; lxml only offers 1.0
+    # (method="c14n") or 2.0 (method="c14n2"), never 1.1 -- the spec's
+    # wording isn't literally implementable, and 1.0 is what's used here.
+    #
+    # This is inclusive C14N (the lxml default), not exclusive: every
+    # in-scope ancestor namespace declaration gets folded into the
+    # canonicalized subtree, so an unrelated xmlns added anywhere on an
+    # ancestor (even the document root) changes every descendant element's
+    # hash. That's the safer failure mode for this project's purposes
+    # (never silently miss a change) so it's kept deliberately, not
+    # switched to exclusive C14N -- exclusive would drop the very
+    # namespace declarations these real MiKaDiv-FM schemas actually need:
+    # QName-valued attributes like `type="std:UUIDType"` reference a
+    # prefix from *inside* an attribute value, which exclusive C14N's
+    # visibly-used-in-the-subtree analysis cannot see and would prune.
     canonical_bytes = etree.tostring(raw_content, method="c14n")
     return hashlib.sha256(canonical_bytes).hexdigest()
 

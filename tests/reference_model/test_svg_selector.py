@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from reference_model.model import Status
 from reference_model.registry import get_resolver
 from reference_model.selectors.svg_selector import SvgSelector
@@ -101,8 +103,28 @@ def test_image_region_on_a_page_with_text_elsewhere_is_uncitable():
 
 def test_malformed_points_raises_a_clear_error():
     selector = SvgSelector(type="SvgSelector", page=PAGE_12, value="<svg:polygon xmlns:svg='http://www.w3.org/2000/svg'/>")
-    try:
+    with pytest.raises(ValueError, match="points="):
         _resolver().resolve(selector, REAL_PDF)
-        assert False, "expected a ValueError for a selector with no points= attribute"
-    except ValueError as exc:
-        assert "points=" in str(exc)
+
+
+def test_malformed_coordinate_raises_a_clear_error_naming_the_bad_pair():
+    selector = SvgSelector(
+        type="SvgSelector", page=PAGE_12,
+        value="<svg:polygon points='abc,def 1,1 2,2' xmlns:svg='http://www.w3.org/2000/svg'/>",
+    )
+    with pytest.raises(ValueError, match="abc,def"):
+        _resolver().resolve(selector, REAL_PDF)
+
+
+def test_zero_area_polygon_raises_a_clear_error():
+    selector = SvgSelector.create(PAGE_12, "0,0 0,0 0,0")
+    with pytest.raises(ValueError, match="zero area"):
+        _resolver().resolve(selector, REAL_PDF)
+
+
+def test_malformed_selector_is_caught_before_the_page_bounds_check():
+    # Document state (an out-of-range page) must never mask a broken
+    # selector -- the selector itself is validated first.
+    selector = SvgSelector(type="SvgSelector", page=999, value="<svg:polygon xmlns:svg='http://www.w3.org/2000/svg'/>")
+    with pytest.raises(ValueError, match="points="):
+        _resolver().resolve(selector, REAL_PDF)
