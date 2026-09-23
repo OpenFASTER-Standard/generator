@@ -92,10 +92,86 @@ def test_out_of_range_index_is_not_found(tmp_path):
     assert outcome.status == Status.NOT_FOUND
 
 
-def test_indexing_into_a_scalar_is_not_found(tmp_path):
+def test_indexing_into_a_string_scalar_is_not_found(tmp_path):
     fixture_path = _write_fixture(tmp_path)
     outcome = _resolver().resolve(JsonSelector.create("/verdict/oops"), fixture_path)
     assert outcome.status == Status.NOT_FOUND
+
+
+def test_indexing_into_a_number_scalar_is_not_found(tmp_path):
+    fixture_path = _write_fixture(tmp_path)
+    outcome = _resolver().resolve(JsonSelector.create("/flags/is_zero/oops"), fixture_path)
+    assert outcome.status == Status.NOT_FOUND
+
+
+def test_indexing_into_a_null_scalar_is_not_found(tmp_path):
+    fixture_path = _write_fixture(tmp_path)
+    outcome = _resolver().resolve(JsonSelector.create("/flags/is_null/oops"), fixture_path)
+    assert outcome.status == Status.NOT_FOUND
+
+
+def test_negative_array_index_is_not_found(tmp_path):
+    # RFC 6901 sec. 4 only permits "0" or a non-zero digit string; Python's
+    # own negative-index semantics would otherwise silently turn an
+    # "absolute" citation into a "relative" one that re-points as the
+    # array grows/shrinks.
+    fixture_path = _write_fixture(tmp_path)
+    outcome = _resolver().resolve(JsonSelector.create("/items/-1"), fixture_path)
+    assert outcome.status == Status.NOT_FOUND
+
+
+def test_array_index_with_leading_zero_is_not_found(tmp_path):
+    fixture_path = _write_fixture(tmp_path)
+    outcome = _resolver().resolve(JsonSelector.create("/items/01"), fixture_path)
+    assert outcome.status == Status.NOT_FOUND
+
+
+def test_array_index_with_plus_sign_is_not_found(tmp_path):
+    fixture_path = _write_fixture(tmp_path)
+    outcome = _resolver().resolve(JsonSelector.create("/items/+1"), fixture_path)
+    assert outcome.status == Status.NOT_FOUND
+
+
+def test_array_index_with_whitespace_is_not_found(tmp_path):
+    fixture_path = _write_fixture(tmp_path)
+    outcome = _resolver().resolve(JsonSelector.create("/items/ 1 "), fixture_path)
+    assert outcome.status == Status.NOT_FOUND
+
+
+def test_array_index_with_non_ascii_digit_is_not_found(tmp_path):
+    # Python's str.isdigit()/int() accept Unicode digits (e.g. full-width
+    # U+FF11) that RFC 6901's ABNF (plain ASCII "0"-"9") does not.
+    fixture_path = _write_fixture(tmp_path)
+    outcome = _resolver().resolve(JsonSelector.create("/items/１"), fixture_path)
+    assert outcome.status == Status.NOT_FOUND
+
+
+def test_non_utf8_encoded_file_is_not_found(tmp_path):
+    # A file saved in a non-UTF-8 encoding raises UnicodeDecodeError out of
+    # open()/json.load() -- must be reported as data (NOT_FOUND), never as
+    # an uncaught exception, same contract as a missing file or malformed
+    # JSON.
+    path = tmp_path / "latin1.json"
+    path.write_bytes('{"caption": "Dateigröße"}'.encode("latin-1"))
+    outcome = _resolver().resolve(JsonSelector.create("/caption"), str(path))
+    assert outcome.status == Status.NOT_FOUND
+
+
+def test_deeply_nested_document_is_not_found(tmp_path):
+    # A pathologically deep document can blow the interpreter's recursion
+    # limit inside json.load() itself -- must also be reported as data,
+    # not an uncaught RecursionError.
+    path = tmp_path / "deep.json"
+    depth = 100_000
+    path.write_text(("[" * depth) + ("]" * depth), encoding="utf-8")
+    outcome = _resolver().resolve(JsonSelector.create("/0"), str(path))
+    assert outcome.status == Status.NOT_FOUND
+
+
+def test_hash_handles_lone_utf16_surrogate():
+    resolver = _resolver()
+    digest = resolver.canonicalize_and_hash("\ud800")
+    assert len(digest) == 64
 
 
 def test_missing_file_is_not_found():

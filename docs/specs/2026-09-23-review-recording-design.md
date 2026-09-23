@@ -65,7 +65,7 @@ def resolve(selector: JsonSelector, retrieval_uri: str) -> ResolutionOutcome:
     try:
         with open(retrieval_uri, encoding="utf-8") as f:
             document = json.load(f)
-    except (OSError, json.JSONDecodeError):
+    except (OSError, ValueError, RecursionError):
         return ResolutionOutcome(status=Status.NOT_FOUND)
 
     try:
@@ -85,7 +85,7 @@ def canonicalize_and_hash(raw_content: object) -> str:
     # practice -- noted here for the same reason XPathSelector's own
     # C14N-1.0-not-1.1 gap is noted: an honest, deliberate simplification.
     canonical = json.dumps(raw_content, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    return hashlib.sha256(canonical.encode("utf-8", errors="surrogatepass")).hexdigest()
 
 
 def _resolve_pointer(document: object, pointer: str) -> object:
@@ -100,14 +100,36 @@ def _resolve_pointer(document: object, pointer: str) -> object:
         if isinstance(current, dict):
             current = current[token]  # raises KeyError if missing
         elif isinstance(current, list):
-            current = current[int(token)]  # raises ValueError (non-numeric) or IndexError
+            current = current[_parse_array_index(token)]  # raises ValueError or IndexError
         else:
             raise KeyError(token)  # can't descend further into a scalar
     return current
 
 
+def _parse_array_index(token: str) -> int:
+    # RFC 6901 sec. 4: an array index is ABNF "0" / ( %x31-39 *(%x30-39) )
+    # -- plain ASCII "0", or a non-zero digit followed by digits. Python's
+    # own int() is far more permissive (signs, leading zeros, whitespace,
+    # non-ASCII digits) -- worst case, a bare "-1" would silently turn an
+    # "absolute" citation into a "relative" one that re-points as the
+    # array grows/shrinks, defeating this whole model's point.
+    if token == "0" or (token.isascii() and token.isdigit() and token[0] != "0"):
+        return int(token)
+    raise ValueError(f"invalid RFC 6901 array index: {token!r}")
+
+
 register("JsonSelector", Resolver(resolve=resolve, canonicalize_and_hash=canonicalize_and_hash))
 ```
+
+Both `resolve()`'s file-read step and `canonicalize_and_hash()` must be
+genuinely total over arbitrary bytes/JSON values, the same "outcomes are
+data, never exceptions" contract every other resolver in this project
+already honors: a non-UTF-8-encoded file (`UnicodeDecodeError`, a
+`ValueError` subclass) or a pathologically deep document
+(`RecursionError`, raised by `json.load()` itself) must map to
+`NOT_FOUND`, not propagate; a JSON string containing a lone UTF-16
+surrogate must still hash (`errors="surrogatepass"`), not raise
+`UnicodeEncodeError`.
 
 ## Review-result document shape and location
 
@@ -214,12 +236,30 @@ here. Also still open: the interaction layer that actually calls
 records themselves ever need to be searched or listed (today, citing one
 requires already knowing its file path).
 
+One consequence worth naming explicitly: a review record's `review-`
+family prefix means it will never appear in a real MiKaDiv-FM
+`_manifest.json`, so `staleness_sweep.sweep()` run over a combined set of
+schema and review references today always reports every review reference
+as a `family_resolution_failure`/`excluded_key` — never `RESOLVED`. That's
+consistent with this document's own Non-Goals (`sweep()` doesn't consult
+review records), but it does mean review references can't simply be
+thrown into the same `references` dict passed to `sweep()` today; whatever
+future mechanism does consult them (see above) will need its own path to
+`check_reference()`/`check_leaf()`, not the batch `sweep()` entry point.
+
 ## Definition of Done
 
 - `JsonSelector` is implemented with the semantics above and registered
   in the selector-type registry.
 - `record_review()` and `Verdict` are implemented with the semantics above.
 - All tests listed above pass.
-- Calling `record_review()` for a real flagged entry produces a real JSON
-  file in `ontologies/mikadiv-fm/reviews/`, and the returned `Leaf`
+- Calling `record_review()` produces a real JSON file on disk (dogfooded
+  against a real filesystem, not a mock), and the returned `Leaf`
   successfully re-resolves via `check_leaf()` with `hash_changed=False`.
+  This project has no real flagged entry with a real human review
+  decision yet — that requires the interaction layer this sub-project's
+  Non-Goals explicitly excludes — so there is no real content to write
+  into `ontologies/mikadiv-fm/reviews/` yet; writing one now would mean
+  fabricating a review that never happened. The first real file in that
+  directory is created the first time a real reviewer calls this code
+  through that future interaction layer, not as part of this sub-project.

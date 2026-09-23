@@ -21,6 +21,9 @@ def test_record_review_returns_a_resolvable_leaf(tmp_path):
     assert leaf.subject_document.family.startswith("review-")
     assert leaf.subject_document.version == "1"
 
+    written = json.loads(open(leaf.subject_document.retrieval_uri, encoding="utf-8").read())
+    assert written["verdict"] == "approved"
+
 
 def test_record_review_writes_the_full_document_shape(tmp_path):
     leaf = record_review(
