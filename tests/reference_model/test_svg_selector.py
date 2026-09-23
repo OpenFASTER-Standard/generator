@@ -6,7 +6,7 @@ from reference_model.model import Status
 from reference_model.registry import get_resolver
 from reference_model.selectors.svg_selector import SvgSelector
 
-REAL_PDF = "/work/ontologies/mikadiv-fm/sources/khb/khb_mikadiv_fm_de_v9.pdf"
+REAL_PDF = "/work/ontologies/mikadiv-fm/sources/1.02/khb/khb_mikadiv_fm_de_v9.pdf"
 PAGE_12 = 12  # confirmed: real page with a text layer, out of 45 total pages
 
 # Real word bounding boxes on page 12, verified live against the actual file:

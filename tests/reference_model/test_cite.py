@@ -7,12 +7,12 @@ from reference_model.model import SubjectDocument, Status, compute_union_referen
 from reference_model.selectors.svg_selector import SvgSelector
 from reference_model.selectors.xpath_selector import XPathSelector
 
-REAL_XSD = "/work/ontologies/mikadiv-fm/sources/xsd/MiKaDiv_FM_Meldeart23_1.02.xsd"
+REAL_XSD = "/work/ontologies/mikadiv-fm/sources/1.02/xsd/MiKaDiv_FM_Meldeart23_1.02.xsd"
 AORDNR_XPATH = (
     "/xs:schema/xs:complexType[@name='AmtlicheOrdnungsnummerMa23ListeType']"
     "/xs:sequence/xs:element[@name='AOrdNr']"
 )
-REAL_PDF = "/work/ontologies/mikadiv-fm/sources/khb/khb_mikadiv_fm_de_v9.pdf"
+REAL_PDF = "/work/ontologies/mikadiv-fm/sources/1.02/khb/khb_mikadiv_fm_de_v9.pdf"
 PAGE_12 = 12
 HEADING_POINTS = "60,88 255,88 255,115 60,115"
 
