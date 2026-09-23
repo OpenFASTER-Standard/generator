@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 
 from reference_model.model import (
     ContentHash,
@@ -66,6 +66,20 @@ def test_union_reference_id_and_hash_are_deterministic_given_order():
     union_reversed = Union(parts=(leaf_2, leaf_1))
     assert union_reversed.reference_id != union_1.reference_id
     assert union_reversed.content_hash.digest != union_1.content_hash.digest
+
+
+def test_union_reference_id_and_content_hash_survive_asdict():
+    # Leaf stores reference_id/content_hash as real fields, so
+    # dataclasses.asdict(leaf) includes them -- Union must match, not
+    # silently drop them via a @property a future persistence layer
+    # (serializing via asdict, the obvious approach) would never see.
+    leaf_1 = _make_leaf("family-a", "1.0", "aaa")
+    leaf_2 = _make_leaf("family-b", "1.0", "bbb")
+    union = Union(parts=(leaf_1, leaf_2))
+
+    as_dict = asdict(union)
+    assert as_dict["reference_id"] == union.reference_id
+    assert as_dict["content_hash"]["digest"] == union.content_hash.digest
 
 
 def test_compute_union_reference_id_and_hash_are_pure_functions():

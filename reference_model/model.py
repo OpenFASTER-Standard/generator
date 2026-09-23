@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import asdict, dataclass, is_dataclass
+from dataclasses import asdict, dataclass, field, is_dataclass
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Union as TypingUnion
@@ -53,8 +53,14 @@ def selector_canonical_form(selector: Any) -> str:
 
 
 def compute_leaf_reference_id(family: str, selector: Any) -> str:
-    # Deliberately excludes subject_document.version -- see Global
-    # Constraints in the implementation plan.
+    # Deliberately excludes subject_document.version (see the design
+    # spec's "Core concept: Reference" section) -- citing the same logical
+    # span across a version bump keeps the same reference_id even though
+    # content_hash may differ. Consequence for any future consumer: two
+    # Leafs with the same reference_id are NOT guaranteed to have the same
+    # content_hash, so reference_id alone is never a safe key for anything
+    # that cares about a specific cited value (e.g. a future storage/
+    # persistence layer) -- only for "is this citing the same span."
     key = f"{family}|{selector_canonical_form(selector)}"
     return hashlib.sha256(key.encode("utf-8")).hexdigest()
 
@@ -85,15 +91,23 @@ class Leaf:
 
 @dataclass(frozen=True)
 class Union:
+    # reference_id/content_hash are derived from `parts`, but stored as
+    # real fields (computed once in __post_init__) rather than @property --
+    # a @property is invisible to dataclasses.asdict(), which would
+    # otherwise silently drop them for any future consumer (e.g. a
+    # persistence layer) that serializes via asdict(), the obvious
+    # approach. Leaf already stores these as fields; Union now matches.
     parts: tuple["Reference", ...]
+    reference_id: str = field(init=False)
+    content_hash: ContentHash = field(init=False)
 
-    @property
-    def reference_id(self) -> str:
-        return compute_union_reference_id([p.reference_id for p in self.parts])
-
-    @property
-    def content_hash(self) -> ContentHash:
-        return compute_union_content_hash([p.content_hash.digest for p in self.parts])
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self, "reference_id", compute_union_reference_id([p.reference_id for p in self.parts])
+        )
+        object.__setattr__(
+            self, "content_hash", compute_union_content_hash([p.content_hash.digest for p in self.parts])
+        )
 
 
 Reference = TypingUnion[Leaf, Union]

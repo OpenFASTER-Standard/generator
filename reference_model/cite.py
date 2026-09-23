@@ -2,8 +2,8 @@
 unless the selector resolves cleanly. check_leaf()/check_reference()
 re-check an existing Reference later, returning outcomes as data without
 raising: "this doesn't resolve anymore" is an expected, meaningful result
-at check time, not a bug. See the Global Constraints in this plan and the
-Resolution & Error Semantics section of the design spec.
+at check time, not a bug. See the "Resolution & Error Semantics" section of
+docs/specs/2026-09-23-source-reference-model-design.md.
 """
 from __future__ import annotations
 
