@@ -124,6 +124,7 @@ class FamilyResolutionFailure:
 class SweepReport:
     results_by_key: dict[str, list[LeafCheckResult]]
     family_resolution_failures: tuple[FamilyResolutionFailure, ...]
+    excluded_keys: tuple[str, ...]  # caller keys omitted from results_by_key, and why
 
 
 def _collect_families(reference: Reference) -> set[str]:
@@ -178,7 +179,18 @@ original path here could report a misleading "unchanged" for a family the
 corpus itself no longer tracks. So `sweep()` excludes any `Reference`
 touching an unresolved family from `results_by_key` entirely — it only
 ever shows up via `family_resolution_failures`, never through a per-leaf
-outcome that looks like a normal check.
+outcome that looks like a normal check. That exclusion is silent unless
+named somewhere, though, and "which facts went unchecked" is exactly the
+question a reader of a large report would ask — so every excluded key is
+also listed in `excluded_keys`, letting a caller enumerate what a sweep
+*couldn't* tell them without re-walking every `Reference`'s families
+against `family_resolution_failures` by hand.
+
+Iteration order matters for reproducibility: `family_resolution_failures`
+is built from a sorted family list, not raw `set` iteration order (which
+varies run to run under Python's string-hash randomization) — a report
+that can't be diffed or snapshot-compared defeats its own purpose as an
+artifact for a later review-surfacing sub-project to consume.
 
 ## Testing strategy
 
