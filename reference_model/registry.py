@@ -23,8 +23,17 @@ class Resolver:
 _REGISTRY: dict[str, Resolver] = {}
 
 
-def register(selector_type: str, resolver: Resolver) -> None:
+def register(selector_type: str, resolver: Resolver, *, replace: bool = False) -> None:
+    if not replace and selector_type in _REGISTRY:
+        raise ValueError(
+            f"selector type {selector_type!r} is already registered; "
+            "pass replace=True to intentionally override it"
+        )
     _REGISTRY[selector_type] = resolver
+
+
+def unregister(selector_type: str) -> None:
+    _REGISTRY.pop(selector_type, None)
 
 
 def get_resolver(selector_type: str) -> Resolver:
