@@ -73,8 +73,22 @@ class ReviewSummary:
     flagged: dict[str, tuple[FlaggedLeaf, ...]]
     unresolved_families: tuple[FamilyResolutionFailure, ...]
     excluded_keys: tuple[str, ...]
+```
 
+`ReviewSummary` is `frozen=True`, but `flagged` is a plain `dict` -- a
+conscious, partial immutability: the dataclass itself can't be
+reassigned field-by-field, but `flagged` can still be mutated in place
+(`summary.flagged["x"] = (...)`) and `hash(summary)` still raises
+`TypeError`. A caller that needs either guarantee in full (e.g. to use a
+`ReviewSummary` as a dict/set key, or to hand it to code that assumes
+true immutability) needs its own copy, not an assumption this type
+enforces one. Not changed to `MappingProxyType` or a tuple-of-pairs here,
+since nothing yet needs it and either would visibly complicate every
+call site that builds or reads `flagged` as a plain dict for no current
+benefit -- but a future consumer (the rendering layer this enables next)
+should not assume it can rely on `frozen=True` meaning fully immutable.
 
+```python
 def summarize_for_review(report: SweepReport) -> ReviewSummary:
     flagged: dict[str, tuple[FlaggedLeaf, ...]] = {}
     for key, results in report.results_by_key.items():
