@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from reference_model.cite import CitationError, check_leaf, check_reference, cite, cite_union
-from reference_model.model import SubjectDocument, Status
+from reference_model.model import SubjectDocument, Status, compute_union_reference_id
 from reference_model.selectors.svg_selector import SvgSelector
 from reference_model.selectors.xpath_selector import XPathSelector
 
@@ -138,6 +138,43 @@ def test_check_leaf_detects_a_changed_hash_for_a_changed_pdf_region(tmp_path: Pa
     result = check_leaf(leaf, retrieval_uri=str(changed_path))
     assert result.outcome.status == Status.RESOLVED
     assert result.hash_changed is True
+
+
+def test_union_spanning_a_page_break_cites_both_real_pages():
+    # The design spec's own headline motivating example: one citation
+    # spanning a page break, as a Union of two same-document,
+    # different-page SvgSelector leaves. Real text on page 13: "Bei den
+    # Antwortnachrichten wird..."
+    page_12_leaf = cite(_pdf_subject_document(), SvgSelector.create(PAGE_12, HEADING_POINTS))
+    page_13_leaf = cite(_pdf_subject_document(), SvgSelector.create(13, "65,70 270,70 270,86 65,86"))
+    union = cite_union([page_12_leaf, page_13_leaf])
+
+    assert union.parts == (page_12_leaf, page_13_leaf)
+
+    results = check_reference(union)
+    assert [r.outcome.status for r in results] == [Status.RESOLVED, Status.RESOLVED]
+    assert [r.hash_changed for r in results] == [False, False]
+
+
+def test_nested_union_flattens_correctly_through_check_reference():
+    # The spec states Union nesting is unrestricted; this pins that a
+    # Union-of-a-Union both computes reference_id recursively and flattens
+    # to every leaf's own result through check_reference(), not just the
+    # top level's immediate parts.
+    xsd_leaf = cite(_xsd_subject_document(), XPathSelector.create(AORDNR_XPATH))
+    page_12_leaf = cite(_pdf_subject_document(), SvgSelector.create(PAGE_12, HEADING_POINTS))
+    page_13_leaf = cite(_pdf_subject_document(), SvgSelector.create(13, "65,70 270,70 270,86 65,86"))
+
+    inner_union = cite_union([page_12_leaf, page_13_leaf])
+    outer_union = cite_union([xsd_leaf, inner_union])
+
+    assert outer_union.reference_id == compute_union_reference_id(
+        [xsd_leaf.reference_id, inner_union.reference_id]
+    )
+
+    results = check_reference(outer_union)
+    assert len(results) == 3
+    assert all(r.outcome.status == Status.RESOLVED for r in results)
 
 
 def test_check_leaf_detects_a_changed_hash_without_a_status_change(tmp_path: Path):
