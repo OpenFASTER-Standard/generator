@@ -106,8 +106,10 @@ path when `RESOLVED`.
 3. Look up `family` in the manifest. Missing → `Status.NOT_FOUND` (the
    family isn't tracked in this snapshot, or was intentionally dropped).
 4. Resolve the manifest's relative path against the snapshot directory.
-   **Path doesn't exist on disk → raise `CorpusIntegrityError`** (same
-   reasoning as step 2 — the manifest lied).
+   **Path doesn't exist on disk, or resolves outside that snapshot
+   directory (a `../`-escaping manifest entry, whether malicious or a
+   hand-editing mistake) → raise `CorpusIntegrityError`** (same reasoning
+   as step 2 — the manifest lied, or lied dangerously).
 5. Otherwise → `Status.RESOLVED` with the resolved absolute path.
 
 ## `sweep()` and `SweepReport`
