@@ -77,6 +77,63 @@ def test_manifest_entry_escaping_the_snapshot_directory_is_rejected(tmp_path):
         resolve_current_location(str(module_root), "EscapingFamily")
 
 
+def test_current_pointer_naming_an_absolute_path_outside_module_root_is_rejected(tmp_path):
+    module_root = tmp_path / "module"
+    module_root.mkdir()
+    outside_dir = tmp_path / "outside-snapshot"
+    outside_dir.mkdir()
+    (outside_dir / "secret.xsd").write_text("<secret/>")
+    (outside_dir / "_manifest.json").write_text(json.dumps({"Family": "secret.xsd"}))
+    (module_root / "_current").write_text(str(outside_dir))
+
+    with pytest.raises(CorpusIntegrityError, match="escapes"):
+        resolve_current_location(str(module_root), "Family")
+
+
+def test_current_pointer_with_dotdot_escaping_module_root_is_rejected(tmp_path):
+    module_root = tmp_path / "module"
+    module_root.mkdir()
+    sibling_snapshot = tmp_path / "sibling-snapshot"
+    sibling_snapshot.mkdir()
+    (sibling_snapshot / "secret.xsd").write_text("<secret/>")
+    (sibling_snapshot / "_manifest.json").write_text(json.dumps({"Family": "secret.xsd"}))
+    (module_root / "_current").write_text("../sibling-snapshot")
+
+    with pytest.raises(CorpusIntegrityError, match="escapes"):
+        resolve_current_location(str(module_root), "Family")
+
+
+def test_malformed_manifest_json_raises_corpus_integrity_error(tmp_path):
+    snapshot_dir = tmp_path / "1.0"
+    snapshot_dir.mkdir()
+    (tmp_path / "_current").write_text("1.0")
+    (snapshot_dir / "_manifest.json").write_text("{not valid json")
+
+    with pytest.raises(CorpusIntegrityError, match="_manifest.json"):
+        resolve_current_location(str(tmp_path), "AnyFamily")
+
+
+def test_manifest_that_is_not_a_json_object_raises(tmp_path):
+    snapshot_dir = tmp_path / "1.0"
+    snapshot_dir.mkdir()
+    (tmp_path / "_current").write_text("1.0")
+    (snapshot_dir / "_manifest.json").write_text(json.dumps(["not", "an", "object"]))
+
+    with pytest.raises(CorpusIntegrityError, match="JSON object"):
+        resolve_current_location(str(tmp_path), "AnyFamily")
+
+
+def test_manifest_naming_a_directory_instead_of_a_file_raises(tmp_path):
+    snapshot_dir = tmp_path / "1.0"
+    snapshot_dir.mkdir()
+    (snapshot_dir / "not-a-file").mkdir()
+    (tmp_path / "_current").write_text("1.0")
+    (snapshot_dir / "_manifest.json").write_text(json.dumps({"DirFamily": "not-a-file"}))
+
+    with pytest.raises(CorpusIntegrityError, match="not-a-file"):
+        resolve_current_location(str(tmp_path), "DirFamily")
+
+
 def test_a_second_synthetic_snapshot_resolves_independently(tmp_path):
     snap1 = tmp_path / "1.0"
     snap1.mkdir()

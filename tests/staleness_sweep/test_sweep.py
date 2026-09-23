@@ -48,6 +48,94 @@ def test_sweep_with_no_references_returns_an_empty_report():
     report = sweep({}, REAL_MODULE_ROOT)
     assert report.results_by_key == {}
     assert report.family_resolution_failures == ()
+    assert report.excluded_keys == ()
+
+
+def test_family_resolution_failures_are_sorted_deterministically():
+    leaves = {
+        f"fact-{name}": cite(
+            SubjectDocument(family=name, version="1.02", retrieval_uri=REAL_MELDEART23_XSD),
+            XPathSelector.create(AORDNR_XPATH),
+        )
+        for name in ("GhostZ", "GhostA", "GhostM")
+    }
+    report = sweep(leaves, REAL_MODULE_ROOT)
+
+    assert report.family_resolution_failures == (
+        FamilyResolutionFailure(family="GhostA", status=Status.NOT_FOUND),
+        FamilyResolutionFailure(family="GhostM", status=Status.NOT_FOUND),
+        FamilyResolutionFailure(family="GhostZ", status=Status.NOT_FOUND),
+    )
+
+
+def test_excluded_keys_lists_every_key_touching_an_unresolved_family():
+    good_leaf = cite(_real_meldeart23_subject_document(), XPathSelector.create(AORDNR_XPATH))
+    bad_subject_document = SubjectDocument(
+        family="NoSuchFamilyEver", version="1.02", retrieval_uri=REAL_MELDEART23_XSD
+    )
+    bad_leaf = cite(bad_subject_document, XPathSelector.create(ABGEF_XPATH))
+
+    report = sweep({"good-fact": good_leaf, "bad-fact": bad_leaf}, REAL_MODULE_ROOT)
+
+    assert report.excluded_keys == ("bad-fact",)
+    assert "good-fact" in report.results_by_key
+    assert "bad-fact" not in report.results_by_key
+
+
+def test_two_references_same_family_different_stale_stored_uris_both_use_resolved_path(tmp_path):
+    original = Path(REAL_MELDEART23_XSD).read_text(encoding="utf-8")
+
+    stale_copy_a = tmp_path / "stale-a.xsd"
+    stale_copy_a.write_text(
+        original.replace(
+            '<xs:element name="AbgefKapitalertragsteuer" type="std:Dezimal14dot2Type">',
+            '<xs:element name="AbgefKapitalertragsteuer" type="std:Dezimal14dot2Type" minOccurs="0">',
+        ),
+        encoding="utf-8",
+    )
+    stale_copy_b = tmp_path / "stale-b.xsd"
+    stale_copy_b.write_text(
+        original.replace(
+            '<xs:element name="AbgefKapitalertragsteuer" type="std:Dezimal14dot2Type">',
+            '<xs:element name="AbgefKapitalertragsteuer" type="std:Dezimal14dot2Type" minOccurs="1">',
+        ),
+        encoding="utf-8",
+    )
+
+    leaf_a = cite(
+        SubjectDocument(family="MiKaDiv_FM_Meldeart23", version="1.02", retrieval_uri=str(stale_copy_a)),
+        XPathSelector.create(ABGEF_XPATH),
+    )
+    leaf_b = cite(
+        SubjectDocument(family="MiKaDiv_FM_Meldeart23", version="1.02", retrieval_uri=str(stale_copy_b)),
+        XPathSelector.create(ABGEF_XPATH),
+    )
+
+    report = sweep({"fact-a": leaf_a, "fact-b": leaf_b}, REAL_MODULE_ROOT)
+
+    # Both leaves' own stored URIs differ from each other AND from the
+    # real current file -- if either fell back to its own stored path,
+    # that path's own mutation would make it look unchanged. Both must
+    # report a real change, proving both used the one resolved current file.
+    assert report.results_by_key["fact-a"][0].hash_changed is True
+    assert report.results_by_key["fact-b"][0].hash_changed is True
+
+
+def test_family_nested_inside_a_union_is_still_collected():
+    good_leaf = cite(_real_meldeart23_subject_document(), XPathSelector.create(AORDNR_XPATH))
+    bad_subject_document = SubjectDocument(
+        family="NoSuchFamilyEver", version="1.02", retrieval_uri=REAL_MELDEART23_XSD
+    )
+    bad_leaf = cite(bad_subject_document, XPathSelector.create(ABGEF_XPATH))
+    inner_union = cite_union([bad_leaf])
+    outer_union = cite_union([good_leaf, inner_union])
+
+    report = sweep({"fact": outer_union}, REAL_MODULE_ROOT)
+
+    assert "fact" not in report.results_by_key
+    assert report.family_resolution_failures == (
+        FamilyResolutionFailure(family="NoSuchFamilyEver", status=Status.NOT_FOUND),
+    )
 
 
 def test_sweep_uses_the_resolved_current_path_not_a_leaf_own_stale_stored_uri(tmp_path):
