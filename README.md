@@ -1,24 +1,21 @@
 # OpenFASTER Generator
 
-Part of [OpenFASTER](https://openfaster.org). The generation/extraction/
-equivalence-checking/ingestion pipeline that turns
-[`ontologies`](https://github.com/OpenFASTER-Standard/ontologies) content
-into real artifacts (XSD, XLSX, PDF, the Bikeshed-sourced spec site, XML
-instances) and real submitted documents back into graph facts. Depends on
-`ontologies` as input; never the reverse.
+Part of [OpenFASTER](https://openfaster.org). Built from scratch against
+real [`ontologies`](https://github.com/OpenFASTER-Standard/ontologies)
+source material (Germany's MiKaDiv-FM regulatory schema: XSDs + BZSt
+guidance PDFs) and externally researched prior art -- not built on or
+migrating from any prior code in this repo's own history. See
+`docs/specs/` for the full design record, one sub-project at a time.
 
 ## Layout
 
-- `extraction/` -- real XSD -> `XSDO:`-shaped facts
-- `generation/` -- graph -> XSD / XLSX / PDF / Bikeshed `.bs` / XML
-- `equivalence/` -- proves a generated XSD is behaviorally equivalent to
-  an official one, via bounded-exhaustive/pairwise structural testing
-  and exact leaf-facet checking (not document sampling, not a formal
-  completeness proof either -- see `docs/specs/2026-09-14-equivalence-checker-design.md`
-  for the exact confidence characterization). Public interface:
-  `check_equivalence`, `Report`, `Divergence`, `UnsupportedConstructError`.
-- `ingestion/` -- real filled documents (both directions) -> graph facts
-
-**Status: `equivalence/` is implemented; `extraction/`, `generation/`, and `ingestion/` are not yet.**
+- `reference_model/` -- a format-agnostic `Reference` (citation) model:
+  records exactly what real source span (an XSD element, a PDF page
+  region) backs a fact, precise enough to re-locate later and soundly
+  flag when it may have changed. See
+  `docs/specs/2026-09-23-source-reference-model-design.md`.
+- `staleness_sweep/` -- batches `reference_model`'s own `check_reference()`
+  across many `Reference`s at once against the real, snapshot-versioned
+  `ontologies` corpus. See `docs/specs/2026-09-23-staleness-sweep-design.md`.
 
 Licensed MIT.
