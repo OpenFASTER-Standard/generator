@@ -488,4 +488,3 @@ all of `extraction/`, all of `reporting/`, and the entire `frontend/` tree.
 - Every file listed as "completely untouched" above has zero diff.
 - `extraction/`'s and the frontend's existing tests are unaffected and still pass
   unchanged.
-</content>
