@@ -11,9 +11,11 @@ ingests, and real, primary-sourced external prior art. This spec is the first
 output of that restart.
 
 The question this document answers: given a fact extracted or derived from a
-real source document (today: the MiKaDiv-FM XSD schema files under
-`ontologies/mikadiv-fm/sources/xsd/`, and the KHB/regulatory PDF documents
-under `ontologies/mikadiv-fm/sources/khb/`), how does the system record
+real source document (today: the MiKaDiv-FM XSD schema files and the
+KHB/regulatory PDF documents under `ontologies/mikadiv-fm/sources/` --
+restructured, by the staleness-sweep sub-project, into one subdirectory
+per whole-module snapshot; see
+`docs/specs/2026-09-23-staleness-sweep-design.md`), how does the system record
 *exactly what it pointed at*, in a way that:
 
 1. is precise enough to re-locate later,

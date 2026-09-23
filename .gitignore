@@ -3,7 +3,3 @@ __pycache__/
 .pytest_cache/
 *.egg-info/
 .venv/
-frontend/node_modules/
-frontend/dist/
-.demo_store/
-.demo_server.log
