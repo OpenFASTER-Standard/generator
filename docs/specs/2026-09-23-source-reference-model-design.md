@@ -281,6 +281,44 @@ those two functions; register them. Nothing about `Reference`, `Union`,
 storage, or any future consumer (staleness detection, review UI) needs to
 change or even be aware a new format was added.
 
+## Roadmap: what this enables next
+
+This is deliberately the first of several sub-projects. None of the
+following are designed by this document — each needs its own brainstorming
+pass once this one is implemented and working against the real sources —
+but they're named here so this piece is visible as part of a sequence, not
+an isolated fragment:
+
+1. **Staleness sweep.** A process that takes an existing `Reference`,
+   re-resolves its selector(s) against the *current* version of the subject
+   document's `family` (never the originally-cited `version` — that never
+   changes), and collects the resulting outcome(s) — `RESOLVED` with a
+   matching or changed hash, `NOT_FOUND`, `AMBIGUOUS`, or `UNCITABLE`. This
+   spec guarantees those outcomes exist and are distinguishable; it does not
+   define when such a sweep runs, on what trigger or schedule, or what scope
+   of the corpus it covers at once.
+2. **Review surfacing.** How a flagged `Reference` — or, for a `Union`,
+   specifically which part(s) — gets shown to a human reviewer, and what
+   they're asked to decide. Needs its own design pass; in particular, this
+   model deliberately stores no human-readable snippet, so surfacing a
+   flagged citation means re-resolving it for display, not reading a stored
+   copy — worth deciding deliberately rather than assuming.
+3. **Correction/revision workflow.** What happens once a reviewer makes a
+   call on a flagged (or newly reviewed) fact — most likely producing a new
+   fact backed by new `Reference`s (to an updated span, or a different
+   source entirely), and needing its own model for recording that revision's
+   history so a later reviewer can see what changed and why. Not designed
+   here.
+4. **Extraction/composition pipeline.** The actual process that walks the
+   real XSD/PDF sources and calls `cite()` to build facts and their
+   `Reference`s in the first place. This spec defines the substrate that
+   process calls into; it does not define the process itself, since none of
+   it exists yet — everything here is being built from scratch.
+
+Each of these becomes its own sub-project with its own spec and plan, per
+this project's own preference for small, independently reviewable designs
+rather than one large one.
+
 ## Testing strategy
 
 Every test targets the real files already used above — `AOrdNr` in
