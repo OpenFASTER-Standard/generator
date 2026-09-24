@@ -15,29 +15,57 @@
   <h1>MiKaDiv-FM References Catalog</h1>
   <div id="content">Loading...</div>
   <script>
-    fetch("/api/references")
-      .then((response) => response.json())
-      .then((catalog) => {
-        const content = document.getElementById("content");
-        const factKeys = Object.keys(catalog);
-        if (factKeys.length === 0) {
-          content.innerHTML = "<p id='empty'>No references yet.</p>";
-          return;
-        }
-        const rows = factKeys.map((factKey) => {
-          const reference = catalog[factKey];
-          const family = reference.subject_document ? reference.subject_document.family : "";
-          const selectorType = reference.selector ? reference.selector.type : "";
-          const referenceId = reference.reference_id || "";
-          return `<tr><td>${factKey}</td><td>${family}</td><td>${selectorType}</td><td>${referenceId}</td></tr>`;
-        }).join("");
-        content.innerHTML = `
-          <table>
-            <thead><tr><th>Fact key</th><th>Family</th><th>Selector type</th><th>Reference ID</th></tr></thead>
-            <tbody>${rows}</tbody>
-          </table>
-        `;
+    function cell(text) {
+      const td = document.createElement("td");
+      td.textContent = text;
+      return td;
+    }
+
+    function renderError(message) {
+      const content = document.getElementById("content");
+      content.innerHTML = "";
+      const p = document.createElement("p");
+      p.id = "error";
+      p.textContent = message;
+      content.appendChild(p);
+    }
+
+    function renderCatalog(catalog) {
+      const content = document.getElementById("content");
+      const factKeys = Object.keys(catalog);
+      content.innerHTML = "";
+      if (factKeys.length === 0) {
+        const p = document.createElement("p");
+        p.id = "empty";
+        p.textContent = "No references yet.";
+        content.appendChild(p);
+        return;
+      }
+      const table = document.createElement("table");
+      table.innerHTML = "<thead><tr><th>Fact key</th><th>Family</th><th>Selector type</th><th>Reference ID</th></tr></thead>";
+      const tbody = document.createElement("tbody");
+      factKeys.forEach((factKey) => {
+        const reference = catalog[factKey];
+        const family = reference.subject_document ? reference.subject_document.family : "";
+        const selectorType = reference.selector ? reference.selector.type : "";
+        const referenceId = reference.reference_id || "";
+        const row = document.createElement("tr");
+        [factKey, family, selectorType, referenceId].forEach((value) => row.appendChild(cell(value)));
+        tbody.appendChild(row);
       });
+      table.appendChild(tbody);
+      content.appendChild(table);
+    }
+
+    fetch("/api/references")
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error(`Server returned ${response.status}`);
+        }
+        return response.json();
+      })
+      .then(renderCatalog)
+      .catch((error) => renderError(`Failed to load the references catalog: ${error.message}`));
   </script>
 </body>
 </html>

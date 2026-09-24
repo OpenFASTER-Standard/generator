@@ -142,10 +142,11 @@ pattern).
 
 ## New dependencies
 
-`fastapi`, `uvicorn`, and `httpx` (the last needed by FastAPI's own
-`TestClient`, used in this sub-project's backend tests) — added to
-`pyproject.toml`'s main `dependencies`, since they're needed to actually
-run the UI, not just to test it.
+`fastapi` and `uvicorn`, added to `pyproject.toml`'s main `dependencies`
+since they're needed to actually run the UI, not just to test it. `httpx`
+is needed only by FastAPI's own `TestClient` (used in this sub-project's
+backend tests) — nothing in `webapp/app.py` itself imports it — so it goes
+in the `dev` extra instead, alongside `pytest`/`reportlab`.
 
 ## Testing strategy
 

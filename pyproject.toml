@@ -13,11 +13,10 @@ dependencies = [
     "shapely>=2.0",
     "fastapi>=0.100",
     "uvicorn>=0.23",
-    "httpx>=0.24",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0", "reportlab>=4.0"]
+dev = ["pytest>=8.0", "reportlab>=4.0", "httpx>=0.24"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

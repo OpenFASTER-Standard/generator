@@ -54,3 +54,20 @@ def test_to_json_dict_serializes_a_union_recursively():
     assert len(result["parts"]) == 2
     assert result["parts"][0] == to_json_dict(leaf_1)
     assert result["parts"][1] == to_json_dict(leaf_2)
+
+
+def test_to_json_dict_union_survives_a_real_json_round_trip():
+    # dataclasses.asdict() reconstructs a tuple field (Union.parts) as a
+    # tuple, not a list -- json.loads(json.dumps(...)) always produces a
+    # list, so a naive asdict()-only implementation makes a Union's own
+    # output silently unequal to its own round-tripped copy, even though
+    # the same check passes for a Leaf (no tuple fields).
+    leaf_1 = cite(_subject_document(), XPathSelector.create(AORDNR_XPATH))
+    leaf_2 = cite(_subject_document(), XPathSelector.create(ABGEF_XPATH))
+    union = cite_union([leaf_1, leaf_2])
+
+    result = to_json_dict(union)
+    round_tripped = json.loads(json.dumps(result))
+
+    assert round_tripped == result
+    assert isinstance(result["parts"], list)
