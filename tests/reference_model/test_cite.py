@@ -188,3 +188,31 @@ def test_check_leaf_detects_a_changed_hash_without_a_status_change(tmp_path: Pat
     result = check_leaf(leaf, retrieval_uri=str(mutated_path))
     assert result.outcome.status == Status.RESOLVED
     assert result.hash_changed is True
+
+
+def test_check_leaf_populates_new_content_hash_when_resolved(tmp_path: Path):
+    leaf = cite(_xsd_subject_document(), XPathSelector.create(AORDNR_XPATH))
+
+    original = Path(REAL_XSD).read_text(encoding="utf-8")
+    mutated = original.replace('maxOccurs="3000"', 'maxOccurs="5000"')
+    mutated_path = tmp_path / "mutated.xsd"
+    mutated_path.write_text(mutated, encoding="utf-8")
+
+    result = check_leaf(leaf, retrieval_uri=str(mutated_path))
+    assert result.outcome.status == Status.RESOLVED
+    assert result.new_content_hash is not None
+    assert len(result.new_content_hash) == 64
+    assert result.new_content_hash != leaf.content_hash.digest
+
+
+def test_check_leaf_new_content_hash_is_none_when_not_resolved(tmp_path: Path):
+    leaf = cite(_xsd_subject_document(), XPathSelector.create(AORDNR_XPATH))
+
+    original = Path(REAL_XSD).read_text(encoding="utf-8")
+    mutated = original.replace('name="AOrdNr"', 'name="AOrdNrRenamed"')
+    mutated_path = tmp_path / "mutated.xsd"
+    mutated_path.write_text(mutated, encoding="utf-8")
+
+    result = check_leaf(leaf, retrieval_uri=str(mutated_path))
+    assert result.outcome.status == Status.NOT_FOUND
+    assert result.new_content_hash is None

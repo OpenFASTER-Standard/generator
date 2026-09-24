@@ -64,6 +64,7 @@ class LeafCheckResult:
     leaf: Leaf
     outcome: ResolutionOutcome
     hash_changed: bool | None  # None unless outcome.status is RESOLVED
+    new_content_hash: str | None  # None unless outcome.status is RESOLVED
 
 
 def check_leaf(leaf: Leaf, retrieval_uri: str | None = None) -> LeafCheckResult:
@@ -71,9 +72,14 @@ def check_leaf(leaf: Leaf, retrieval_uri: str | None = None) -> LeafCheckResult:
     uri = retrieval_uri if retrieval_uri is not None else leaf.subject_document.retrieval_uri
     outcome = resolver.resolve(leaf.selector, uri)
     if outcome.status != Status.RESOLVED:
-        return LeafCheckResult(leaf=leaf, outcome=outcome, hash_changed=None)
+        return LeafCheckResult(leaf=leaf, outcome=outcome, hash_changed=None, new_content_hash=None)
     new_digest = resolver.canonicalize_and_hash(outcome.raw_content)
-    return LeafCheckResult(leaf=leaf, outcome=outcome, hash_changed=new_digest != leaf.content_hash.digest)
+    return LeafCheckResult(
+        leaf=leaf,
+        outcome=outcome,
+        hash_changed=new_digest != leaf.content_hash.digest,
+        new_content_hash=new_digest,
+    )
 
 
 def check_reference(

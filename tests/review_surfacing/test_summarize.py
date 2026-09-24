@@ -188,6 +188,7 @@ def test_uncitable_drift_is_also_classified_as_structural():
         leaf=leaf,
         outcome=ResolutionOutcome(status=Status.UNCITABLE),
         hash_changed=None,
+        new_content_hash=None,
     )
     report = sweep({"fact-1": leaf}, REAL_MODULE_ROOT)
     report.results_by_key["fact-1"][:] = [fake_result]
