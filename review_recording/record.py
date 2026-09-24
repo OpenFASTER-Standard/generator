@@ -1,6 +1,7 @@
 """Turns a reviewer's decision into a plain, real JSON document, cited
 through the same Reference/cite() machinery already built for XSDs and
-PDFs. See docs/specs/2026-09-23-review-recording-design.md.
+PDFs. See docs/specs/2026-09-23-review-recording-design.md and
+docs/specs/2026-09-24-review-consultation-design.md.
 """
 from __future__ import annotations
 
@@ -13,7 +14,7 @@ from pathlib import Path
 from reference_model.cite import cite
 from reference_model.model import Leaf, SubjectDocument
 from reference_model.selectors.json_selector import JsonSelector
-from review_surfacing.summarize import DriftKind
+from review_surfacing.summarize import FlaggedLeaf
 
 
 class Verdict(Enum):
@@ -24,8 +25,7 @@ class Verdict(Enum):
 def record_review(
     reviews_dir: str,
     fact_key: str,
-    family: str,
-    drift_kind: DriftKind,
+    flagged: FlaggedLeaf,
     reviewer: str,
     verdict: Verdict,
     reasoning: str,
@@ -34,8 +34,9 @@ def record_review(
     review_id = str(uuid.uuid4())
     document = {
         "fact_key": fact_key,
-        "family": family,
-        "drift_kind": drift_kind.value,
+        "family": flagged.leaf.subject_document.family,
+        "drift_kind": flagged.drift_kind.value,
+        "reviewed_fingerprint": flagged.fingerprint,
         "reviewer": reviewer,
         "reviewed_at": datetime.now(timezone.utc).isoformat(),
         "verdict": verdict.value,
