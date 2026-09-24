@@ -25,7 +25,7 @@ def _catalog_path() -> Path:
 
 @app.get("/api/references")
 def list_references() -> dict:
-    return load_catalog(str(_catalog_path()))
+    return load_catalog(_catalog_path())
 
 
 app.mount("/", StaticFiles(directory=Path(__file__).parent / "static", html=True), name="static")
