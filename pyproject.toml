@@ -11,6 +11,9 @@ dependencies = [
     "lxml>=5.0",
     "pdfplumber>=0.11",
     "shapely>=2.0",
+    "fastapi>=0.100",
+    "uvicorn>=0.23",
+    "httpx>=0.24",
 ]
 
 [project.optional-dependencies]
@@ -20,4 +23,4 @@ dev = ["pytest>=8.0", "reportlab>=4.0"]
 testpaths = ["tests"]
 
 [tool.setuptools.packages.find]
-include = ["reference_model*", "staleness_sweep*", "review_surfacing*", "review_recording*", "review_consultation*"]
+include = ["reference_model*", "staleness_sweep*", "review_surfacing*", "review_recording*", "review_consultation*", "webapp*"]

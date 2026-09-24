@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>MiKaDiv-FM References Catalog</title>
+  <style>
+    body { font-family: sans-serif; margin: 2rem; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #ccc; padding: 0.5rem; text-align: left; }
+    th { background: #f0f0f0; }
+    #empty { color: #666; font-style: italic; }
+  </style>
+</head>
+<body>
+  <h1>MiKaDiv-FM References Catalog</h1>
+  <div id="content">Loading...</div>
+  <script>
+    fetch("/api/references")
+      .then((response) => response.json())
+      .then((catalog) => {
+        const content = document.getElementById("content");
+        const factKeys = Object.keys(catalog);
+        if (factKeys.length === 0) {
+          content.innerHTML = "<p id='empty'>No references yet.</p>";
+          return;
+        }
+        const rows = factKeys.map((factKey) => {
+          const reference = catalog[factKey];
+          const family = reference.subject_document ? reference.subject_document.family : "";
+          const selectorType = reference.selector ? reference.selector.type : "";
+          const referenceId = reference.reference_id || "";
+          return `<tr><td>${factKey}</td><td>${family}</td><td>${selectorType}</td><td>${referenceId}</td></tr>`;
+        }).join("");
+        content.innerHTML = `
+          <table>
+            <thead><tr><th>Fact key</th><th>Family</th><th>Selector type</th><th>Reference ID</th></tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        `;
+      });
+  </script>
+</body>
+</html>
