@@ -102,6 +102,32 @@ def test_structural_drift_is_classified_as_structural(tmp_path):
     assert flagged_leaf.leaf == leaf
 
 
+def test_content_drift_fingerprint_is_the_new_content_hash(tmp_path):
+    module_root = tmp_path / "mikadiv-fm-sources"
+    _make_content_and_structural_snapshot(module_root)
+
+    leaf = cite(_real_meldeart23_subject_document(), XPathSelector.create(ABGEF_XPATH))
+    report = sweep({"fact-1": leaf}, str(module_root))
+    summary = summarize_for_review(report)
+
+    (flagged_leaf,) = summary.flagged["fact-1"]
+    assert flagged_leaf.fingerprint == report.results_by_key["fact-1"][0].new_content_hash
+    assert flagged_leaf.fingerprint != leaf.content_hash.digest
+    assert len(flagged_leaf.fingerprint) == 64
+
+
+def test_structural_drift_fingerprint_is_the_status_name(tmp_path):
+    module_root = tmp_path / "mikadiv-fm-sources"
+    _make_content_and_structural_snapshot(module_root)
+
+    leaf = cite(_real_meldeart23_subject_document(), XPathSelector.create(AORDNR_XPATH))
+    report = sweep({"fact-1": leaf}, str(module_root))
+    summary = summarize_for_review(report)
+
+    (flagged_leaf,) = summary.flagged["fact-1"]
+    assert flagged_leaf.fingerprint == "NOT_FOUND"
+
+
 def test_union_mixing_healthy_content_and_structural_leaves(tmp_path):
     module_root = tmp_path / "mikadiv-fm-sources"
     _make_content_and_structural_snapshot(module_root)
@@ -169,6 +195,7 @@ def test_ambiguous_drift_is_also_classified_as_structural(tmp_path):
     (flagged_leaf,) = summary.flagged["fact-1"]
     assert flagged_leaf.outcome.status == Status.AMBIGUOUS
     assert flagged_leaf.drift_kind == DriftKind.STRUCTURAL
+    assert flagged_leaf.fingerprint == "AMBIGUOUS"
 
 
 def test_uncitable_drift_is_also_classified_as_structural():
@@ -198,3 +225,4 @@ def test_uncitable_drift_is_also_classified_as_structural():
     (flagged_leaf,) = summary.flagged["fact-1"]
     assert flagged_leaf.outcome.status == Status.UNCITABLE
     assert flagged_leaf.drift_kind == DriftKind.STRUCTURAL
+    assert flagged_leaf.fingerprint == "UNCITABLE"

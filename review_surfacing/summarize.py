@@ -21,6 +21,7 @@ class FlaggedLeaf:
     leaf: Leaf
     outcome: ResolutionOutcome
     drift_kind: DriftKind
+    fingerprint: str
 
 
 @dataclass(frozen=True)
@@ -33,9 +34,9 @@ class ReviewSummary:
 def _classify(result: LeafCheckResult) -> FlaggedLeaf | None:
     if result.outcome.status == Status.RESOLVED:
         if result.hash_changed:
-            return FlaggedLeaf(result.leaf, result.outcome, DriftKind.CONTENT)
+            return FlaggedLeaf(result.leaf, result.outcome, DriftKind.CONTENT, result.new_content_hash)
         return None
-    return FlaggedLeaf(result.leaf, result.outcome, DriftKind.STRUCTURAL)
+    return FlaggedLeaf(result.leaf, result.outcome, DriftKind.STRUCTURAL, result.outcome.status.name)
 
 
 def summarize_for_review(report: SweepReport) -> ReviewSummary:
