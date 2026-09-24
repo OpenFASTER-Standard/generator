@@ -1,5 +1,7 @@
 import shutil
 
+import pytest
+
 from reference_model.cite import LeafCheckResult, cite, cite_union
 from reference_model.model import ResolutionOutcome, SubjectDocument, Status
 from reference_model.selectors.xpath_selector import XPathSelector
@@ -226,3 +228,22 @@ def test_uncitable_drift_is_also_classified_as_structural():
     assert flagged_leaf.outcome.status == Status.UNCITABLE
     assert flagged_leaf.drift_kind == DriftKind.STRUCTURAL
     assert flagged_leaf.fingerprint == "UNCITABLE"
+
+
+def test_classify_raises_if_content_drift_has_no_new_content_hash():
+    # Documents and pins the invariant check_leaf() itself guarantees
+    # (RESOLVED implies new_content_hash is set) -- a malformed
+    # LeafCheckResult that violates it must fail loudly, not silently
+    # write None into FlaggedLeaf.fingerprint's str-typed field.
+    leaf = cite(_real_meldeart23_subject_document(), XPathSelector.create(AORDNR_XPATH))
+    fake_result = LeafCheckResult(
+        leaf=leaf,
+        outcome=ResolutionOutcome(status=Status.RESOLVED, raw_content="whatever"),
+        hash_changed=True,
+        new_content_hash=None,
+    )
+    report = sweep({"fact-1": leaf}, REAL_MODULE_ROOT)
+    report.results_by_key["fact-1"][:] = [fake_result]
+
+    with pytest.raises(AssertionError):
+        summarize_for_review(report)

@@ -291,61 +291,83 @@ def test_load_reviews_on_nonexistent_directory_returns_empty_list(tmp_path):
     assert reviews == []
 
 
+def _complete_review_document(**overrides):
+    document = {
+        "fact_key": "fact-1",
+        "family": "MiKaDiv_FM_Meldeart23",
+        "leaf_reference_id": "some-reference-id",
+        "drift_kind": "CONTENT",
+        "reviewed_fingerprint": "abc123",
+        "reviewer": "julian.nalenz@divizend.com",
+        "reviewed_at": "2026-09-24T00:00:00+00:00",
+        "verdict": "approved",
+        "reasoning": "n/a",
+    }
+    document.update(overrides)
+    return document
+
+
 def test_load_reviews_raises_on_malformed_json(tmp_path):
     (tmp_path / "bad.json").write_text("{not valid json", encoding="utf-8")
-    with pytest.raises(ReviewLoadError):
+    with pytest.raises(ReviewLoadError, match="not valid JSON"):
+        load_reviews(str(tmp_path))
+
+
+def test_load_reviews_raises_on_non_utf8_file(tmp_path):
+    (tmp_path / "latin1.json").write_bytes('{"caption": "Dateigröße"}'.encode("latin-1"))
+    with pytest.raises(ReviewLoadError, match="not valid JSON"):
         load_reviews(str(tmp_path))
 
 
 def test_load_reviews_raises_on_non_object_json(tmp_path):
     (tmp_path / "array.json").write_text("[1, 2, 3]", encoding="utf-8")
-    with pytest.raises(ReviewLoadError):
+    with pytest.raises(ReviewLoadError, match="expected a JSON object"):
         load_reviews(str(tmp_path))
 
 
 def test_load_reviews_raises_on_missing_required_field(tmp_path):
-    incomplete = {
-        "fact_key": "fact-1",
-        "family": "MiKaDiv_FM_Meldeart23",
-        "drift_kind": "CONTENT",
-        "reviewed_fingerprint": "abc123",
-        "reviewer": "julian.nalenz@divizend.com",
-        "reviewed_at": "2026-09-24T00:00:00+00:00",
-        "verdict": "approved",
-        # "reasoning" deliberately omitted
-    }
+    incomplete = _complete_review_document()
+    del incomplete["reasoning"]
     (tmp_path / "incomplete.json").write_text(json.dumps(incomplete), encoding="utf-8")
-    with pytest.raises(ReviewLoadError):
+    with pytest.raises(ReviewLoadError, match="missing field"):
+        load_reviews(str(tmp_path))
+
+
+def test_load_reviews_raises_on_non_string_field_value(tmp_path):
+    invalid = _complete_review_document(reviewed_fingerprint=12345)
+    (tmp_path / "invalid.json").write_text(json.dumps(invalid), encoding="utf-8")
+    with pytest.raises(ReviewLoadError, match="reviewed_fingerprint"):
+        load_reviews(str(tmp_path))
+
+
+def test_load_reviews_raises_on_null_field_value(tmp_path):
+    invalid = _complete_review_document(fact_key=None)
+    (tmp_path / "invalid.json").write_text(json.dumps(invalid), encoding="utf-8")
+    with pytest.raises(ReviewLoadError, match="fact_key"):
         load_reviews(str(tmp_path))
 
 
 def test_load_reviews_raises_on_invalid_drift_kind_value(tmp_path):
-    invalid = {
-        "fact_key": "fact-1",
-        "family": "MiKaDiv_FM_Meldeart23",
-        "drift_kind": "NOT_A_REAL_DRIFT_KIND",
-        "reviewed_fingerprint": "abc123",
-        "reviewer": "julian.nalenz@divizend.com",
-        "reviewed_at": "2026-09-24T00:00:00+00:00",
-        "verdict": "approved",
-        "reasoning": "n/a",
-    }
+    invalid = _complete_review_document(drift_kind="NOT_A_REAL_DRIFT_KIND")
     (tmp_path / "invalid.json").write_text(json.dumps(invalid), encoding="utf-8")
-    with pytest.raises(ReviewLoadError):
+    with pytest.raises(ReviewLoadError, match="invalid drift_kind/verdict value"):
         load_reviews(str(tmp_path))
 
 
 def test_load_reviews_raises_on_invalid_verdict_value(tmp_path):
-    invalid = {
-        "fact_key": "fact-1",
-        "family": "MiKaDiv_FM_Meldeart23",
-        "drift_kind": "CONTENT",
-        "reviewed_fingerprint": "abc123",
-        "reviewer": "julian.nalenz@divizend.com",
-        "reviewed_at": "2026-09-24T00:00:00+00:00",
-        "verdict": "maybe",
-        "reasoning": "n/a",
-    }
+    invalid = _complete_review_document(verdict="maybe")
     (tmp_path / "invalid.json").write_text(json.dumps(invalid), encoding="utf-8")
-    with pytest.raises(ReviewLoadError):
+    with pytest.raises(ReviewLoadError, match="invalid drift_kind/verdict value"):
         load_reviews(str(tmp_path))
+
+
+def test_load_reviews_skips_a_directory_matching_the_glob_pattern(tmp_path):
+    (tmp_path / "not-a-review.json").mkdir()
+    (tmp_path / "real-review.json").write_text(
+        json.dumps(_complete_review_document()), encoding="utf-8"
+    )
+
+    reviews = load_reviews(str(tmp_path))
+
+    assert len(reviews) == 1
+    assert reviews[0].fact_key == "fact-1"

@@ -33,20 +33,34 @@ _REQUIRED_FIELDS = (
     "fact_key", "family", "leaf_reference_id", "drift_kind", "reviewed_fingerprint",
     "reviewer", "reviewed_at", "verdict", "reasoning",
 )
+# drift_kind/verdict are validated separately, by constructing their enums --
+# a non-string value there already fails that construction with ValueError.
+_STRING_FIELDS = (
+    "fact_key", "family", "leaf_reference_id", "reviewed_fingerprint",
+    "reviewer", "reviewed_at", "reasoning",
+)
 
 
 def load_reviews(reviews_dir: str) -> list[ReviewRecord]:
     records = []
     for path in sorted(Path(reviews_dir).glob("*.json")):
+        if not path.is_file():
+            continue  # e.g. a directory that happens to match "*.json"
         try:
             raw = json.loads(path.read_text(encoding="utf-8"))
-        except json.JSONDecodeError as e:
+        except (OSError, ValueError) as e:
+            # ValueError subsumes json.JSONDecodeError and UnicodeDecodeError
+            # (a non-UTF-8-encoded file) alike -- both are "not a valid
+            # review file", not a crash.
             raise ReviewLoadError(f"{path}: not valid JSON") from e
         if not isinstance(raw, dict):
             raise ReviewLoadError(f"{path}: expected a JSON object")
         missing = [f for f in _REQUIRED_FIELDS if f not in raw]
         if missing:
             raise ReviewLoadError(f"{path}: missing field(s) {missing}")
+        non_string = [f for f in _STRING_FIELDS if not isinstance(raw[f], str)]
+        if non_string:
+            raise ReviewLoadError(f"{path}: field(s) {non_string} must be strings")
         try:
             drift_kind = DriftKind(raw["drift_kind"])
             verdict = Verdict(raw["verdict"])

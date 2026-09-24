@@ -34,6 +34,10 @@ class ReviewSummary:
 def _classify(result: LeafCheckResult) -> FlaggedLeaf | None:
     if result.outcome.status == Status.RESOLVED:
         if result.hash_changed:
+            assert result.new_content_hash is not None, (
+                "check_leaf() guarantees new_content_hash is set whenever outcome.status "
+                "is RESOLVED -- a LeafCheckResult violating that invariant is malformed"
+            )
             return FlaggedLeaf(result.leaf, result.outcome, DriftKind.CONTENT, result.new_content_hash)
         return None
     return FlaggedLeaf(result.leaf, result.outcome, DriftKind.STRUCTURAL, result.outcome.status.name)
