@@ -1,14 +1,16 @@
 """Serves the references catalog: one JSON API endpoint, one static page
-that renders it. See docs/specs/2026-09-24-references-catalog-design.md.
+that renders it. See docs/specs/2026-09-24-references-catalog-design.md
+and docs/specs/2026-09-24-catalog-write-path-design.md.
 """
 from __future__ import annotations
 
-import json
 import os
 from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
+
+from references_catalog.catalog import load_catalog
 
 DEFAULT_CATALOG_PATH = "/work/ontologies/mikadiv-fm/references.json"
 
@@ -23,7 +25,7 @@ def _catalog_path() -> Path:
 
 @app.get("/api/references")
 def list_references() -> dict:
-    return json.loads(_catalog_path().read_text(encoding="utf-8"))
+    return load_catalog(str(_catalog_path()))
 
 
 app.mount("/", StaticFiles(directory=Path(__file__).parent / "static", html=True), name="static")
