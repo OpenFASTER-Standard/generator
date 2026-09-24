@@ -199,30 +199,36 @@ def test_both_approved_and_rejected_for_same_fingerprint_stays_visible(tmp_path)
 
 
 def test_union_with_one_leaf_approved_key_remains_with_only_unreviewed_leaf(tmp_path):
+    # Both leaves are renamed, so both go STRUCTURAL with the identical
+    # fingerprint "NOT_FOUND" -- this is deliberate, not incidental: two
+    # different leaves sharing a (fact_key, drift_kind, fingerprint) triple
+    # is exactly the collision apply_reviews() must not conflate. Approving
+    # one must never suppress the other just because they look alike.
     module_root = tmp_path / "mikadiv-fm-sources"
     shutil.copytree(REAL_MODULE_ROOT, module_root)
     original = (module_root / "1.02" / "xsd" / "MiKaDiv_FM_Meldeart23_1.02.xsd").read_text(encoding="utf-8")
     mutated = original.replace(
         '<xs:element name="AbgefKapitalertragsteuer" type="std:Dezimal14dot2Type">',
-        '<xs:element name="AbgefKapitalertragsteuer" type="std:Dezimal14dot2Type" minOccurs="0">',
+        '<xs:element name="AbgefKapitalertragsteuerRenamed" type="std:Dezimal14dot2Type">',
     ).replace('name="AOrdNr"', 'name="AOrdNrRenamed"')
     _write_snapshot(module_root, "1.03", mutated)
 
-    content_leaf = cite(_real_meldeart23_subject_document(), XPathSelector.create(ABGEF_XPATH))
-    structural_leaf = cite(_real_meldeart23_subject_document(), XPathSelector.create(AORDNR_XPATH))
-    union = cite_union([content_leaf, structural_leaf])
+    abgef_leaf = cite(_real_meldeart23_subject_document(), XPathSelector.create(ABGEF_XPATH))
+    aordnr_leaf = cite(_real_meldeart23_subject_document(), XPathSelector.create(AORDNR_XPATH))
+    union = cite_union([abgef_leaf, aordnr_leaf])
 
     summary = summarize_for_review(sweep({"fact-1": union}, str(module_root)))
     assert len(summary.flagged["fact-1"]) == 2
-    content_flagged = next(fl for fl in summary.flagged["fact-1"] if fl.leaf == content_leaf)
+    assert {fl.fingerprint for fl in summary.flagged["fact-1"]} == {"NOT_FOUND"}
+    abgef_flagged = next(fl for fl in summary.flagged["fact-1"] if fl.leaf == abgef_leaf)
 
     record_review(
         reviews_dir=str(tmp_path / "reviews"),
         fact_key="fact-1",
-        flagged=content_flagged,
+        flagged=abgef_flagged,
         reviewer="julian.nalenz@divizend.com",
         verdict=Verdict.APPROVED,
-        reasoning="Content change confirmed benign.",
+        reasoning="This rename is expected; the other one is not yet reviewed.",
     )
 
     reviews = load_reviews(str(tmp_path / "reviews"))
@@ -230,7 +236,7 @@ def test_union_with_one_leaf_approved_key_remains_with_only_unreviewed_leaf(tmp_
 
     assert "fact-1" in filtered.flagged
     (remaining,) = filtered.flagged["fact-1"]
-    assert remaining.leaf == structural_leaf
+    assert remaining.leaf == aordnr_leaf
 
 
 def test_union_with_all_leaves_approved_key_is_dropped(tmp_path):

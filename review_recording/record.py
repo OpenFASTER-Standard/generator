@@ -35,6 +35,7 @@ def record_review(
     document = {
         "fact_key": fact_key,
         "family": flagged.leaf.subject_document.family,
+        "leaf_reference_id": flagged.leaf.reference_id,
         "drift_kind": flagged.drift_kind.value,
         "reviewed_fingerprint": flagged.fingerprint,
         "reviewer": reviewer,

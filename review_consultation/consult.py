@@ -16,6 +16,7 @@ from review_surfacing.summarize import DriftKind, FlaggedLeaf, ReviewSummary
 class ReviewRecord:
     fact_key: str
     family: str
+    leaf_reference_id: str
     drift_kind: DriftKind
     reviewed_fingerprint: str
     reviewer: str
@@ -29,7 +30,7 @@ class ReviewLoadError(Exception):
 
 
 _REQUIRED_FIELDS = (
-    "fact_key", "family", "drift_kind", "reviewed_fingerprint",
+    "fact_key", "family", "leaf_reference_id", "drift_kind", "reviewed_fingerprint",
     "reviewer", "reviewed_at", "verdict", "reasoning",
 )
 
@@ -54,6 +55,7 @@ def load_reviews(reviews_dir: str) -> list[ReviewRecord]:
         records.append(ReviewRecord(
             fact_key=raw["fact_key"],
             family=raw["family"],
+            leaf_reference_id=raw["leaf_reference_id"],
             drift_kind=drift_kind,
             reviewed_fingerprint=raw["reviewed_fingerprint"],
             reviewer=raw["reviewer"],
@@ -65,12 +67,17 @@ def load_reviews(reviews_dir: str) -> list[ReviewRecord]:
 
 
 def apply_reviews(summary: ReviewSummary, reviews: list[ReviewRecord]) -> ReviewSummary:
+    # Matched on leaf identity (leaf_reference_id), not just
+    # (fact_key, drift_kind, fingerprint) -- two different leaves under the
+    # same fact_key can share a fingerprint (e.g. two elements renamed in
+    # the same upstream change both go NOT_FOUND), and approving one must
+    # never silently suppress the other, still-unreviewed one.
     approved = {
-        (r.fact_key, r.drift_kind, r.reviewed_fingerprint)
+        (r.fact_key, r.leaf_reference_id, r.drift_kind, r.reviewed_fingerprint)
         for r in reviews if r.verdict == Verdict.APPROVED
     }
     rejected = {
-        (r.fact_key, r.drift_kind, r.reviewed_fingerprint)
+        (r.fact_key, r.leaf_reference_id, r.drift_kind, r.reviewed_fingerprint)
         for r in reviews if r.verdict == Verdict.REJECTED
     }
 
@@ -78,8 +85,8 @@ def apply_reviews(summary: ReviewSummary, reviews: list[ReviewRecord]) -> Review
     for fact_key, entries in summary.flagged.items():
         kept = tuple(
             fl for fl in entries
-            if (fact_key, fl.drift_kind, fl.fingerprint) not in approved
-            or (fact_key, fl.drift_kind, fl.fingerprint) in rejected
+            if (fact_key, fl.leaf.reference_id, fl.drift_kind, fl.fingerprint) not in approved
+            or (fact_key, fl.leaf.reference_id, fl.drift_kind, fl.fingerprint) in rejected
         )
         if kept:
             flagged[fact_key] = kept

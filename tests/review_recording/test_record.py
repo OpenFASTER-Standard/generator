@@ -94,6 +94,7 @@ def test_record_review_writes_the_full_document_shape(tmp_path):
     written = json.loads(open(leaf.subject_document.retrieval_uri, encoding="utf-8").read())
     assert written["fact_key"] == "fact-1"
     assert written["family"] == "MiKaDiv_FM_Meldeart23"
+    assert written["leaf_reference_id"] == flagged_leaf.leaf.reference_id
     assert written["drift_kind"] == "STRUCTURAL"
     assert written["reviewed_fingerprint"] == "NOT_FOUND"
     assert written["reviewer"] == "julian.nalenz@divizend.com"
