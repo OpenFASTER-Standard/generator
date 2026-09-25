@@ -26,7 +26,7 @@ class FamilyLocation:
     retrieval_uri: str
 
 
-def _load_current_manifest(module_root: str):
+def _load_current_manifest(module_root: str) -> tuple[Path, dict[str, str], str] | None:
     module_root_path = Path(module_root)
     current_path = module_root_path / "_current"
     if not current_path.exists():
@@ -64,7 +64,7 @@ def _load_current_manifest(module_root: str):
     return snapshot_dir, manifest, snapshot
 
 
-def _resolve_family_path(snapshot_dir: Path, snapshot: str, family: str, manifest: dict) -> str:
+def _resolve_family_path(snapshot_dir: Path, snapshot: str, family: str, manifest: dict[str, str]) -> str:
     resolved_path = (snapshot_dir / manifest[family]).resolve()
     if not resolved_path.is_relative_to(snapshot_dir):
         raise CorpusIntegrityError(
@@ -103,3 +103,34 @@ def list_current_locations(module_root: str) -> list[FamilyLocation]:
         )
         for family in sorted(manifest.keys())
     ]
+
+
+def list_current_families(module_root: str) -> list[str]:
+    # Deliberately does not resolve any family's file path (unlike
+    # list_current_locations()) -- a caller that needs to enumerate family
+    # names without one broken manifest entry (a missing file, an escaping
+    # path) taking down the whole listing should use this instead, then
+    # resolve each family individually via resolve_family_location().
+    result = _load_current_manifest(module_root)
+    if result is None:
+        return []
+    _snapshot_dir, manifest, _snapshot = result
+    return sorted(manifest.keys())
+
+
+def resolve_family_location(module_root: str, family: str) -> FamilyLocation | None:
+    # Resolves exactly one family, so a broken manifest entry for some
+    # OTHER family never prevents citing or listing this one -- unlike
+    # list_current_locations(), which resolves every family eagerly and
+    # therefore fails as a whole if any single entry is broken.
+    result = _load_current_manifest(module_root)
+    if result is None:
+        return None
+    snapshot_dir, manifest, snapshot = result
+    if family not in manifest:
+        return None
+    return FamilyLocation(
+        family=family,
+        version=snapshot,
+        retrieval_uri=_resolve_family_path(snapshot_dir, snapshot, family, manifest),
+    )

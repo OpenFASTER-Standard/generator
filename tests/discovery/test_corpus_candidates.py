@@ -73,3 +73,53 @@ def test_returns_corpus_candidate_instances_with_no_family_or_location_fields():
 
 def test_on_corpus_with_no_current_pointer_returns_empty_dict(tmp_path):
     assert list_corpus_candidates(str(tmp_path)) == {}
+
+
+def _synthetic_corpus(tmp_path, entries: dict) -> str:
+    import json
+
+    module_root = tmp_path / "corpus"
+    snapshot_dir = module_root / "1.0"
+    snapshot_dir.mkdir(parents=True)
+    manifest = {}
+    for family, (filename, content) in entries.items():
+        if content is not None:
+            (snapshot_dir / filename).write_text(content, encoding="utf-8")
+        manifest[family] = filename
+    (snapshot_dir / "_manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    (module_root / "_current").write_text("1.0", encoding="utf-8")
+    return str(module_root)
+
+
+_VALID_XSD = (
+    '<?xml version="1.0" encoding="UTF-8"?>'
+    '<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">'
+    '<xs:element name="Foo" type="xs:string"/>'
+    "</xs:schema>"
+)
+
+
+def test_list_corpus_candidates_skips_a_family_whose_manifest_entry_is_broken_but_keeps_others(tmp_path):
+    module_root = _synthetic_corpus(tmp_path, {
+        "GoodFamily": ("good.xsd", _VALID_XSD),
+        "BrokenFamily": ("does-not-exist.xsd", None),
+    })
+
+    result = list_corpus_candidates(module_root)
+
+    assert "GoodFamily" in result
+    assert len(result["GoodFamily"]) == 1
+    assert "BrokenFamily" not in result
+
+
+def test_list_corpus_candidates_skips_a_family_with_corrupt_xml_but_keeps_others(tmp_path):
+    module_root = _synthetic_corpus(tmp_path, {
+        "GoodFamily": ("good.xsd", _VALID_XSD),
+        "CorruptFamily": ("corrupt.xsd", "<not><valid>xml"),
+    })
+
+    result = list_corpus_candidates(module_root)
+
+    assert "GoodFamily" in result
+    assert len(result["GoodFamily"]) == 1
+    assert "CorruptFamily" not in result

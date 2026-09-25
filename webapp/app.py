@@ -11,9 +11,9 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
-from citation_workflow.add_citation import FamilyNotFoundError, add_citation
+from citation_workflow.add_citation import FamilyNotCitableError, FamilyNotFoundError, add_citation
 from discovery.corpus_candidates import list_corpus_candidates
 from reference_model.cite import CitationError
 from references_catalog.catalog import get_history, list_pages
@@ -42,6 +42,18 @@ class AddCitationRequest(BaseModel):
     author: str
     comment: str
     is_correction: bool
+
+    @field_validator("fact_key", "author")
+    @classmethod
+    def _reject_blank(cls, value: str) -> str:
+        # A blank fact_key would write a page into the real, git-tracked
+        # catalog that no URL can ever reach again (GET /api/pages/ 404s
+        # on an empty path segment); a blank author defeats the point of
+        # recording one. Reject both at the boundary, before add_citation()
+        # ever touches the catalog.
+        if not value.strip():
+            raise ValueError("must not be blank")
+        return value
 
 
 @app.get("/api/pages")
@@ -90,7 +102,7 @@ def add_citation_endpoint(request: AddCitationRequest) -> dict:
             request.comment,
             request.is_correction,
         )
-    except (FamilyNotFoundError, CitationError) as exc:
+    except (FamilyNotFoundError, FamilyNotCitableError, CitationError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"fact_key": request.fact_key, "revision": dataclasses.asdict(revision)}
 

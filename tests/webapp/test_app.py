@@ -250,3 +250,105 @@ def test_add_citation_endpoint_returns_400_for_a_candidate_that_went_stale(tmp_p
 
     assert response.status_code == 400
     assert client.get("/api/pages/fact-3").status_code == 404
+
+
+def _corpus_with_one_healthy_and_one_broken_family(tmp_path) -> str:
+    module_root = tmp_path / "corpus"
+    snapshot_dir = module_root / "1.0"
+    snapshot_dir.mkdir(parents=True)
+    (snapshot_dir / "healthy.xsd").write_text(_VALID_XSD, encoding="utf-8")
+    (snapshot_dir / "_manifest.json").write_text(
+        json.dumps({"HealthyFamily": "healthy.xsd", "BrokenFamily": "does-not-exist.xsd"}),
+        encoding="utf-8",
+    )
+    (module_root / "_current").write_text("1.0", encoding="utf-8")
+    return str(module_root)
+
+
+def test_add_citation_endpoint_rejects_a_blank_fact_key_without_creating_a_page(tmp_path, monkeypatch):
+    catalog_path = tmp_path / "references.json"
+    catalog_path.write_text("{}", encoding="utf-8")
+    module_root = _synthetic_corpus(tmp_path, _VALID_XSD)
+    monkeypatch.setenv("REFERENCES_CATALOG_PATH", str(catalog_path))
+    monkeypatch.setenv("MIKADIV_MODULE_ROOT", module_root)
+
+    client = TestClient(app)
+    response = client.post("/api/citations", json={
+        "family": "TestFamily",
+        "xpath": "/xs:schema/xs:element[@name='Foo']",
+        "fact_key": "   ",
+        "author": "julian",
+        "comment": "x",
+        "is_correction": False,
+    })
+
+    assert response.status_code == 422
+    assert client.get("/api/pages").json() == {}
+
+
+def test_add_citation_endpoint_rejects_a_blank_author_without_creating_a_page(tmp_path, monkeypatch):
+    catalog_path = tmp_path / "references.json"
+    catalog_path.write_text("{}", encoding="utf-8")
+    module_root = _synthetic_corpus(tmp_path, _VALID_XSD)
+    monkeypatch.setenv("REFERENCES_CATALOG_PATH", str(catalog_path))
+    monkeypatch.setenv("MIKADIV_MODULE_ROOT", module_root)
+
+    client = TestClient(app)
+    response = client.post("/api/citations", json={
+        "family": "TestFamily",
+        "xpath": "/xs:schema/xs:element[@name='Foo']",
+        "fact_key": "fact-x",
+        "author": "   ",
+        "comment": "x",
+        "is_correction": False,
+    })
+
+    assert response.status_code == 422
+    assert client.get("/api/pages").json() == {}
+
+
+def test_list_candidates_endpoint_returns_200_despite_one_broken_family_in_manifest(tmp_path, monkeypatch):
+    module_root = _corpus_with_one_healthy_and_one_broken_family(tmp_path)
+    monkeypatch.setenv("MIKADIV_MODULE_ROOT", module_root)
+
+    client = TestClient(app)
+    response = client.get("/api/candidates")
+
+    assert response.status_code == 200
+    assert "HealthyFamily" in response.json()
+    assert "BrokenFamily" not in response.json()
+
+
+def test_add_citation_endpoint_succeeds_for_healthy_family_despite_unrelated_broken_family(tmp_path, monkeypatch):
+    module_root = _corpus_with_one_healthy_and_one_broken_family(tmp_path)
+    catalog_path = tmp_path / "references.json"
+    catalog_path.write_text("{}", encoding="utf-8")
+    monkeypatch.setenv("REFERENCES_CATALOG_PATH", str(catalog_path))
+    monkeypatch.setenv("MIKADIV_MODULE_ROOT", module_root)
+
+    client = TestClient(app)
+    response = client.post("/api/citations", json={
+        "family": "HealthyFamily",
+        "xpath": "/xs:schema/xs:element[@name='Foo']",
+        "fact_key": "fact-7",
+        "author": "julian",
+        "comment": "x",
+        "is_correction": False,
+    })
+
+    assert response.status_code == 200
+
+
+def test_add_citation_endpoint_returns_400_for_a_non_xsd_family():
+    client = TestClient(app)
+    response = client.post("/api/citations", json={
+        "family": "khb_mikadiv_fm_de",
+        "xpath": "/x",
+        "fact_key": "fact-8",
+        "author": "julian",
+        "comment": "x",
+        "is_correction": False,
+    })
+
+    assert response.status_code == 400
+    assert client.get("/api/pages/fact-8").status_code == 404

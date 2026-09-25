@@ -12,10 +12,14 @@ from reference_model.cite import cite
 from reference_model.model import SubjectDocument
 from reference_model.selectors.xpath_selector import XPathSelector
 from references_catalog.catalog import Revision, add_revision
-from staleness_sweep.resolve import list_current_locations
+from staleness_sweep.resolve import resolve_family_location
 
 
 class FamilyNotFoundError(Exception):
+    pass
+
+
+class FamilyNotCitableError(Exception):
     pass
 
 
@@ -29,10 +33,16 @@ def add_citation(
     comment: str,
     is_correction: bool,
 ) -> Revision:
-    locations = {loc.family: loc for loc in list_current_locations(module_root)}
-    if family not in locations:
+    # Resolves only the one family requested -- an unrelated broken
+    # manifest entry for some OTHER family must never prevent citing this
+    # one. See resolve_family_location()'s own docstring.
+    location = resolve_family_location(module_root, family)
+    if location is None:
         raise FamilyNotFoundError(f"no such family in the current corpus snapshot: {family!r}")
-    location = locations[family]
+    if not location.retrieval_uri.endswith(".xsd"):
+        raise FamilyNotCitableError(
+            f"family {family!r} has no XSD in the current corpus snapshot and cannot be cited"
+        )
     subject_document = SubjectDocument(
         family=location.family,
         version=location.version,

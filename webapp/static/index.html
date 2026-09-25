@@ -17,7 +17,9 @@
     .cite-form { border: 1px solid #ccc; padding: 1rem; margin-top: 1rem; max-width: 30rem; }
     .cite-form label { display: block; margin-top: 0.5rem; }
     .cite-form input[type="text"] { width: 100%; box-sizing: border-box; }
+    .form-error { color: #a00; font-weight: bold; }
     button { cursor: pointer; }
+    button:disabled { cursor: default; opacity: 0.6; }
   </style>
 </head>
 <body>
@@ -133,20 +135,23 @@
       summary.textContent = `${family}: ${candidate.tag} ${candidate.name} (${candidate.xpath})`;
       form.appendChild(summary);
 
-      function makeField(labelText, inputType) {
+      function makeField(labelText, inputType, required) {
         const label = document.createElement("label");
         label.textContent = labelText;
         const input = document.createElement("input");
         input.type = inputType;
+        if (required) {
+          input.required = true;
+        }
         label.appendChild(input);
         form.appendChild(label);
         return input;
       }
 
-      const factKeyInput = makeField("Fact key", "text");
-      const authorInput = makeField("Author", "text");
-      const commentInput = makeField("Comment", "text");
-      const isCorrectionInput = makeField("Is correction", "checkbox");
+      const factKeyInput = makeField("Fact key", "text", true);
+      const authorInput = makeField("Author", "text", true);
+      const commentInput = makeField("Comment", "text", false);
+      const isCorrectionInput = makeField("Is correction", "checkbox", false);
 
       const submitButton = document.createElement("button");
       submitButton.type = "submit";
@@ -154,12 +159,25 @@
       form.appendChild(submitButton);
 
       const formError = document.createElement("p");
-      formError.id = "error";
+      formError.className = "form-error";
       form.appendChild(formError);
+
+      function describeErrorBody(text, status) {
+        try {
+          const body = JSON.parse(text);
+          if (body && body.detail) {
+            return typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail);
+          }
+        } catch (parseError) {
+          // Not JSON (e.g. a plain-text 500) -- fall through to the generic message.
+        }
+        return `Server returned ${status}`;
+      }
 
       form.addEventListener("submit", (event) => {
         event.preventDefault();
         formError.textContent = "";
+        submitButton.disabled = true;
         const factKey = factKeyInput.value;
         fetch("/api/citations", {
           method: "POST",
@@ -175,18 +193,21 @@
         })
           .then((response) => {
             if (!response.ok) {
-              return response.json().then((body) => {
-                throw new Error(body.detail || `Server returned ${response.status}`);
+              return response.text().then((text) => {
+                throw new Error(describeErrorBody(text, response.status));
               });
             }
             window.location.href = `?page=${encodeURIComponent(factKey)}`;
           })
           .catch((error) => {
             formError.textContent = `Failed to submit citation: ${error.message}`;
+            submitButton.disabled = false;
           });
       });
 
       container.appendChild(form);
+      form.scrollIntoView({ behavior: "smooth", block: "center" });
+      factKeyInput.focus();
     }
 
     function renderCandidateTable(container, family, candidates) {
@@ -228,6 +249,14 @@
       const heading = document.createElement("h2");
       heading.textContent = "Add citation";
       content.appendChild(heading);
+
+      if (Object.keys(candidatesByFamily).length === 0) {
+        const p = document.createElement("p");
+        p.id = "empty";
+        p.textContent = "No citable families in the current corpus snapshot.";
+        content.appendChild(p);
+        return;
+      }
 
       const familyList = document.createElement("ul");
       const detail = document.createElement("div");
