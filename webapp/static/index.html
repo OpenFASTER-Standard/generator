@@ -12,10 +12,20 @@
     .correction { color: #a00; font-weight: bold; }
     a { color: #06c; text-decoration: none; }
     a:hover { text-decoration: underline; }
+    nav { margin-bottom: 1rem; }
+    nav a { margin-right: 1rem; }
+    .cite-form { border: 1px solid #ccc; padding: 1rem; margin-top: 1rem; max-width: 30rem; }
+    .cite-form label { display: block; margin-top: 0.5rem; }
+    .cite-form input[type="text"] { width: 100%; box-sizing: border-box; }
+    button { cursor: pointer; }
   </style>
 </head>
 <body>
   <h1><a href="/">MiKaDiv-FM References</a></h1>
+  <nav>
+    <a href="/">Index</a>
+    <a href="?add=1">Add citation</a>
+  </nav>
   <div id="content">Loading...</div>
   <script>
     function cell(text) {
@@ -110,10 +120,151 @@
       content.appendChild(table);
     }
 
+    function renderCiteForm(container, family, candidate) {
+      const existingForm = container.querySelector(".cite-form");
+      if (existingForm) {
+        existingForm.remove();
+      }
+
+      const form = document.createElement("form");
+      form.className = "cite-form";
+
+      const summary = document.createElement("p");
+      summary.textContent = `${family}: ${candidate.tag} ${candidate.name} (${candidate.xpath})`;
+      form.appendChild(summary);
+
+      function makeField(labelText, inputType) {
+        const label = document.createElement("label");
+        label.textContent = labelText;
+        const input = document.createElement("input");
+        input.type = inputType;
+        label.appendChild(input);
+        form.appendChild(label);
+        return input;
+      }
+
+      const factKeyInput = makeField("Fact key", "text");
+      const authorInput = makeField("Author", "text");
+      const commentInput = makeField("Comment", "text");
+      const isCorrectionInput = makeField("Is correction", "checkbox");
+
+      const submitButton = document.createElement("button");
+      submitButton.type = "submit";
+      submitButton.textContent = "Submit citation";
+      form.appendChild(submitButton);
+
+      const formError = document.createElement("p");
+      formError.id = "error";
+      form.appendChild(formError);
+
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        formError.textContent = "";
+        const factKey = factKeyInput.value;
+        fetch("/api/citations", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            family: family,
+            xpath: candidate.xpath,
+            fact_key: factKey,
+            author: authorInput.value,
+            comment: commentInput.value,
+            is_correction: isCorrectionInput.checked,
+          }),
+        })
+          .then((response) => {
+            if (!response.ok) {
+              return response.json().then((body) => {
+                throw new Error(body.detail || `Server returned ${response.status}`);
+              });
+            }
+            window.location.href = `?page=${encodeURIComponent(factKey)}`;
+          })
+          .catch((error) => {
+            formError.textContent = `Failed to submit citation: ${error.message}`;
+          });
+      });
+
+      container.appendChild(form);
+    }
+
+    function renderCandidateTable(container, family, candidates) {
+      const existingTable = container.querySelector(".candidate-table");
+      if (existingTable) {
+        existingTable.remove();
+      }
+      const existingForm = container.querySelector(".cite-form");
+      if (existingForm) {
+        existingForm.remove();
+      }
+
+      const table = document.createElement("table");
+      table.className = "candidate-table";
+      table.innerHTML = "<thead><tr><th>Tag</th><th>Name</th><th>XPath</th><th></th></tr></thead>";
+      const tbody = document.createElement("tbody");
+      candidates.forEach((candidate) => {
+        const row = document.createElement("tr");
+        row.appendChild(cell(candidate.tag));
+        row.appendChild(cell(candidate.name));
+        row.appendChild(cell(candidate.xpath));
+        const actionCell = document.createElement("td");
+        const citeButton = document.createElement("button");
+        citeButton.type = "button";
+        citeButton.textContent = "Cite this";
+        citeButton.addEventListener("click", () => renderCiteForm(container, family, candidate));
+        actionCell.appendChild(citeButton);
+        row.appendChild(actionCell);
+        tbody.appendChild(row);
+      });
+      table.appendChild(tbody);
+      container.appendChild(table);
+    }
+
+    function renderAdd(candidatesByFamily) {
+      const content = document.getElementById("content");
+      content.innerHTML = "";
+
+      const heading = document.createElement("h2");
+      heading.textContent = "Add citation";
+      content.appendChild(heading);
+
+      const familyList = document.createElement("ul");
+      const detail = document.createElement("div");
+      detail.id = "add-detail";
+
+      Object.keys(candidatesByFamily).sort().forEach((family) => {
+        const item = document.createElement("li");
+        const link = document.createElement("a");
+        link.href = "#";
+        link.textContent = `${family} (${candidatesByFamily[family].length} candidates)`;
+        link.addEventListener("click", (event) => {
+          event.preventDefault();
+          renderCandidateTable(detail, family, candidatesByFamily[family]);
+        });
+        item.appendChild(link);
+        familyList.appendChild(item);
+      });
+
+      content.appendChild(familyList);
+      content.appendChild(detail);
+    }
+
     const params = new URLSearchParams(window.location.search);
     const factKey = params.get("page");
+    const isAdd = params.get("add");
 
-    if (factKey) {
+    if (isAdd) {
+      fetch("/api/candidates")
+        .then((response) => {
+          if (!response.ok) {
+            throw new Error(`Server returned ${response.status}`);
+          }
+          return response.json();
+        })
+        .then(renderAdd)
+        .catch((error) => renderError(`Failed to load candidates: ${error.message}`));
+    } else if (factKey) {
       fetch(`/api/pages/${encodeURIComponent(factKey)}`)
         .then((response) => {
           if (!response.ok) {
