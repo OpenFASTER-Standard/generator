@@ -2,17 +2,20 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>MiKaDiv-FM References Catalog</title>
+  <title>MiKaDiv-FM References</title>
   <style>
     body { font-family: sans-serif; margin: 2rem; }
-    table { border-collapse: collapse; width: 100%; }
+    table { border-collapse: collapse; width: 100%; margin-top: 1rem; }
     th, td { border: 1px solid #ccc; padding: 0.5rem; text-align: left; }
     th { background: #f0f0f0; }
-    #empty { color: #666; font-style: italic; }
+    #empty, #error { color: #666; font-style: italic; }
+    .correction { color: #a00; font-weight: bold; }
+    a { color: #06c; text-decoration: none; }
+    a:hover { text-decoration: underline; }
   </style>
 </head>
 <body>
-  <h1>MiKaDiv-FM References Catalog</h1>
+  <h1><a href="/">MiKaDiv-FM References</a></h1>
   <div id="content">Loading...</div>
   <script>
     function cell(text) {
@@ -30,42 +33,100 @@
       content.appendChild(p);
     }
 
-    function renderCatalog(catalog) {
+    function renderIndex(pages) {
       const content = document.getElementById("content");
-      const factKeys = Object.keys(catalog);
+      const factKeys = Object.keys(pages);
       content.innerHTML = "";
       if (factKeys.length === 0) {
         const p = document.createElement("p");
         p.id = "empty";
-        p.textContent = "No references yet.";
+        p.textContent = "No pages yet.";
         content.appendChild(p);
         return;
       }
       const table = document.createElement("table");
-      table.innerHTML = "<thead><tr><th>Fact key</th><th>Family</th><th>Selector type</th><th>Reference ID</th></tr></thead>";
+      table.innerHTML = "<thead><tr><th>Page</th><th>Family</th><th>Selector type</th><th>Revisions</th></tr></thead>";
       const tbody = document.createElement("tbody");
       factKeys.forEach((factKey) => {
-        const reference = catalog[factKey];
+        const page = pages[factKey];
+        const reference = page.current.reference;
         const family = reference.subject_document ? reference.subject_document.family : "";
         const selectorType = reference.selector ? reference.selector.type : "";
-        const referenceId = reference.reference_id || "";
         const row = document.createElement("tr");
-        [factKey, family, selectorType, referenceId].forEach((value) => row.appendChild(cell(value)));
+        const linkCell = document.createElement("td");
+        const link = document.createElement("a");
+        link.href = `?page=${encodeURIComponent(factKey)}`;
+        link.textContent = factKey;
+        linkCell.appendChild(link);
+        row.appendChild(linkCell);
+        [family, selectorType, String(page.revision_count)].forEach((value) => row.appendChild(cell(value)));
         tbody.appendChild(row);
       });
       table.appendChild(tbody);
       content.appendChild(table);
     }
 
-    fetch("/api/references")
-      .then((response) => {
-        if (!response.ok) {
-          throw new Error(`Server returned ${response.status}`);
+    function renderPage(factKey, page) {
+      const content = document.getElementById("content");
+      content.innerHTML = "";
+
+      const heading = document.createElement("h2");
+      heading.textContent = factKey;
+      content.appendChild(heading);
+
+      const reference = page.current.reference;
+      const summary = document.createElement("p");
+      const family = reference.subject_document ? reference.subject_document.family : "";
+      const selectorType = reference.selector ? reference.selector.type : "";
+      summary.textContent = `${family} / ${selectorType} / ${reference.reference_id || ""}`;
+      content.appendChild(summary);
+
+      const historyHeading = document.createElement("h3");
+      historyHeading.textContent = "History";
+      content.appendChild(historyHeading);
+
+      const table = document.createElement("table");
+      table.innerHTML = "<thead><tr><th>When</th><th>Author</th><th>Comment</th></tr></thead>";
+      const tbody = document.createElement("tbody");
+      [...page.history].reverse().forEach((revision) => {
+        const row = document.createElement("tr");
+        row.appendChild(cell(revision.created_at));
+        row.appendChild(cell(revision.author));
+        const commentCell = cell(revision.is_correction ? `[correction] ${revision.comment}` : revision.comment);
+        if (revision.is_correction) {
+          commentCell.classList.add("correction");
         }
-        return response.json();
-      })
-      .then(renderCatalog)
-      .catch((error) => renderError(`Failed to load the references catalog: ${error.message}`));
+        row.appendChild(commentCell);
+        tbody.appendChild(row);
+      });
+      table.appendChild(tbody);
+      content.appendChild(table);
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    const factKey = params.get("page");
+
+    if (factKey) {
+      fetch(`/api/pages/${encodeURIComponent(factKey)}`)
+        .then((response) => {
+          if (!response.ok) {
+            throw new Error(`Server returned ${response.status}`);
+          }
+          return response.json();
+        })
+        .then((page) => renderPage(factKey, page))
+        .catch((error) => renderError(`Failed to load this page: ${error.message}`));
+    } else {
+      fetch("/api/pages")
+        .then((response) => {
+          if (!response.ok) {
+            throw new Error(`Server returned ${response.status}`);
+          }
+          return response.json();
+        })
+        .then(renderIndex)
+        .catch((error) => renderError(`Failed to load the page index: ${error.message}`));
+    }
   </script>
 </body>
 </html>
