@@ -22,4 +22,4 @@ dev = ["pytest>=8.0", "reportlab>=4.0", "httpx>=0.24"]
 testpaths = ["tests"]
 
 [tool.setuptools.packages.find]
-include = ["reference_model*", "staleness_sweep*", "review_surfacing*", "review_recording*", "review_consultation*", "webapp*", "references_catalog*"]
+include = ["reference_model*", "staleness_sweep*", "review_surfacing*", "review_recording*", "review_consultation*", "webapp*", "references_catalog*", "discovery*"]
