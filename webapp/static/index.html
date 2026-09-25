@@ -45,13 +45,14 @@
         return;
       }
       const table = document.createElement("table");
-      table.innerHTML = "<thead><tr><th>Page</th><th>Family</th><th>Selector type</th><th>Revisions</th></tr></thead>";
+      table.innerHTML = "<thead><tr><th>Page</th><th>Family</th><th>Selector type</th><th>Current reference ID</th><th>Revisions</th></tr></thead>";
       const tbody = document.createElement("tbody");
       factKeys.forEach((factKey) => {
         const page = pages[factKey];
         const reference = page.current.reference;
         const family = reference.subject_document ? reference.subject_document.family : "";
         const selectorType = reference.selector ? reference.selector.type : "";
+        const referenceId = reference.reference_id || "";
         const row = document.createElement("tr");
         const linkCell = document.createElement("td");
         const link = document.createElement("a");
@@ -59,7 +60,13 @@
         link.textContent = factKey;
         linkCell.appendChild(link);
         row.appendChild(linkCell);
-        [family, selectorType, String(page.revision_count)].forEach((value) => row.appendChild(cell(value)));
+        const referenceIdCell = cell(referenceId);
+        if (page.current.is_correction) {
+          referenceIdCell.classList.add("correction");
+        }
+        [family, selectorType].forEach((value) => row.appendChild(cell(value)));
+        row.appendChild(referenceIdCell);
+        row.appendChild(cell(String(page.revision_count)));
         tbody.appendChild(row);
       });
       table.appendChild(tbody);

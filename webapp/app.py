@@ -18,6 +18,8 @@ app = FastAPI()
 
 
 def _catalog_path() -> Path:
+    # Read at call time, not import time, so tests can override it via
+    # REFERENCES_CATALOG_PATH without needing a fresh process per test.
     return Path(os.environ.get("REFERENCES_CATALOG_PATH", DEFAULT_CATALOG_PATH))
 
 

@@ -118,14 +118,17 @@ class PageSummary:
 
 
 def _revision_from_dict(data: dict) -> Revision:
-    return Revision(
-        revision_id=data["revision_id"],
-        reference=data["reference"],
-        author=data["author"],
-        comment=data["comment"],
-        is_correction=data["is_correction"],
-        created_at=data["created_at"],
-    )
+    try:
+        return Revision(
+            revision_id=data["revision_id"],
+            reference=data["reference"],
+            author=data["author"],
+            comment=data["comment"],
+            is_correction=data["is_correction"],
+            created_at=data["created_at"],
+        )
+    except KeyError as e:
+        raise CatalogLoadError(f"revision is missing field {e}") from e
 
 
 def load_catalog(catalog_path: str | Path) -> dict:
@@ -136,6 +139,12 @@ def load_catalog(catalog_path: str | Path) -> dict:
         raise CatalogLoadError(f"{path}: not valid JSON") from e
     if not isinstance(raw, dict):
         raise CatalogLoadError(f"{path}: expected a JSON object")
+    for fact_key, value in raw.items():
+        if not isinstance(value, list):
+            raise CatalogLoadError(
+                f"{path}: {fact_key!r} is not a revision list "
+                "(pre-revision-history catalog format?)"
+            )
     return raw
 
 
@@ -160,9 +169,19 @@ def add_revision(
     )
     page.append(dataclasses.asdict(revision))
 
+    # Write to a sibling temp file, then rename over the target -- os.replace()
+    # is atomic on POSIX, so a process killed mid-write leaves the original
+    # file untouched rather than truncated or partially written. If the write
+    # or rename itself fails, remove the temp file rather than leaving an
+    # orphan behind in a directory (e.g. the real, git-tracked ontologies
+    # checkout) that's supposed to stay clean.
     tmp_path = path.with_suffix(path.suffix + ".tmp")
-    tmp_path.write_text(json.dumps(catalog, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    os.replace(tmp_path, path)
+    try:
+        tmp_path.write_text(json.dumps(catalog, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        os.replace(tmp_path, path)
+    except BaseException:
+        tmp_path.unlink(missing_ok=True)
+        raise
     return revision
 
 
@@ -228,6 +247,8 @@ app = FastAPI()
 
 
 def _catalog_path() -> Path:
+    # Read at call time, not import time, so tests can override it via
+    # REFERENCES_CATALOG_PATH without needing a fresh process per test.
     return Path(os.environ.get("REFERENCES_CATALOG_PATH", DEFAULT_CATALOG_PATH))
 
 
@@ -268,8 +289,14 @@ parameter — still no build step, no framework:
 
 - **No `page` param** (the index): fetches `/api/pages`, renders a table
   of every page — its `fact_key` as a link, its current citation's
-  family and selector type, and its revision count. An empty catalog
-  shows an honest "No pages yet." message, same convention as before.
+  family, selector type, and **reference ID** (visually marked if the
+  current revision is a correction), and its revision count. The
+  reference ID is included specifically because it's the one column that
+  actually changes when a correction lands — family and selector type
+  are typically identical across revisions of the same page, so without
+  it the index can't show *that* something changed, only *how many*
+  times. An empty catalog shows an honest "No pages yet." message, same
+  convention as before.
 - **`?page=<fact_key>`**: fetches `/api/pages/<fact_key>`, renders that
   page's current citation prominently, then a full History table below
   (newest first) showing each revision's timestamp, author, and comment
@@ -301,9 +328,16 @@ matching the established pattern throughout this project:
 - The written catalog file is pretty-printed and key-sorted (as before),
   and a rejected/failed write (malformed existing catalog, an
   interrupted write simulated via a monkeypatched `os.replace`) leaves
-  the file byte-for-byte unchanged and no leftover temp file — the same
-  guarantees the previous sub-project's own tests already established,
-  re-verified against the new list-based format.
+  the file byte-for-byte unchanged **and no leftover `.tmp` file** — the
+  same guarantees the previous sub-project's own tests already
+  established, re-verified against the new list-based format and
+  explicitly asserted (not just implied) for the interrupted-write case.
+- A catalog written in the pre-revision-history flat shape (or containing
+  a revision missing a required field) raises `CatalogLoadError` — never
+  an opaque `KeyError`/`TypeError` from deep inside `get_history()`/
+  `list_pages()` — since `REFERENCES_CATALOG_PATH` is a user-settable
+  environment variable and old-format catalogs genuinely exist from the
+  previous, now-replaced sub-project.
 - `list_pages()` on a multi-page catalog returns one `PageSummary` per
   page, each with the correct `revision_count` and `current` revision;
   on an empty catalog it returns `{}`.
@@ -322,7 +356,20 @@ matching the established pattern throughout this project:
 
 - **The interaction layer** — a real edit form calling `add_revision()`
   with a human's actual input, still the single most-repeated "still
-  missing" item across this project's specs.
+  missing" item across this project's specs. **Must address**
+  concurrent writes when it's designed: `add_revision()` today is an
+  unlocked read-modify-write (load the whole catalog, mutate in memory,
+  atomically replace the file) — two truly concurrent calls for the same
+  `fact_key` can silently lose one caller's revision, with no error,
+  because the atomic rename makes the second writer's full-catalog
+  snapshot win outright. Not reachable today, since nothing yet calls
+  `add_revision()` except test code and manual scripts (no concurrent
+  caller exists), but the whole premise of a page+revision model is
+  repeated, potentially concurrent edits to the same page — the
+  interaction layer needs either a file lock or a compare-and-swap on
+  the page's last `revision_id` (the real Wikipedia model this design
+  follows calls this an "edit conflict") before it can be safely
+  multi-user.
 - **Talk-page-style discussion**, using this exact revision mechanism in
   a different namespace, once there's a real reason to build it.
 - **Diffing between revisions** — showing what actually changed in the

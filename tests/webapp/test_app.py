@@ -11,6 +11,10 @@ AORDNR_XPATH = (
     "/xs:schema/xs:complexType[@name='AmtlicheOrdnungsnummerMa23ListeType']"
     "/xs:sequence/xs:element[@name='AOrdNr']"
 )
+ABGEF_XPATH = (
+    "/xs:schema/xs:complexType[@name='Meldeart23']/xs:complexContent"
+    "/xs:extension/xs:sequence/xs:element[@name='AbgefKapitalertragsteuer']"
+)
 
 
 def _subject_document() -> SubjectDocument:
@@ -44,6 +48,26 @@ def test_list_pages_endpoint_returns_real_pages_built_via_add_revision(tmp_path,
     assert body["fact-1"]["revision_count"] == 1
     assert body["fact-1"]["current"]["author"] == "julian"
     assert body["fact-1"]["current"]["comment"] == "initial"
+
+
+def test_list_pages_endpoint_reflects_the_current_not_the_first_revision(tmp_path, monkeypatch):
+    catalog_path = tmp_path / "references.json"
+    catalog_path.write_text("{}", encoding="utf-8")
+    leaf_1 = cite(_subject_document(), XPathSelector.create(AORDNR_XPATH))
+    leaf_2 = cite(_subject_document(), XPathSelector.create(ABGEF_XPATH))
+    add_revision(str(catalog_path), "fact-1", leaf_1, "julian", "initial", False)
+    add_revision(str(catalog_path), "fact-1", leaf_2, "julian", "corrected", True)
+    monkeypatch.setenv("REFERENCES_CATALOG_PATH", str(catalog_path))
+
+    client = TestClient(app)
+    response = client.get("/api/pages")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["fact-1"]["revision_count"] == 2
+    assert body["fact-1"]["current"]["comment"] == "corrected"
+    assert body["fact-1"]["current"]["is_correction"] is True
+    assert body["fact-1"]["current"]["reference"]["selector"]["value"] == ABGEF_XPATH
 
 
 def test_get_page_endpoint_returns_full_history_for_a_real_page(tmp_path, monkeypatch):

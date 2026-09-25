@@ -37,14 +37,17 @@ class PageSummary:
 
 
 def _revision_from_dict(data: dict) -> Revision:
-    return Revision(
-        revision_id=data["revision_id"],
-        reference=data["reference"],
-        author=data["author"],
-        comment=data["comment"],
-        is_correction=data["is_correction"],
-        created_at=data["created_at"],
-    )
+    try:
+        return Revision(
+            revision_id=data["revision_id"],
+            reference=data["reference"],
+            author=data["author"],
+            comment=data["comment"],
+            is_correction=data["is_correction"],
+            created_at=data["created_at"],
+        )
+    except KeyError as e:
+        raise CatalogLoadError(f"revision is missing field {e}") from e
 
 
 def load_catalog(catalog_path: str | Path) -> dict:
@@ -55,6 +58,12 @@ def load_catalog(catalog_path: str | Path) -> dict:
         raise CatalogLoadError(f"{path}: not valid JSON") from e
     if not isinstance(raw, dict):
         raise CatalogLoadError(f"{path}: expected a JSON object")
+    for fact_key, value in raw.items():
+        if not isinstance(value, list):
+            raise CatalogLoadError(
+                f"{path}: {fact_key!r} is not a revision list "
+                "(pre-revision-history catalog format?)"
+            )
     return raw
 
 
@@ -79,9 +88,19 @@ def add_revision(
     )
     page.append(dataclasses.asdict(revision))
 
+    # Write to a sibling temp file, then rename over the target -- os.replace()
+    # is atomic on POSIX, so a process killed mid-write leaves the original
+    # file untouched rather than truncated or partially written. If the write
+    # or rename itself fails, remove the temp file rather than leaving an
+    # orphan behind in a directory (e.g. the real, git-tracked ontologies
+    # checkout) that's supposed to stay clean.
     tmp_path = path.with_suffix(path.suffix + ".tmp")
-    tmp_path.write_text(json.dumps(catalog, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    os.replace(tmp_path, path)
+    try:
+        tmp_path.write_text(json.dumps(catalog, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        os.replace(tmp_path, path)
+    except BaseException:
+        tmp_path.unlink(missing_ok=True)
+        raise
     return revision
 
 

@@ -165,6 +165,7 @@ def test_add_revision_leaves_original_file_intact_if_write_is_interrupted(tmp_pa
 
     after = Path(catalog_path).read_text(encoding="utf-8")
     assert after == before
+    assert list(Path(tmp_path).glob("*.tmp")) == []
 
 
 def test_add_revision_leaves_no_leftover_temp_file(tmp_path):
@@ -212,3 +213,40 @@ def test_list_pages_summarizes_every_page_with_correct_revision_count_and_curren
 def test_list_pages_on_empty_catalog_returns_empty_dict(tmp_path):
     catalog_path = _empty_catalog(tmp_path)
     assert list_pages(catalog_path) == {}
+
+
+def test_load_catalog_raises_catalog_load_error_on_pre_revision_history_format(tmp_path):
+    # The previous sub-project's now-removed save_reference() wrote
+    # {fact_key: <flat reference dict>}, not {fact_key: [<revision>, ...]}.
+    # A catalog written in that old shape (or REFERENCES_CATALOG_PATH
+    # pointed at one) must fail loudly and specifically, not with an
+    # opaque KeyError/TypeError from deep inside get_history()/list_pages().
+    catalog_path = tmp_path / "old_format.json"
+    catalog_path.write_text(json.dumps({"fact-1": {"reference_id": "abc"}}), encoding="utf-8")
+
+    with pytest.raises(CatalogLoadError, match="revision list"):
+        load_catalog(str(catalog_path))
+
+
+def test_get_history_raises_catalog_load_error_on_pre_revision_history_format(tmp_path):
+    catalog_path = tmp_path / "old_format.json"
+    catalog_path.write_text(json.dumps({"fact-1": {"reference_id": "abc"}}), encoding="utf-8")
+
+    with pytest.raises(CatalogLoadError):
+        get_history(str(catalog_path), "fact-1")
+
+
+def test_list_pages_raises_catalog_load_error_on_pre_revision_history_format(tmp_path):
+    catalog_path = tmp_path / "old_format.json"
+    catalog_path.write_text(json.dumps({"fact-1": {"reference_id": "abc"}}), encoding="utf-8")
+
+    with pytest.raises(CatalogLoadError):
+        list_pages(str(catalog_path))
+
+
+def test_get_history_raises_catalog_load_error_on_revision_missing_a_field(tmp_path):
+    catalog_path = tmp_path / "broken.json"
+    catalog_path.write_text(json.dumps({"fact-1": [{"revision_id": "x"}]}), encoding="utf-8")
+
+    with pytest.raises(CatalogLoadError):
+        get_history(str(catalog_path), "fact-1")
