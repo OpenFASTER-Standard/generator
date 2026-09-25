@@ -1,22 +1,50 @@
-"""Reads and writes the references catalog file. See
-docs/specs/2026-09-24-catalog-write-path-design.md.
+"""Reads and writes the references catalog: a page (fact_key) has an
+ordered history of immutable revisions. See
+docs/specs/2026-09-25-catalog-revision-history-design.md.
 """
 from __future__ import annotations
 
+import dataclasses
 import json
 import os
+import uuid
+from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 
 from reference_model.model import Reference
 from reference_model.serialize import to_json_dict
 
 
-class DuplicateFactKeyError(Exception):
-    pass
-
-
 class CatalogLoadError(Exception):
     pass
+
+
+@dataclass(frozen=True)
+class Revision:
+    revision_id: str
+    reference: dict
+    author: str
+    comment: str
+    is_correction: bool
+    created_at: str
+
+
+@dataclass(frozen=True)
+class PageSummary:
+    revision_count: int
+    current: Revision
+
+
+def _revision_from_dict(data: dict) -> Revision:
+    return Revision(
+        revision_id=data["revision_id"],
+        reference=data["reference"],
+        author=data["author"],
+        comment=data["comment"],
+        is_correction=data["is_correction"],
+        created_at=data["created_at"],
+    )
 
 
 def load_catalog(catalog_path: str | Path) -> dict:
@@ -30,16 +58,49 @@ def load_catalog(catalog_path: str | Path) -> dict:
     return raw
 
 
-def save_reference(catalog_path: str | Path, fact_key: str, reference: Reference) -> None:
+def add_revision(
+    catalog_path: str | Path,
+    fact_key: str,
+    reference: Reference,
+    author: str,
+    comment: str,
+    is_correction: bool,
+) -> Revision:
     path = Path(catalog_path)
     catalog = load_catalog(path)
-    if fact_key in catalog:
-        raise DuplicateFactKeyError(f"{fact_key!r} already exists in {path}")
-    catalog[fact_key] = to_json_dict(reference)
+    page = catalog.setdefault(fact_key, [])
+    revision = Revision(
+        revision_id=str(uuid.uuid4()),
+        reference=to_json_dict(reference),
+        author=author,
+        comment=comment,
+        is_correction=is_correction,
+        created_at=datetime.now(timezone.utc).isoformat(),
+    )
+    page.append(dataclasses.asdict(revision))
 
-    # Write to a sibling temp file, then rename over the target -- os.replace()
-    # is atomic on POSIX, so a process killed mid-write leaves the original
-    # file untouched rather than truncated or partially written.
     tmp_path = path.with_suffix(path.suffix + ".tmp")
     tmp_path.write_text(json.dumps(catalog, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     os.replace(tmp_path, path)
+    return revision
+
+
+def get_current_revision(catalog_path: str | Path, fact_key: str) -> Revision | None:
+    page = load_catalog(catalog_path).get(fact_key)
+    if not page:
+        return None
+    return _revision_from_dict(page[-1])
+
+
+def get_history(catalog_path: str | Path, fact_key: str) -> list[Revision]:
+    page = load_catalog(catalog_path).get(fact_key, [])
+    return [_revision_from_dict(r) for r in page]
+
+
+def list_pages(catalog_path: str | Path) -> dict[str, PageSummary]:
+    catalog = load_catalog(catalog_path)
+    return {
+        fact_key: PageSummary(revision_count=len(revisions), current=_revision_from_dict(revisions[-1]))
+        for fact_key, revisions in catalog.items()
+        if revisions
+    }
