@@ -1,5 +1,12 @@
 # Interconnected Provenance UI Implementation Plan
 
+> **SUPERSEDED (2026-09-28).** Executed and merged, then wholesale
+> deleted along with the rest of the old Oxigraph/React stack in
+> `7eeb248` ("Remove the old pre-reset codebase — never extended, would
+> break once mikadiv-fm/sources/ is restructured"). See
+> `docs/specs/2026-09-15-provenance-and-review-platform-design.md`'s
+> superseded-banner for what replaced it. Kept only as history.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Replace the tab-based Plan D frontend with three switchable, interlinked

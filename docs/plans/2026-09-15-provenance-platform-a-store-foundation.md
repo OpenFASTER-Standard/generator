@@ -1,5 +1,10 @@
 # Provenance Platform — Plan A: Store, Provenance & Citations Foundation
 
+> **SUPERSEDED (2026-09-28).** Executed and merged, then wholesale
+> deleted in `7eeb248` along with the rest of the Oxigraph/React stack.
+> See `docs/specs/2026-09-15-provenance-and-review-platform-design.md`'s
+> superseded-banner for what replaced it. Kept only as history.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build the persistent, embedded Oxigraph-backed store that replaces

@@ -1,5 +1,15 @@
 # Interconnected Provenance UI — Design
 
+> **SUPERSEDED (2026-09-28).** This design (and its implementation plan,
+> `docs/plans/2026-09-17-interconnected-provenance-ui.md`) was fully
+> built and merged, then wholesale deleted along with the rest of the
+> old Oxigraph/React stack in `7eeb248` ("Remove the old pre-reset
+> codebase — never extended, would break once mikadiv-fm/sources/ is
+> restructured"). See
+> `docs/specs/2026-09-15-provenance-and-review-platform-design.md`'s own
+> superseded-banner for what replaced it. Kept here only as history — do
+> not treat this as live roadmap or design authority.
+
 **Status:** Approved for planning (section-by-section design approved live; see
 `.superpowers/sdd/` plans once written).
 

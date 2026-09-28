@@ -1,5 +1,18 @@
 # Provenance & Review Platform — Design
 
+> **SUPERSEDED (2026-09-28).** This design (and its 4 implementation
+> plans, `docs/plans/2026-09-15-provenance-platform-{a,b,c,d}-*.md`, plus
+> the follow-up `docs/specs/2026-09-17-interconnected-provenance-ui-design.md`)
+> was fully built and merged, then wholesale deleted in `7eeb248` ("Remove
+> the old pre-reset codebase — never extended, would break once
+> mikadiv-fm/sources/ is restructured"). It was rebuilt from scratch with
+> a much simpler design: no RDF/SPARQL/Oxigraph, no React — see
+> `reference_model`, `staleness_sweep`, `review_surfacing`,
+> `review_recording`, `review_consultation`, `references_catalog`,
+> `discovery`, and `citation_workflow`, each with its own small spec+plan
+> under `docs/specs/`/`docs/plans/`. Kept here only as history — do not
+> treat this as live roadmap or design authority.
+
 Sub-project 3b, Phase 2, of `/work/openfaster-restructuring/STATUS.md`.
 Phase 1 (a self-contained static `report.html`, see
 `2026-09-15-generator-output-report-design.md`) is complete, merged, and
