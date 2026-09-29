@@ -10,6 +10,7 @@ import os
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from enum import Enum
 from pathlib import Path
 
 from reference_model.model import Reference
@@ -20,6 +21,20 @@ class CatalogLoadError(Exception):
     pass
 
 
+class RevisionKind(Enum):
+    # CITATION is a curator's cited span of a source document -- the only
+    # kind of revision that can ever be a page's "current" reference, since
+    # it's the only kind staleness_sweep knows how to resolve/check. REVIEW
+    # is a review-decision event (see review_recording/record.py's
+    # review-<uuid> synthetic subject_document) appended for browsability
+    # per docs/specs/2026-09-29-webapp-react-rebuild-design.md -- it must
+    # never become "current", or the page's real citation stops being
+    # swept for drift the moment it's ever reviewed (see that same spec's
+    # audit finding on this exact seam).
+    CITATION = "citation"
+    REVIEW = "review"
+
+
 @dataclass(frozen=True)
 class Revision:
     revision_id: str
@@ -28,6 +43,7 @@ class Revision:
     comment: str
     is_correction: bool
     created_at: str
+    kind: str = RevisionKind.CITATION.value
 
 
 @dataclass(frozen=True)
@@ -45,9 +61,21 @@ def _revision_from_dict(data: dict) -> Revision:
             comment=data["comment"],
             is_correction=data["is_correction"],
             created_at=data["created_at"],
+            # Missing only for a revision written before this field existed
+            # (there are none in any real, committed catalog as of this
+            # change) -- unambiguously a citation, since REVIEW-kind
+            # revisions did not exist until this field did.
+            kind=data.get("kind", RevisionKind.CITATION.value),
         )
     except KeyError as e:
         raise CatalogLoadError(f"revision is missing field {e}") from e
+
+
+def _latest_citation(revisions: list[Revision]) -> Revision | None:
+    for revision in reversed(revisions):
+        if revision.kind == RevisionKind.CITATION.value:
+            return revision
+    return None
 
 
 def load_catalog(catalog_path: str | Path) -> dict:
@@ -74,6 +102,7 @@ def add_revision(
     author: str,
     comment: str,
     is_correction: bool,
+    kind: RevisionKind = RevisionKind.CITATION,
 ) -> Revision:
     path = Path(catalog_path)
     catalog = load_catalog(path)
@@ -85,6 +114,7 @@ def add_revision(
         comment=comment,
         is_correction=is_correction,
         created_at=datetime.now(timezone.utc).isoformat(),
+        kind=kind.value,
     )
     page.append(dataclasses.asdict(revision))
 
@@ -105,10 +135,8 @@ def add_revision(
 
 
 def get_current_revision(catalog_path: str | Path, fact_key: str) -> Revision | None:
-    page = load_catalog(catalog_path).get(fact_key)
-    if not page:
-        return None
-    return _revision_from_dict(page[-1])
+    page = load_catalog(catalog_path).get(fact_key, [])
+    return _latest_citation([_revision_from_dict(r) for r in page])
 
 
 def get_history(catalog_path: str | Path, fact_key: str) -> list[Revision]:
@@ -118,8 +146,9 @@ def get_history(catalog_path: str | Path, fact_key: str) -> list[Revision]:
 
 def list_pages(catalog_path: str | Path) -> dict[str, PageSummary]:
     catalog = load_catalog(catalog_path)
-    return {
-        fact_key: PageSummary(revision_count=len(revisions), current=_revision_from_dict(revisions[-1]))
-        for fact_key, revisions in catalog.items()
-        if revisions
-    }
+    pages = {}
+    for fact_key, revisions in catalog.items():
+        current = _latest_citation([_revision_from_dict(r) for r in revisions])
+        if current is not None:
+            pages[fact_key] = PageSummary(revision_count=len(revisions), current=current)
+    return pages

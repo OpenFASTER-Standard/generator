@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from reference_model.deserialize import ReferenceDeserializationError, from_json_dict
-from references_catalog.catalog import Revision, add_revision, list_pages
+from references_catalog.catalog import Revision, RevisionKind, add_revision, list_pages
 from review_consultation.consult import apply_reviews, load_reviews
 from review_recording.record import Verdict, record_review
 from review_surfacing.summarize import FlaggedLeaf, ReviewSummary, summarize_for_review
@@ -57,4 +57,5 @@ def submit_review(
     return add_revision(
         catalog_path, fact_key, leaf, reviewer,
         f"Review ({verdict.value}): {reasoning}", is_correction=False,
+        kind=RevisionKind.REVIEW,
     )

@@ -72,3 +72,37 @@ def test_get_review_summary_runs_apply_reviews_end_to_end(tmp_path):
     result_before = get_review_summary(str(catalog_path), MODULE_ROOT, str(reviews_dir))
     assert result_before.summary.flagged == {}
     assert result_before.deserialization_failures == ()
+
+
+def test_submitting_a_review_does_not_stop_the_fact_key_from_being_swept_again(tmp_path):
+    # The architectural bug found in the 2026-09-29 audit, predicted by name
+    # in docs/specs/2026-09-23-review-recording-design.md's own warning:
+    # submit_review() appends a REVIEW-kind revision on the fact_key it
+    # reviewed. If that revision were ever treated as the page's "current"
+    # citation, the next get_review_summary() would try to resolve family
+    # "review-<uuid>" (never in any real manifest), get NOT_FOUND, and drop
+    # the fact_key into excluded_keys -- silently ending drift monitoring
+    # for exactly the fact a human just looked at. Assert the real seam:
+    # after a review, the fact_key is still genuinely swept, not excluded.
+    catalog_path = tmp_path / "references.json"
+    catalog_path.write_text("{}")
+    reviews_dir = tmp_path / "reviews"
+    leaf = _real_leaf("MiKaDiv_FM_Meldeart23", "/xs:schema/xs:complexType[@name='Meldeart23']")
+    add_revision(str(catalog_path), "some-key", leaf, "author", "comment", False)
+
+    flagged = FlaggedLeaf(
+        leaf=leaf,
+        outcome=ResolutionOutcome(status=Status.RESOLVED),
+        drift_kind=DriftKind.CONTENT,
+        fingerprint="abc123",
+    )
+    submit_review(str(catalog_path), str(reviews_dir), "some-key", flagged, "reviewer-1", Verdict.APPROVED, "fine")
+
+    result = get_review_summary(str(catalog_path), MODULE_ROOT, str(reviews_dir))
+
+    assert "some-key" not in result.summary.excluded_keys
+    assert result.summary.unresolved_families == ()
+    # Suppressed via apply_reviews() (the approved fingerprint matching),
+    # not via exclusion from the sweep entirely -- the distinction Finding 1
+    # is about.
+    assert "some-key" not in result.summary.flagged

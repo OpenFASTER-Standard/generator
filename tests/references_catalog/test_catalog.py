@@ -10,6 +10,7 @@ from reference_model.selectors.xpath_selector import XPathSelector
 from reference_model.serialize import to_json_dict
 from references_catalog.catalog import (
     CatalogLoadError,
+    RevisionKind,
     add_revision,
     get_current_revision,
     get_history,
@@ -213,6 +214,39 @@ def test_list_pages_summarizes_every_page_with_correct_revision_count_and_curren
 def test_list_pages_on_empty_catalog_returns_empty_dict(tmp_path):
     catalog_path = _empty_catalog(tmp_path)
     assert list_pages(catalog_path) == {}
+
+
+def test_add_revision_defaults_to_citation_kind(tmp_path):
+    catalog_path = _empty_catalog(tmp_path)
+    leaf = cite(_subject_document(), XPathSelector.create(AORDNR_XPATH))
+
+    revision = add_revision(catalog_path, "fact-1", leaf, "julian", "initial citation", False)
+
+    assert revision.kind == RevisionKind.CITATION.value
+
+
+def test_a_review_revision_never_becomes_the_page_current_or_list_pages_current(tmp_path):
+    # The architectural bug found in the 2026-09-29 audit: submit_review()
+    # appends a REVIEW-kind revision (an internal bookkeeping event, not a
+    # citation), and that must never displace the page's real citation as
+    # "current" -- neither via get_current_revision() nor via list_pages(),
+    # since both drive what staleness_sweep actually checks going forward.
+    catalog_path = _empty_catalog(tmp_path)
+    leaf = cite(_subject_document(), XPathSelector.create(AORDNR_XPATH))
+    citation = add_revision(catalog_path, "fact-1", leaf, "julian", "initial citation", False)
+
+    add_revision(
+        catalog_path, "fact-1", leaf, "reviewer-1", "Review (approved): looks fine", False,
+        kind=RevisionKind.REVIEW,
+    )
+
+    current = get_current_revision(catalog_path, "fact-1")
+    assert current.revision_id == citation.revision_id
+    assert current.kind == RevisionKind.CITATION.value
+
+    pages = list_pages(catalog_path)
+    assert pages["fact-1"].current.revision_id == citation.revision_id
+    assert pages["fact-1"].revision_count == 2
 
 
 def test_load_catalog_raises_catalog_load_error_on_pre_revision_history_format(tmp_path):

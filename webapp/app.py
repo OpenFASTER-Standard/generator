@@ -21,7 +21,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from citation_workflow.add_citation import FamilyNotCitableError, FamilyNotFoundError, add_citation
 from discovery.corpus_candidates import list_corpus_candidates
 from reference_model.cite import CitationError
-from references_catalog.catalog import get_history, list_pages
+from references_catalog.catalog import get_current_revision, get_history, list_pages
 from review_recording.record import Verdict
 from review_workflow.orchestrate import get_review_summary, submit_review
 
@@ -94,9 +94,10 @@ def get_page(fact_key: str) -> dict:
     history = get_history(_catalog_path(), fact_key)
     if not history:
         raise HTTPException(status_code=404, detail=f"No such page: {fact_key!r}")
+    current = get_current_revision(_catalog_path(), fact_key)
     return {
         "fact_key": fact_key,
-        "current": dataclasses.asdict(history[-1]),
+        "current": dataclasses.asdict(current) if current is not None else None,
         "history": [dataclasses.asdict(r) for r in history],
     }
 
