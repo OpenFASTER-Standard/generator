@@ -1,0 +1,58 @@
+import { describe, expect, it, vi, beforeEach } from "vitest"
+import { render, screen, within, fireEvent, waitFor } from "@testing-library/react"
+import { MemoryRouter } from "react-router-dom"
+import { AddCitationView } from "./AddCitationView"
+import * as api from "../api"
+
+const candidates = {
+  "Family-A": [
+    { tag: "xs:element", name: "Foo", xpath: "//Foo" },
+    { tag: "xs:element", name: "Bar", xpath: "//Bar" },
+  ],
+}
+
+beforeEach(() => {
+  vi.restoreAllMocks()
+})
+
+describe("AddCitationView", () => {
+  it("filters a family's candidates by the filter input", async () => {
+    vi.spyOn(api, "fetchCandidates").mockResolvedValue(candidates as any)
+    render(
+      <MemoryRouter>
+        <AddCitationView />
+      </MemoryRouter>
+    )
+
+    fireEvent.click(await screen.findByText(/Family-A/))
+    expect(await screen.findByText("Foo")).toBeInTheDocument()
+    expect(screen.getByText("Bar")).toBeInTheDocument()
+
+    fireEvent.change(screen.getByPlaceholderText(/filter/i), { target: { value: "foo" } })
+    expect(screen.getByText("Foo")).toBeInTheDocument()
+    expect(screen.queryByText("Bar")).not.toBeInTheDocument()
+  })
+
+  it("submits a citation and navigates to the resulting page", async () => {
+    vi.spyOn(api, "fetchCandidates").mockResolvedValue(candidates as any)
+    vi.spyOn(api, "submitCitation").mockResolvedValue({ fact_key: "new-key", revision: {} as any })
+    render(
+      <MemoryRouter>
+        <AddCitationView />
+      </MemoryRouter>
+    )
+
+    fireEvent.click(await screen.findByText(/Family-A/))
+    const fooRow = (await screen.findByText("Foo")).closest("tr")!
+    fireEvent.click(within(fooRow).getByText("Cite this"))
+    fireEvent.change(screen.getByLabelText(/Fact key/i), { target: { value: "new-key" } })
+    fireEvent.change(screen.getByLabelText(/Author/i), { target: { value: "me" } })
+    fireEvent.click(screen.getByText("Submit citation"))
+
+    await waitFor(() =>
+      expect(api.submitCitation).toHaveBeenCalledWith(
+        expect.objectContaining({ family: "Family-A", xpath: "//Foo", fact_key: "new-key", author: "me" })
+      )
+    )
+  })
+})
