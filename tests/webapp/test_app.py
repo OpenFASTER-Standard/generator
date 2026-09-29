@@ -114,12 +114,17 @@ def test_list_pages_endpoint_returns_a_server_error_when_catalog_file_is_missing
     assert response.status_code == 500
 
 
-def test_static_index_page_is_served_at_root():
+def test_spa_shell_is_served_at_root():
     client = TestClient(app)
     response = client.get("/")
 
     assert response.status_code == 200
     assert "text/html" in response.headers["content-type"]
+    # Asserts it's genuinely the built React SPA shell, not just any HTML --
+    # webapp/static/index.html (a now-deleted, superseded vanilla-JS page)
+    # used to also satisfy the weaker "returns text/html" check this test
+    # had before, which is exactly how it went undetected as dead code.
+    assert 'id="root"' in response.text
 
 
 def test_old_references_endpoint_no_longer_exists():
