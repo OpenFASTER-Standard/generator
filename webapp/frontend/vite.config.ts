@@ -22,6 +22,11 @@ export default defineConfig({
         // added, or an orphaned old bundle nothing references anymore.
         // Stable names mean every rebuild modifies the same paths in
         // place instead.
+        // [name] alone (no hash) means two assets that ever end up with
+        // the same base name would silently collide -- not a concern for
+        // this app's current asset set (checked: the vendored Geist font
+        // subsets already have distinct names), but worth knowing if a
+        // future asset addition needs a name check.
         entryFileNames: 'assets/[name].js',
         chunkFileNames: 'assets/[name].js',
         assetFileNames: 'assets/[name][extname]',

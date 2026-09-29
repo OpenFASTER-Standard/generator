@@ -211,6 +211,23 @@ def submit_review_endpoint(request: SubmitReviewRequest) -> dict:
 
 _FRONTEND_DIST = Path(__file__).parent / "frontend_dist"
 
+
+@app.middleware("http")
+async def no_heuristic_caching_for_the_spa(request: Request, call_next):
+    # vite.config.ts deliberately uses stable, unhashed asset filenames
+    # (frontend_dist/ is committed and deployed as-is, no CI/deploy build
+    # step) -- without an explicit Cache-Control, a browser applies
+    # heuristic freshness to a same-named response and may serve a stale
+    # bundle after a real deploy without ever revalidating. "no-cache"
+    # (not "no-store") keeps ETag/Last-Modified revalidation working --
+    # every request still round-trips, it just can't skip that round trip
+    # on a heuristic guess.
+    response = await call_next(request)
+    if not request.url.path.startswith("/api/"):
+        response.headers["Cache-Control"] = "no-cache"
+    return response
+
+
 app.mount("/", StaticFiles(directory=_FRONTEND_DIST, html=True), name="static")
 
 

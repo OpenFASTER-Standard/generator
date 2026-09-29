@@ -128,6 +128,26 @@ def test_spa_shell_is_served_at_root():
     # used to also satisfy the weaker "returns text/html" check this test
     # had before, which is exactly how it went undetected as dead code.
     assert 'id="root"' in response.text
+    # frontend_dist/'s built assets use stable, unhashed filenames (see
+    # vite.config.ts's own comment on why) -- without this header, browsers
+    # apply heuristic freshness to a same-named response and may serve a
+    # stale bundle after a deploy without ever revalidating.
+    assert response.headers["cache-control"] == "no-cache"
+
+
+def test_static_assets_also_get_no_cache_so_stable_filenames_dont_go_stale():
+    client = TestClient(app)
+    response = client.get("/assets/index.js")
+
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "no-cache"
+
+
+def test_api_responses_are_not_affected_by_the_spa_cache_control_header():
+    client = TestClient(app)
+    response = client.get("/api/pages")
+
+    assert "cache-control" not in {k.lower() for k in response.headers.keys()}
 
 
 def test_old_references_endpoint_no_longer_exists():
