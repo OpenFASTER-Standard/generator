@@ -352,3 +352,63 @@ def test_add_citation_endpoint_returns_400_for_a_non_xsd_family():
 
     assert response.status_code == 400
     assert client.get("/api/pages/fact-8").status_code == 404
+
+
+def test_get_review_returns_deserialization_failures_separately(tmp_path, monkeypatch):
+    catalog_path = tmp_path / "references.json"
+    catalog_path.write_text(json.dumps({
+        "bad-key": [{
+            "revision_id": "x", "reference": {"not": "real"},
+            "author": "a", "comment": "c", "is_correction": False, "created_at": "2026-01-01T00:00:00+00:00",
+        }]
+    }))
+    monkeypatch.setenv("REFERENCES_CATALOG_PATH", str(catalog_path))
+    monkeypatch.setenv("MIKADIV_REVIEWS_DIR", str(tmp_path / "reviews"))
+    client = TestClient(app)
+
+    response = client.get("/api/review")
+
+    assert response.status_code == 200
+    assert response.json()["deserialization_failures"] == ["bad-key"]
+
+
+def test_post_reviews_rejects_a_leaf_reference_id_that_is_not_currently_flagged(tmp_path, monkeypatch):
+    catalog_path = tmp_path / "references.json"
+    catalog_path.write_text("{}")
+    monkeypatch.setenv("REFERENCES_CATALOG_PATH", str(catalog_path))
+    monkeypatch.setenv("MIKADIV_REVIEWS_DIR", str(tmp_path / "reviews"))
+    client = TestClient(app)
+
+    response = client.post("/api/reviews", json={
+        "fact_key": "no-such-key", "leaf_reference_id": "does-not-exist",
+        "reviewer": "r", "verdict": "approved", "reasoning": "x",
+    })
+
+    assert response.status_code == 404
+
+
+def test_post_reviews_rejects_an_invalid_verdict_string(tmp_path, monkeypatch):
+    monkeypatch.setenv("REFERENCES_CATALOG_PATH", str(tmp_path / "references.json"))
+    (tmp_path / "references.json").write_text("{}")
+    monkeypatch.setenv("MIKADIV_REVIEWS_DIR", str(tmp_path / "reviews"))
+    client = TestClient(app)
+
+    response = client.post("/api/reviews", json={
+        "fact_key": "k", "leaf_reference_id": "r", "reviewer": "r", "verdict": "maybe", "reasoning": "x",
+    })
+
+    assert response.status_code == 400
+
+
+def test_a_real_api_404_is_not_masked_by_the_spa_fallback():
+    client = TestClient(app)
+    response = client.get("/api/pages/does-not-exist-at-all")
+    assert response.status_code == 404
+    assert response.json()["detail"]  # a real JSON error body, not HTML
+
+
+def test_an_unknown_non_api_path_gets_the_spa_shell():
+    client = TestClient(app)
+    response = client.get("/pages/whatever-react-router-will-own")
+    assert response.status_code == 200
+    assert "html" in response.headers["content-type"]
