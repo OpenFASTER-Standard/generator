@@ -66,19 +66,26 @@ export function ReviewView() {
       reasoning,
     })
       .then(() => {
-        setReview((prev) => {
-          if (!prev) return prev
-          const remaining = (prev.flagged[target.factKey] ?? []).filter(
-            (l) => l.leaf.reference_id !== target.leaf.leaf.reference_id
-          )
-          const nextFlagged = { ...prev.flagged }
-          if (remaining.length === 0) {
-            delete nextFlagged[target.factKey]
-          } else {
-            nextFlagged[target.factKey] = remaining
-          }
-          return { ...prev, flagged: nextFlagged }
-        })
+        // Only remove optimistically on approval -- apply_reviews()
+        // deliberately keeps a REJECTED leaf flagged (the drift is real
+        // and stays open), so removing it here would show it as handled
+        // when the server disagrees, and it would silently reappear on
+        // the next fetch with no trace of what happened to it.
+        if (verdict === "approved") {
+          setReview((prev) => {
+            if (!prev) return prev
+            const remaining = (prev.flagged[target.factKey] ?? []).filter(
+              (l) => l.leaf.reference_id !== target.leaf.leaf.reference_id
+            )
+            const nextFlagged = { ...prev.flagged }
+            if (remaining.length === 0) {
+              delete nextFlagged[target.factKey]
+            } else {
+              nextFlagged[target.factKey] = remaining
+            }
+            return { ...prev, flagged: nextFlagged }
+          })
+        }
         setTarget(null)
       })
       .catch((e) => setSubmitError(e.message))

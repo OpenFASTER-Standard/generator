@@ -117,6 +117,37 @@ describe("ReviewView", () => {
     await waitFor(() => expect(screen.getAllByText("Review")).toHaveLength(1))
   })
 
+  it("a Reject verdict does NOT remove the item -- the server keeps a rejected leaf flagged, since the drift is real and stays open", async () => {
+    // Real bug found in a whole-branch review: apply_reviews() (the real
+    // server-side filter) deliberately keeps a REJECTED leaf flagged --
+    // "this drift is real, it stays open" -- but the UI removed it from
+    // local state on ANY successful submit regardless of verdict, so a
+    // rejected item vanished as if handled and silently reappeared on the
+    // next load. Per this project's own standing rule that every state
+    // must have a visible way forward, an item vanishing with no trace is
+    // exactly a state with no visible way forward.
+    vi.spyOn(api, "fetchReview").mockResolvedValue(reviewData as any)
+    vi.spyOn(api, "submitReview").mockResolvedValue({ fact_key: "key-a", revision: {} } as any)
+    render(
+      <MemoryRouter>
+        <ReviewView />
+      </MemoryRouter>
+    )
+
+    fireEvent.click(await screen.findByText(/key-a/))
+    fireEvent.click(screen.getByText("Review"))
+    fireEvent.change(screen.getByLabelText(/Reviewer/i), { target: { value: "r1" } })
+    fireEvent.change(screen.getByLabelText(/Reasoning/i), { target: { value: "still drifted" } })
+    fireEvent.click(screen.getByText("Reject"))
+
+    await waitFor(() =>
+      expect(api.submitReview).toHaveBeenCalledWith(expect.objectContaining({ verdict: "rejected" }))
+    )
+    // Still there -- rejecting keeps the finding open, it doesn't resolve it.
+    expect(screen.getByText(/key-a/)).toBeInTheDocument()
+    expect(screen.getAllByText("Review")).toHaveLength(1)
+  })
+
   it("does not submit a review with a blank reviewer or reasoning", async () => {
     vi.spyOn(api, "fetchReview").mockResolvedValue(reviewData as any)
     vi.spyOn(api, "submitReview").mockResolvedValue({ fact_key: "key-a", revision: {} } as any)
