@@ -106,4 +106,16 @@ describe("AddCitationView", () => {
     fireEvent.click(await screen.findByText(/Family-A/))
     expect(await screen.findByText(/1 construct could not be given an unambiguous path/i)).toBeInTheDocument()
   })
+
+  it("shows an error alert when fetching candidates fails", async () => {
+    vi.spyOn(api, "fetchCandidates").mockRejectedValue(new Error("boom"))
+
+    render(
+      <MemoryRouter>
+        <AddCitationView />
+      </MemoryRouter>
+    )
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/failed to load candidates.*boom/i)
+  })
 })

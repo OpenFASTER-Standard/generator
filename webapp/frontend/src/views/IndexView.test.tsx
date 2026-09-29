@@ -54,4 +54,16 @@ describe("IndexView", () => {
 
     expect(await screen.findByText(/no pages yet/i)).toBeInTheDocument()
   })
+
+  it("shows an error alert when fetching pages fails", async () => {
+    vi.spyOn(api, "fetchPages").mockRejectedValue(new Error("boom"))
+
+    render(
+      <MemoryRouter>
+        <IndexView />
+      </MemoryRouter>
+    )
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/failed to load the page index.*boom/i)
+  })
 })

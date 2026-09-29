@@ -76,4 +76,18 @@ describe("PageDetailView", () => {
 
     expect(await screen.findByRole("link", { name: /back to pages/i })).toHaveAttribute("href", "/")
   })
+
+  it("shows an error alert when fetching the page fails", async () => {
+    vi.spyOn(api, "fetchPage").mockRejectedValue(new Error("boom"))
+
+    render(
+      <MemoryRouter initialEntries={["/pages/k"]}>
+        <Routes>
+          <Route path="/pages/:factKey" element={<PageDetailView />} />
+        </Routes>
+      </MemoryRouter>
+    )
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/failed to load this page.*boom/i)
+  })
 })

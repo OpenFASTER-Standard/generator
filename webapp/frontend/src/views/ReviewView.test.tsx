@@ -38,7 +38,7 @@ describe("ReviewView", () => {
     expect(new Set([deserializationAlert, unresolvedAlert, excludedAlert]).size).toBe(3)
   })
 
-  it("submits an approve verdict and removes the item from view", async () => {
+  it("submits an approve verdict and removes the item -- and its whole fact_key group, since it was the only leaf -- from view", async () => {
     vi.spyOn(api, "fetchReview").mockResolvedValue(reviewData as any)
     vi.spyOn(api, "submitReview").mockResolvedValue({ fact_key: "key-a", revision: {} } as any)
     render(
@@ -58,6 +58,47 @@ describe("ReviewView", () => {
         expect.objectContaining({ fact_key: "key-a", leaf_reference_id: "ref1", verdict: "approved", reviewer: "r1", reasoning: "fine" })
       )
     )
+    // The actual point of the optimistic-removal logic: the leaf (and,
+    // since it was the only one under "key-a", the whole group) is gone
+    // from the rendered accordion, not just "the API was called".
+    await waitFor(() => expect(screen.queryByText(/key-a/)).not.toBeInTheDocument())
+    expect(screen.getByText(/nothing flagged for review/i)).toBeInTheDocument()
+  })
+
+  it("removes only the reviewed leaf, keeping its fact_key group, when a second leaf is still pending", async () => {
+    const twoLeafData = {
+      ...reviewData,
+      flagged: {
+        "key-a": [
+          { leaf: { reference_id: "ref1", subject_document: { family: "Fam" } }, drift_kind: "CONTENT", fingerprint: "fp1" },
+          { leaf: { reference_id: "ref2", subject_document: { family: "Fam" } }, drift_kind: "CONTENT", fingerprint: "fp2" },
+        ],
+      },
+    }
+    vi.spyOn(api, "fetchReview").mockResolvedValue(twoLeafData as any)
+    vi.spyOn(api, "submitReview").mockResolvedValue({ fact_key: "key-a", revision: {} } as any)
+    render(
+      <MemoryRouter>
+        <ReviewView />
+      </MemoryRouter>
+    )
+
+    fireEvent.click(await screen.findByText(/key-a/))
+    const rowsBefore = await screen.findAllByText("Review")
+    expect(rowsBefore).toHaveLength(2)
+
+    fireEvent.click(rowsBefore[0])
+    fireEvent.change(screen.getByLabelText(/Reviewer/i), { target: { value: "r1" } })
+    fireEvent.change(screen.getByLabelText(/Reasoning/i), { target: { value: "fine" } })
+    fireEvent.click(screen.getByText("Approve"))
+
+    await waitFor(() =>
+      expect(api.submitReview).toHaveBeenCalledWith(expect.objectContaining({ leaf_reference_id: "ref1" }))
+    )
+    // key-a's group itself is still there (one leaf remains) -- only the
+    // reviewed row disappeared.
+    expect(screen.getByText(/key-a/)).toBeInTheDocument()
+    await waitFor(() => expect(screen.getAllByText("Review")).toHaveLength(1))
   })
 
   it("does not submit a review with a blank reviewer or reasoning", async () => {
@@ -105,5 +146,17 @@ describe("ReviewView", () => {
 
     resolveSubmit!({ fact_key: "key-a", revision: {} as any })
     await waitFor(() => expect(api.submitReview).toHaveBeenCalledTimes(1))
+  })
+
+  it("shows an error alert when fetching the review summary fails", async () => {
+    vi.spyOn(api, "fetchReview").mockRejectedValue(new Error("boom"))
+
+    render(
+      <MemoryRouter>
+        <ReviewView />
+      </MemoryRouter>
+    )
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/failed to load review data.*boom/i)
   })
 })
