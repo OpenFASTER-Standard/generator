@@ -148,9 +148,15 @@ describe("ReviewView", () => {
     expect(screen.getAllByText("Review")).toHaveLength(1)
   })
 
-  it("does not submit a review with a blank reviewer or reasoning", async () => {
+  it("disables Approve/Reject until both reviewer and reasoning are filled", async () => {
+    // Asserts the real, load-bearing mechanism directly (the disabled
+    // attribute) rather than firing a click and checking submitReview
+    // wasn't called -- a disabled button never fires its onClick handler
+    // at all in a real browser or jsdom, so that style of test passes
+    // identically whether or not any guard logic inside the handler
+    // exists, which is exactly how a genuinely dead-code guard survived
+    // a whole-branch review undetected.
     vi.spyOn(api, "fetchReview").mockResolvedValue(reviewData as any)
-    vi.spyOn(api, "submitReview").mockResolvedValue({ fact_key: "key-a", revision: {} } as any)
     render(
       <MemoryRouter>
         <ReviewView />
@@ -160,13 +166,15 @@ describe("ReviewView", () => {
     fireEvent.click(await screen.findByText(/key-a/))
     fireEvent.click(screen.getByText("Review"))
 
-    // Reviewer and reasoning both start blank -- Approve must be inert.
-    fireEvent.click(screen.getByText("Approve"))
-    expect(api.submitReview).not.toHaveBeenCalled()
+    expect(screen.getByText("Approve")).toBeDisabled()
+    expect(screen.getByText("Reject")).toBeDisabled()
 
     fireEvent.change(screen.getByLabelText(/Reviewer/i), { target: { value: "r1" } })
-    fireEvent.click(screen.getByText("Approve"))
-    expect(api.submitReview).not.toHaveBeenCalled()
+    expect(screen.getByText("Approve")).toBeDisabled()
+
+    fireEvent.change(screen.getByLabelText(/Reasoning/i), { target: { value: "fine" } })
+    expect(screen.getByText("Approve")).not.toBeDisabled()
+    expect(screen.getByText("Reject")).not.toBeDisabled()
   })
 
   it("submits exactly once even if Approve is clicked twice rapidly", async () => {

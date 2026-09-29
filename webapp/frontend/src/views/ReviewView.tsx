@@ -52,11 +52,12 @@ export function ReviewView() {
   }
 
   function handleVerdict(verdict: "approved" | "rejected") {
+    // No .trim() re-check here: both verdict buttons are already
+    // disabled={submitting || !reviewer.trim() || !reasoning.trim()}, so
+    // this can only ever be reached with both fields genuinely filled --
+    // a second guard here would be dead code no real interaction can
+    // reach (a disabled button never fires its onClick).
     if (!target || submitting) return
-    if (!reviewer.trim() || !reasoning.trim()) {
-      setSubmitError("Reviewer and reasoning are both required")
-      return
-    }
     setSubmitting(true)
     submitReview({
       fact_key: target.factKey,
