@@ -22,29 +22,35 @@ import {
   Alert,
   AlertDescription,
 } from "@openfaster-standard/ui"
-import { fetchCandidates, submitCitation, type Candidate, type CandidatesResponse } from "../api"
+import { fetchCandidates, submitCitation, type Candidate, type CandidatesResponse, type FamilyCandidates as FamilyCandidatesData } from "../api"
 
 function FamilyCandidates({
   family,
-  candidates,
+  data,
   onCite,
 }: {
   family: string
-  candidates: Candidate[]
+  data: FamilyCandidatesData
   onCite: (family: string, candidate: Candidate) => void
 }) {
   const [filter, setFilter] = useState("")
 
   const filtered = useMemo(() => {
     const needle = filter.toLowerCase()
-    if (!needle) return candidates
-    return candidates.filter(
+    if (!needle) return data.candidates
+    return data.candidates.filter(
       (c) => c.tag.toLowerCase().includes(needle) || c.name.toLowerCase().includes(needle) || c.xpath.toLowerCase().includes(needle)
     )
-  }, [filter, candidates])
+  }, [filter, data.candidates])
 
   return (
     <div>
+      {data.excluded.length > 0 && (
+        <p>
+          {data.excluded.length} construct{data.excluded.length === 1 ? "" : "s"} could not be given an unambiguous
+          path and {data.excluded.length === 1 ? "is" : "are"} not citable: {data.excluded.map((e) => e.name).join(", ")}
+        </p>
+      )}
       <Input placeholder="Filter candidates..." value={filter} onChange={(e) => setFilter(e.target.value)} />
       <Table>
         <TableHeader>
@@ -142,10 +148,10 @@ export function AddCitationView() {
         {families.map((family) => (
           <AccordionItem key={family} value={family}>
             <AccordionTrigger>
-              {family} ({candidatesByFamily[family].length} candidates)
+              {family} ({candidatesByFamily[family].candidates.length} candidates)
             </AccordionTrigger>
             <AccordionContent>
-              <FamilyCandidates family={family} candidates={candidatesByFamily[family]} onCite={openCiteDialog} />
+              <FamilyCandidates family={family} data={candidatesByFamily[family]} onCite={openCiteDialog} />
             </AccordionContent>
           </AccordionItem>
         ))}

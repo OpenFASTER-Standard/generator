@@ -181,6 +181,28 @@ def test_list_candidates_endpoint_returns_the_real_13_xsd_families():
 
     assert response.status_code == 200
     assert set(response.json().keys()) == REAL_XSD_FAMILIES
+    for family_result in response.json().values():
+        assert set(family_result.keys()) == {"candidates", "excluded"}
+
+
+def test_list_candidates_endpoint_surfaces_excluded_candidates(tmp_path, monkeypatch):
+    module_root = _synthetic_corpus(
+        tmp_path,
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:vendor="urn:vendor">'
+        '<wrapper><xs:element name="Decoy" type="xs:string"/></wrapper>'
+        '<vendor:wrapper><xs:element name="Decoy" type="xs:string"/></vendor:wrapper>'
+        "</xs:schema>",
+    )
+    monkeypatch.setenv("MIKADIV_MODULE_ROOT", module_root)
+    client = TestClient(app)
+
+    response = client.get("/api/candidates")
+
+    body = response.json()["TestFamily"]
+    assert len(body["candidates"]) == 1
+    assert len(body["excluded"]) == 1
+    assert body["excluded"][0]["name"] == "Decoy"
 
 
 def test_add_citation_endpoint_creates_a_page_retrievable_via_get_pages(tmp_path, monkeypatch):
@@ -240,7 +262,7 @@ def test_add_citation_endpoint_returns_400_for_a_candidate_that_went_stale(tmp_p
     # The xpath is valid right now -- confirm the candidate genuinely
     # exists before making it stale underneath the same family.
     candidates = client.get("/api/candidates").json()
-    assert any(c["xpath"] == "/xs:schema/xs:element[@name='Foo']" for c in candidates["TestFamily"])
+    assert any(c["xpath"] == "/xs:schema/xs:element[@name='Foo']" for c in candidates["TestFamily"]["candidates"])
 
     # Mutate the real underlying file so the same xpath no longer resolves
     # -- simulates a candidate going stale between listing and submission.

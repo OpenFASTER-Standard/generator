@@ -28,7 +28,19 @@ export interface Candidate {
   xpath: string
 }
 
-export type CandidatesResponse = Record<string, Candidate[]>
+export interface ExcludedCandidate {
+  tag: string
+  name: string
+  xpath: string
+  match_count: number
+}
+
+export interface FamilyCandidates {
+  candidates: Candidate[]
+  excluded: ExcludedCandidate[]
+}
+
+export type CandidatesResponse = Record<string, FamilyCandidates>
 
 export interface CitationRequest {
   family: string

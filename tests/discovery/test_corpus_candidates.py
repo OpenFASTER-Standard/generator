@@ -1,4 +1,5 @@
-from discovery.corpus_candidates import CorpusCandidate, list_corpus_candidates
+from discovery.xsd_discoverer import Candidate
+from discovery.corpus_candidates import list_corpus_candidates
 
 REAL_MODULE_ROOT = "/work/ontologies/mikadiv-fm/sources"
 
@@ -43,12 +44,12 @@ def test_returns_exactly_the_13_real_xsd_families_never_any_pdf_family():
 def test_real_per_family_candidate_counts_match_live_verification():
     result = list_corpus_candidates(REAL_MODULE_ROOT)
     for family, expected_count in REAL_PER_FAMILY_COUNTS.items():
-        assert len(result[family]) == expected_count, family
+        assert len(result[family].candidates) == expected_count, family
 
 
 def test_total_real_candidate_count_across_the_whole_corpus_is_422():
     result = list_corpus_candidates(REAL_MODULE_ROOT)
-    assert sum(len(candidates) for candidates in result.values()) == 422
+    assert sum(len(r.candidates) for r in result.values()) == 422
 
 
 def test_a_known_real_candidate_appears_with_the_correct_xpath():
@@ -57,16 +58,21 @@ def test_a_known_real_candidate_appears_with_the_correct_xpath():
         "/xs:schema/xs:complexType[@name='AmtlicheOrdnungsnummerMa23ListeType']"
         "/xs:sequence/xs:element[@name='AOrdNr']"
     )
-    matches = [c for c in result["MiKaDiv_FM_Meldeart23"] if c.xpath == aordnr_xpath]
+    matches = [c for c in result["MiKaDiv_FM_Meldeart23"].candidates if c.xpath == aordnr_xpath]
     assert len(matches) == 1
     assert matches[0].name == "AOrdNr"
     assert matches[0].tag == "element"
 
 
-def test_returns_corpus_candidate_instances_with_no_family_or_location_fields():
+def test_returns_the_real_candidate_type_with_no_family_or_location_fields():
+    # No second, hand-maintained "CorpusCandidate" dataclass duplicating
+    # discovery.xsd_discoverer.Candidate field-for-field -- this returns
+    # the real DiscoveryResult (candidates + excluded) discover_candidates()
+    # itself produces, per the 2026-09-29 audit finding on that duplication
+    # silently dropping `excluded`.
     result = list_corpus_candidates(REAL_MODULE_ROOT)
-    sample = result["MiKaDiv_FM_Meldeart23"][0]
-    assert isinstance(sample, CorpusCandidate)
+    sample = result["MiKaDiv_FM_Meldeart23"].candidates[0]
+    assert isinstance(sample, Candidate)
     assert not hasattr(sample, "family")
     assert not hasattr(sample, "retrieval_uri")
 
@@ -108,7 +114,7 @@ def test_list_corpus_candidates_skips_a_family_whose_manifest_entry_is_broken_bu
     result = list_corpus_candidates(module_root)
 
     assert "GoodFamily" in result
-    assert len(result["GoodFamily"]) == 1
+    assert len(result["GoodFamily"].candidates) == 1
     assert "BrokenFamily" not in result
 
 
@@ -121,5 +127,36 @@ def test_list_corpus_candidates_skips_a_family_with_corrupt_xml_but_keeps_others
     result = list_corpus_candidates(module_root)
 
     assert "GoodFamily" in result
-    assert len(result["GoodFamily"]) == 1
+    assert len(result["GoodFamily"].candidates) == 1
     assert "CorruptFamily" not in result
+
+
+_XSD_WITH_AMBIGUOUS_NAMES = (
+    '<?xml version="1.0" encoding="UTF-8"?>'
+    '<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" '
+    'xmlns:vendor="urn:vendor">'
+    "<wrapper><xs:element name=\"Decoy\" type=\"xs:string\"/></wrapper>"
+    "<vendor:wrapper><xs:element name=\"Decoy\" type=\"xs:string\"/></vendor:wrapper>"
+    "</xs:schema>"
+)
+
+
+def test_list_corpus_candidates_surfaces_excluded_candidates_not_just_real_ones(tmp_path):
+    # Real bug found in the 2026-09-29 audit: a construct discover_candidates()
+    # itself classifies as ExcludedCandidate (an ambiguous computed xpath)
+    # used to be silently dropped one layer up here -- GET /api/candidates
+    # could not tell "this schema has no such construct" from "it exists
+    # but couldn't be given an unambiguous xpath".
+    module_root = _synthetic_corpus(tmp_path, {
+        "AmbiguousFamily": ("ambiguous.xsd", _XSD_WITH_AMBIGUOUS_NAMES),
+    })
+
+    result = list_corpus_candidates(module_root)
+
+    # Two "Decoy" elements share the same computed xpath (a non-XSD-namespace
+    # ancestor doesn't affect the path): one is a real, correct candidate,
+    # the other is recorded as excluded -- not silently dropped, per
+    # discover_candidates()'s own "recorded, never silently wrong" rule.
+    assert len(result["AmbiguousFamily"].candidates) == 1
+    assert len(result["AmbiguousFamily"].excluded) == 1
+    assert result["AmbiguousFamily"].excluded[0].name == "Decoy"

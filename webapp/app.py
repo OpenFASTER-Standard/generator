@@ -124,10 +124,13 @@ def get_page(fact_key: str) -> dict:
 
 @app.get("/api/candidates")
 def list_candidates_endpoint() -> dict:
-    candidates = list_corpus_candidates(_module_root())
+    results = list_corpus_candidates(_module_root())
     return {
-        family: [dataclasses.asdict(c) for c in family_candidates]
-        for family, family_candidates in candidates.items()
+        family: {
+            "candidates": [dataclasses.asdict(c) for c in result.candidates],
+            "excluded": [dataclasses.asdict(e) for e in result.excluded],
+        }
+        for family, result in results.items()
     }
 
 

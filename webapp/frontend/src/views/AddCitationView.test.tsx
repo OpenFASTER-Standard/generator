@@ -5,10 +5,13 @@ import { AddCitationView } from "./AddCitationView"
 import * as api from "../api"
 
 const candidates = {
-  "Family-A": [
-    { tag: "xs:element", name: "Foo", xpath: "//Foo" },
-    { tag: "xs:element", name: "Bar", xpath: "//Bar" },
-  ],
+  "Family-A": {
+    candidates: [
+      { tag: "xs:element", name: "Foo", xpath: "//Foo" },
+      { tag: "xs:element", name: "Bar", xpath: "//Bar" },
+    ],
+    excluded: [],
+  },
 }
 
 beforeEach(() => {
@@ -85,5 +88,22 @@ describe("AddCitationView", () => {
 
     resolveSubmit!({ fact_key: "new-key", revision: {} as any })
     await waitFor(() => expect(api.submitCitation).toHaveBeenCalledTimes(1))
+  })
+
+  it("surfaces excluded (ambiguous) candidates instead of silently dropping them", async () => {
+    vi.spyOn(api, "fetchCandidates").mockResolvedValue({
+      "Family-A": {
+        candidates: [{ tag: "xs:element", name: "Foo", xpath: "//Foo" }],
+        excluded: [{ tag: "xs:element", name: "Decoy", xpath: "//Decoy", match_count: 2 }],
+      },
+    } as any)
+    render(
+      <MemoryRouter>
+        <AddCitationView />
+      </MemoryRouter>
+    )
+
+    fireEvent.click(await screen.findByText(/Family-A/))
+    expect(await screen.findByText(/1 construct could not be given an unambiguous path/i)).toBeInTheDocument()
   })
 })
