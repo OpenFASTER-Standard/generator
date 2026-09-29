@@ -12,11 +12,14 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
+from errors import GeneratorError
 from reference_model.model import ResolutionOutcome, Status
 
 
-class CorpusIntegrityError(Exception):
-    pass
+class CorpusIntegrityError(GeneratorError):
+    # The corpus's own _current/_manifest.json is malformed or escapes its
+    # own root -- a server-side data problem, not a bad request.
+    http_status = 500
 
 
 @dataclass(frozen=True)

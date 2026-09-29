@@ -76,4 +76,4 @@ def canonicalize_and_hash(raw_content) -> str:
     return hashlib.sha256(canonical.encode("utf-8", errors="surrogatepass")).hexdigest()
 
 
-register("JsonSelector", Resolver(resolve=resolve, canonicalize_and_hash=canonicalize_and_hash))
+register("JsonSelector", Resolver(resolve=resolve, canonicalize_and_hash=canonicalize_and_hash, selector_cls=JsonSelector))

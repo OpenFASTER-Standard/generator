@@ -424,6 +424,42 @@ def test_post_reviews_rejects_a_blank_reviewer_or_reasoning(tmp_path, monkeypatc
     assert blank_reasoning.status_code == 422
 
 
+def test_a_generator_error_maps_uniformly_to_its_own_http_status_with_a_real_detail_message(tmp_path, monkeypatch):
+    # 2026-09-29 audit finding: only POST /api/citations mapped its domain
+    # errors to a meaningful HTTP status; every other endpoint either
+    # 500'd generically (masking a message like "<path>: not valid JSON")
+    # or didn't map at all. GeneratorError's single exception_handler fixes
+    # this for every endpoint at once -- exercised here via a corrupted
+    # reviews_dir file reaching GET /api/review, which is not
+    # POST /api/citations' own special-cased path.
+    catalog_path = tmp_path / "references.json"
+    catalog_path.write_text("{}", encoding="utf-8")
+    reviews_dir = tmp_path / "reviews"
+    reviews_dir.mkdir()
+    (reviews_dir / "corrupt.json").write_text("{not valid json", encoding="utf-8")
+    monkeypatch.setenv("REFERENCES_CATALOG_PATH", str(catalog_path))
+    monkeypatch.setenv("MIKADIV_REVIEWS_DIR", str(reviews_dir))
+    client = TestClient(app)
+
+    response = client.get("/api/review")
+
+    assert response.status_code == 500
+    assert "not valid JSON" in response.json()["detail"]
+
+
+def test_get_candidates_maps_a_corpus_integrity_error_to_500_with_a_real_detail_message(tmp_path, monkeypatch):
+    module_root = tmp_path / "corpus"
+    module_root.mkdir()
+    (module_root / "_current").write_text("../escapes-module-root", encoding="utf-8")
+    monkeypatch.setenv("MIKADIV_MODULE_ROOT", str(module_root))
+    client = TestClient(app)
+
+    response = client.get("/api/candidates")
+
+    assert response.status_code == 500
+    assert "escapes module_root" in response.json()["detail"]
+
+
 def test_get_review_serializes_a_real_content_drift_leaf_without_500(tmp_path, monkeypatch):
     # Real bug, found during manual Playwright verification: for an
     # XPathSelector, ResolutionOutcome.raw_content on a RESOLVED/CONTENT-drift

@@ -1,23 +1,30 @@
 """Deserializes a plain JSON-safe dict (as produced by
 reference_model.serialize.to_json_dict()) back into a real Reference.
 See docs/specs/2026-09-29-webapp-react-rebuild-design.md.
+
+Looks selector classes up via reference_model.registry rather than
+keeping a second, hand-maintained type->class dict here -- registry.py's
+own documented promise is that adding a new source format means writing
+a resolve()/canonicalize_and_hash() pair and registering it, "nothing
+else in this package, or any future consumer, needs to change". A
+consumer must have imported the selector module(s) it needs (so they've
+registered themselves) before calling from_json_dict() on data using
+that type -- the same "import what you use" contract
+reference_model/__init__.py already documents for the format-agnostic
+model, which is what keeps importing this module alone from dragging in
+every selector's own dependencies (pdfplumber/shapely/lxml).
 """
 from __future__ import annotations
 
+from errors import GeneratorError
 from reference_model.model import ContentHash, Leaf, Reference, SubjectDocument, Union
-from reference_model.selectors.json_selector import JsonSelector
-from reference_model.selectors.svg_selector import SvgSelector
-from reference_model.selectors.xpath_selector import XPathSelector
-
-_SELECTOR_TYPES = {
-    "XPathSelector": XPathSelector,
-    "JsonSelector": JsonSelector,
-    "SvgSelector": SvgSelector,
-}
+from reference_model.registry import get_resolver
 
 
-class ReferenceDeserializationError(Exception):
-    pass
+class ReferenceDeserializationError(GeneratorError):
+    # Malformed catalog data reaching an unexpected place is a server-side
+    # data problem, not something a caller's request fixes by retrying.
+    http_status = 500
 
 
 def from_json_dict(data: dict) -> Reference:
@@ -34,10 +41,16 @@ def from_json_dict(data: dict) -> Reference:
     try:
         selector_data = dict(data["selector"])
         selector_type = selector_data["type"]
-        if selector_type not in _SELECTOR_TYPES:
-            raise ReferenceDeserializationError(f"unknown selector type: {selector_type!r}")
-        selector_cls = _SELECTOR_TYPES[selector_type]
-        selector = selector_cls(**selector_data)
+        try:
+            resolver = get_resolver(selector_type)
+        except KeyError as exc:
+            raise ReferenceDeserializationError(f"unknown selector type: {selector_type!r}") from exc
+        if resolver.selector_cls is None:
+            raise ReferenceDeserializationError(
+                f"selector type {selector_type!r} is registered but has no selector_cls "
+                "to deserialize into"
+            )
+        selector = resolver.selector_cls(**selector_data)
 
         subject_document = SubjectDocument(**data["subject_document"])
         content_hash = ContentHash(**data["content_hash"])

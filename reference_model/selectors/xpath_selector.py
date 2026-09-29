@@ -91,4 +91,4 @@ def canonicalize_and_hash(raw_content: "etree._Element") -> str:
     return hashlib.sha256(canonical_bytes).hexdigest()
 
 
-register("XPathSelector", Resolver(resolve=resolve, canonicalize_and_hash=canonicalize_and_hash))
+register("XPathSelector", Resolver(resolve=resolve, canonicalize_and_hash=canonicalize_and_hash, selector_cls=XPathSelector))

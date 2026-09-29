@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from errors import GeneratorError
 from reference_model.cite import cite
 from reference_model.model import SubjectDocument
 from reference_model.selectors.xpath_selector import XPathSelector
@@ -15,12 +16,15 @@ from references_catalog.catalog import Revision, add_revision
 from staleness_sweep.resolve import resolve_family_location
 
 
-class FamilyNotFoundError(Exception):
-    pass
+class FamilyNotFoundError(GeneratorError):
+    # The caller named a family that doesn't exist -- a bad request.
+    http_status = 400
 
 
-class FamilyNotCitableError(Exception):
-    pass
+class FamilyNotCitableError(GeneratorError):
+    # The caller named a real family, but not one this citation flow
+    # supports (e.g. a PDF family) -- also a bad request.
+    http_status = 400
 
 
 def add_citation(

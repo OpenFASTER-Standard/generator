@@ -8,6 +8,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
+from errors import GeneratorError
 from review_recording.record import Verdict
 from review_surfacing.summarize import DriftKind, FlaggedLeaf, ReviewSummary
 
@@ -25,8 +26,10 @@ class ReviewRecord:
     reasoning: str
 
 
-class ReviewLoadError(Exception):
-    pass
+class ReviewLoadError(GeneratorError):
+    # A recorded review file is unreadable -- a server-side data problem
+    # (this system, not the caller, wrote every file in reviews_dir).
+    http_status = 500
 
 
 _REQUIRED_FIELDS = (

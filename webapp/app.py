@@ -13,14 +13,14 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exception_handlers import http_exception_handler
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, field_validator
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from citation_workflow.add_citation import FamilyNotCitableError, FamilyNotFoundError, add_citation
+from citation_workflow.add_citation import add_citation
 from discovery.corpus_candidates import list_corpus_candidates
-from reference_model.cite import CitationError
+from errors import GeneratorError
 from references_catalog.catalog import get_current_revision, get_history, list_pages
 from review_recording.record import Verdict
 from review_workflow.orchestrate import get_review_summary, submit_review
@@ -30,6 +30,15 @@ DEFAULT_MODULE_ROOT = "/work/ontologies/mikadiv-fm/sources"
 DEFAULT_REVIEWS_DIR = "/work/ontologies/mikadiv-fm/reviews"
 
 app = FastAPI()
+
+
+@app.exception_handler(GeneratorError)
+async def generator_error_handler(request: Request, exc: GeneratorError) -> JSONResponse:
+    # One handler for every domain error in the system (see errors.py) --
+    # each subclass says its own http_status, so no endpoint needs its own
+    # try/except to get a meaningful status + message instead of a bare
+    # 500 with no detail.
+    return JSONResponse(status_code=exc.http_status, content={"detail": str(exc)})
 
 
 def _catalog_path() -> Path:
@@ -124,19 +133,19 @@ def list_candidates_endpoint() -> dict:
 
 @app.post("/api/citations")
 def add_citation_endpoint(request: AddCitationRequest) -> dict:
-    try:
-        revision = add_citation(
-            _module_root(),
-            _catalog_path(),
-            request.family,
-            request.xpath,
-            request.fact_key,
-            request.author,
-            request.comment,
-            request.is_correction,
-        )
-    except (FamilyNotFoundError, FamilyNotCitableError, CitationError) as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    # FamilyNotFoundError/FamilyNotCitableError/CitationError all derive
+    # from GeneratorError, so generator_error_handler() maps them to 400
+    # uniformly -- no try/except needed here.
+    revision = add_citation(
+        _module_root(),
+        _catalog_path(),
+        request.family,
+        request.xpath,
+        request.fact_key,
+        request.author,
+        request.comment,
+        request.is_correction,
+    )
     return {"fact_key": request.fact_key, "revision": dataclasses.asdict(revision)}
 
 

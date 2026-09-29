@@ -13,12 +13,15 @@ from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 
+from errors import GeneratorError
 from reference_model.model import Reference
 from reference_model.serialize import to_json_dict
 
 
-class CatalogLoadError(Exception):
-    pass
+class CatalogLoadError(GeneratorError):
+    # The catalog file itself is unreadable -- no amount of retrying a
+    # request with different input fixes this, so it maps to 500.
+    http_status = 500
 
 
 class RevisionKind(Enum):

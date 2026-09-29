@@ -125,4 +125,4 @@ def canonicalize_and_hash(raw_content: str) -> str:
     return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
 
-register("SvgSelector", Resolver(resolve=resolve, canonicalize_and_hash=canonicalize_and_hash))
+register("SvgSelector", Resolver(resolve=resolve, canonicalize_and_hash=canonicalize_and_hash, selector_cls=SvgSelector))

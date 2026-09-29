@@ -18,6 +18,13 @@ CanonicalizeAndHashFn = Callable[[Any], str]
 class Resolver:
     resolve: ResolveFn
     canonicalize_and_hash: CanonicalizeAndHashFn
+    # The dataclass a JSON-serialized selector of this type deserializes
+    # back into -- reference_model.deserialize.from_json_dict() looks this
+    # up rather than keeping its own hardcoded type->class dict, so adding
+    # a new selector type never requires touching that module. Optional so
+    # existing registrations that don't need deserialization support (e.g.
+    # a resolver registered only for a test) aren't forced to supply one.
+    selector_cls: type | None = None
 
 
 _REGISTRY: dict[str, Resolver] = {}

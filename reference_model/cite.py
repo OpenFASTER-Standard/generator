@@ -22,10 +22,13 @@ from reference_model.model import (
     now_iso,
 )
 from reference_model.registry import get_resolver
+from errors import GeneratorError
 
 
-class CitationError(Exception):
-    pass
+class CitationError(GeneratorError):
+    # A selector that doesn't resolve against a source document is a bad
+    # request from the caller (a stale/invalid xpath, an unciteable span).
+    http_status = 400
 
 
 def cite(subject_document: SubjectDocument, selector: Any) -> Leaf:
