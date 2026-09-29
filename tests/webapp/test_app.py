@@ -1,4 +1,5 @@
 import json
+import shutil
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -9,6 +10,7 @@ from reference_model.selectors.xpath_selector import XPathSelector
 from references_catalog.catalog import add_revision
 from webapp.app import app
 
+REAL_MODULE_ROOT = "/work/ontologies/mikadiv-fm/sources"
 REAL_XSD = "/work/ontologies/mikadiv-fm/sources/1.02/xsd/MiKaDiv_FM_Meldeart23_1.02.xsd"
 AORDNR_XPATH = (
     "/xs:schema/xs:complexType[@name='AmtlicheOrdnungsnummerMa23ListeType']"
@@ -398,6 +400,44 @@ def test_post_reviews_rejects_an_invalid_verdict_string(tmp_path, monkeypatch):
     })
 
     assert response.status_code == 400
+
+
+def test_get_review_serializes_a_real_content_drift_leaf_without_500(tmp_path, monkeypatch):
+    # Real bug, found during manual Playwright verification: for an
+    # XPathSelector, ResolutionOutcome.raw_content on a RESOLVED/CONTENT-drift
+    # leaf is a real lxml Element (see xpath_selector.resolve()) --
+    # dataclasses.asdict(FlaggedLeaf) leaves that object in place, and
+    # FastAPI/pydantic then can't serialize it, so this endpoint 500s for
+    # every genuine CONTENT-drift XPath finding, not just a contrived one.
+    module_root = tmp_path / "mikadiv-fm-sources"
+    shutil.copytree(REAL_MODULE_ROOT, module_root)
+    xsd_path = module_root / "1.02" / "xsd" / "MiKaDiv_FM_Meldeart23_1.02.xsd"
+    original = xsd_path.read_text(encoding="utf-8")
+    # Change an attribute's documentation text -- the element named by the
+    # xpath still resolves (no structural drift), but its canonical content
+    # hash changes, which is exactly what produces a CONTENT-drift FlaggedLeaf.
+    mutated = original.replace(
+        'name="AOrdNr"', 'name="AOrdNr" fixed="drift-test"', 1
+    )
+    assert mutated != original
+    xsd_path.write_text(mutated, encoding="utf-8")
+
+    catalog_path = tmp_path / "references.json"
+    catalog_path.write_text("{}", encoding="utf-8")
+    leaf = cite(_subject_document(), XPathSelector.create(AORDNR_XPATH))
+    add_revision(str(catalog_path), "fact-drift", leaf, "julian", "initial", False)
+
+    monkeypatch.setenv("REFERENCES_CATALOG_PATH", str(catalog_path))
+    monkeypatch.setenv("MIKADIV_MODULE_ROOT", str(module_root))
+    monkeypatch.setenv("MIKADIV_REVIEWS_DIR", str(tmp_path / "reviews"))
+    client = TestClient(app)
+
+    response = client.get("/api/review")
+
+    assert response.status_code == 200
+    flagged = response.json()["flagged"]["fact-drift"]
+    assert len(flagged) == 1
+    assert flagged[0]["drift_kind"] == "CONTENT"
 
 
 def test_a_real_api_404_is_not_masked_by_the_spa_fallback():

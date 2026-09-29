@@ -128,12 +128,26 @@ def add_citation_endpoint(request: AddCitationRequest) -> dict:
     return {"fact_key": request.fact_key, "revision": dataclasses.asdict(revision)}
 
 
+def _serialize_flagged_leaf(flagged_leaf) -> dict:
+    # `outcome.raw_content` is an internal resolution artifact -- for an
+    # XPathSelector it's a real lxml Element (see xpath_selector.resolve()),
+    # which dataclasses.asdict() leaves untouched and FastAPI/pydantic then
+    # cannot serialize at all. The frontend only ever needs outcome.status,
+    # so that's all this sends.
+    return {
+        "leaf": dataclasses.asdict(flagged_leaf.leaf),
+        "outcome": {"status": flagged_leaf.outcome.status.value},
+        "drift_kind": flagged_leaf.drift_kind.value,
+        "fingerprint": flagged_leaf.fingerprint,
+    }
+
+
 @app.get("/api/review")
 def get_review_endpoint() -> dict:
     result = get_review_summary(_catalog_path(), _module_root(), _reviews_dir())
     return {
         "flagged": {
-            fact_key: [dataclasses.asdict(fl) for fl in entries]
+            fact_key: [_serialize_flagged_leaf(fl) for fl in entries]
             for fact_key, entries in result.summary.flagged.items()
         },
         "unresolved_families": [dataclasses.asdict(f) for f in result.summary.unresolved_families],
