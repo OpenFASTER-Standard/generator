@@ -43,7 +43,7 @@ migrating from any prior code in this repo's own history. See
   what's already been reviewed, and record new review decisions back
   onto the catalog. See
   `docs/specs/2026-09-29-webapp-react-rebuild-design.md`.
-- `errors/` -- `GeneratorError`, the shared base every domain error in
+- `generator_errors/` -- `GeneratorError`, the shared base every domain error in
   this system derives from, so the webapp's HTTP layer can map any of
   them to the right status code uniformly.
 - `webapp/` -- serves the catalog as browsable pages with revision

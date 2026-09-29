@@ -16,7 +16,7 @@ every selector's own dependencies (pdfplumber/shapely/lxml).
 """
 from __future__ import annotations
 
-from errors import GeneratorError
+from generator_errors import GeneratorError
 from reference_model.model import ContentHash, Leaf, Reference, SubjectDocument, Union
 from reference_model.registry import get_resolver
 

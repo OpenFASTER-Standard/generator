@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from errors import GeneratorError
+from generator_errors import GeneratorError
 from reference_model.cite import cite
 from reference_model.model import SubjectDocument
 from reference_model.selectors.xpath_selector import XPathSelector

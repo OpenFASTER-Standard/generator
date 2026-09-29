@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 
-from errors import GeneratorError
+from generator_errors import GeneratorError
 from reference_model.model import Reference
 from reference_model.serialize import to_json_dict
 

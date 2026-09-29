@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from generator_errors import GeneratorError
 from reference_model.model import (
     ContentHash,
     Leaf,
@@ -22,7 +23,6 @@ from reference_model.model import (
     now_iso,
 )
 from reference_model.registry import get_resolver
-from errors import GeneratorError
 
 
 class CitationError(GeneratorError):

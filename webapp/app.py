@@ -20,7 +20,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from citation_workflow.add_citation import add_citation
 from discovery.corpus_candidates import list_corpus_candidates
-from errors import GeneratorError
+from generator_errors import GeneratorError
 from references_catalog.catalog import get_current_revision, get_history, list_pages
 from review_recording.record import Verdict
 from review_workflow.orchestrate import get_review_summary, submit_review
@@ -34,7 +34,7 @@ app = FastAPI()
 
 @app.exception_handler(GeneratorError)
 async def generator_error_handler(request: Request, exc: GeneratorError) -> JSONResponse:
-    # One handler for every domain error in the system (see errors.py) --
+    # One handler for every domain error in the system (see generator_errors/__init__.py) --
     # each subclass says its own http_status, so no endpoint needs its own
     # try/except to get a meaningful status + message instead of a bare
     # 500 with no detail.

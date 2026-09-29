@@ -12,7 +12,8 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-from errors import GeneratorError
+from generator_errors import GeneratorError
+
 
 class CorpusIntegrityError(GeneratorError):
     # The corpus's own _current/_manifest.json is malformed or escapes its

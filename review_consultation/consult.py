@@ -8,7 +8,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-from errors import GeneratorError
+from generator_errors import GeneratorError
 from review_recording.record import Verdict
 from review_surfacing.summarize import DriftKind, FlaggedLeaf, ReviewSummary
 
