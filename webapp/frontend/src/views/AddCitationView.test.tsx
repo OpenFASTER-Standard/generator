@@ -118,4 +118,28 @@ describe("AddCitationView", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/failed to load candidates.*boom/i)
   })
+
+  it("does not submit a citation with a whitespace-only fact key or author", async () => {
+    vi.spyOn(api, "fetchCandidates").mockResolvedValue(candidates as any)
+    vi.spyOn(api, "submitCitation").mockResolvedValue({ fact_key: "new-key", revision: {} as any })
+    render(
+      <MemoryRouter>
+        <AddCitationView />
+      </MemoryRouter>
+    )
+
+    fireEvent.click(await screen.findByText(/Family-A/))
+    const fooRow = (await screen.findByText("Foo")).closest("tr")!
+    fireEvent.click(within(fooRow).getByText("Cite this"))
+
+    fireEvent.change(screen.getByLabelText(/Fact key/i), { target: { value: "   " } })
+    fireEvent.change(screen.getByLabelText(/Author/i), { target: { value: "me" } })
+    fireEvent.click(screen.getByText("Submit citation"))
+    expect(api.submitCitation).not.toHaveBeenCalled()
+
+    fireEvent.change(screen.getByLabelText(/Fact key/i), { target: { value: "new-key" } })
+    fireEvent.change(screen.getByLabelText(/Author/i), { target: { value: "   " } })
+    fireEvent.click(screen.getByText("Submit citation"))
+    expect(api.submitCitation).not.toHaveBeenCalled()
+  })
 })

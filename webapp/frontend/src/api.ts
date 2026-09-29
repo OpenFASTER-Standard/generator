@@ -140,12 +140,26 @@ export interface SubmitReviewResponse {
   revision: Revision
 }
 
+function describeValidationErrors(detail: unknown): string | null {
+  if (!Array.isArray(detail)) return null
+  const lines = detail.map((item) => {
+    if (item && typeof item === "object" && Array.isArray(item.loc) && typeof item.msg === "string") {
+      return `${item.loc[item.loc.length - 1]}: ${item.msg}`
+    }
+    return JSON.stringify(item)
+  })
+  return lines.join("; ")
+}
+
 async function describeErrorBody(response: Response): Promise<string> {
   const text = await response.text()
   try {
     const body = JSON.parse(text)
     if (body && body.detail) {
-      return typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail)
+      if (typeof body.detail === "string") return body.detail
+      // FastAPI/pydantic's real 422 shape: a list of {loc, msg, ...} --
+      // rendered as readable "field: message" lines instead of raw JSON.
+      return describeValidationErrors(body.detail) ?? JSON.stringify(body.detail)
     }
   } catch {
     // Not JSON (e.g. a plain-text 500) -- fall through to the generic message.

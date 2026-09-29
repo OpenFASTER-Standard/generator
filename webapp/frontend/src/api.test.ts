@@ -42,6 +42,21 @@ describe("fetchPages", () => {
     })
     await expect(fetchPages()).rejects.toThrow("Server returned 502")
   })
+
+  it("renders a pydantic validation-error array as readable 'field: message' lines, not raw JSON", async () => {
+    // Real shape confirmed live against POST /api/citations with a
+    // whitespace-only fact_key: {"detail": [{"loc": ["body", "fact_key"],
+    // "msg": "Value error, must not be blank", ...}]}. Previously
+    // JSON.stringify'd wholesale, so a user saw a raw JSON blob.
+    ;(fetch as any).mockResolvedValue({
+      ok: false,
+      status: 422,
+      text: async () => JSON.stringify({
+        detail: [{ type: "value_error", loc: ["body", "fact_key"], msg: "Value error, must not be blank" }],
+      }),
+    })
+    await expect(fetchPages()).rejects.toThrow("fact_key: Value error, must not be blank")
+  })
 })
 
 describe("fetchPage", () => {

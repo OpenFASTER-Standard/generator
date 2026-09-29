@@ -111,6 +111,10 @@ export function AddCitationView() {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!citeTarget || submitting) return
+    if (!factKey.trim() || !author.trim()) {
+      setSubmitError("Fact key and author are both required")
+      return
+    }
     setSubmitting(true)
     submitCitation({
       family: citeTarget.family,
