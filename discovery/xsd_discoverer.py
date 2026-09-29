@@ -10,6 +10,8 @@ from dataclasses import dataclass
 
 from lxml import etree
 
+from reference_model.selectors.xml_safety import SAFE_XML_PARSER
+
 _XS_NS = "http://www.w3.org/2001/XMLSchema"
 
 
@@ -70,7 +72,7 @@ def _compute_xpath(node) -> str:
 
 
 def discover_candidates(xsd_path: str) -> DiscoveryResult:
-    tree = etree.parse(xsd_path)
+    tree = etree.parse(xsd_path, parser=SAFE_XML_PARSER)
     candidates = []
     excluded = []
     for node in tree.iter():

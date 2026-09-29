@@ -113,3 +113,46 @@ def test_xpath_count_function_is_uncitable():
     selector = XPathSelector.create("count(//xs:element)")
     outcome = _resolver().resolve(selector, REAL_XSD)
     assert outcome.status == Status.UNCITABLE
+
+
+def test_an_external_entity_declaration_is_not_expanded_into_cited_content(tmp_path: Path):
+    # This system's entire input domain is externally authored regulatory
+    # XML (fetched from BZSt); a malicious/tampered XSD declaring a
+    # SYSTEM external entity must never have that entity's content reach a
+    # citation -- it would flow through canonicalization/hashing into the
+    # catalog and, via GET /api/review's CONTENT-drift path, into a
+    # browser. See the 2026-09-29 audit finding on this exact gap.
+    secret_path = tmp_path / "secret.txt"
+    secret_path.write_text("super-secret-file-content", encoding="utf-8")
+    malicious_xsd = tmp_path / "malicious.xsd"
+    malicious_xsd.write_text(
+        f"""<?xml version="1.0"?>
+<!DOCTYPE xs:schema [
+  <!ENTITY xxe SYSTEM "file://{secret_path}">
+]>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="AOrdNr">
+    <xs:annotation><xs:documentation>&xxe;</xs:documentation></xs:annotation>
+  </xs:element>
+</xs:schema>
+""",
+        encoding="utf-8",
+    )
+
+    selector = XPathSelector.create("/xs:schema/xs:element[@name='AOrdNr']/xs:annotation/xs:documentation")
+    outcome = _resolver().resolve(selector, str(malicious_xsd))
+
+    if outcome.status == Status.RESOLVED:
+        from lxml import etree
+
+        # Not method="c14n" -- an unresolved entity reference node (exactly
+        # what SAFE_XML_PARSER's resolve_entities=False leaves behind) is
+        # not something C14N knows how to serialize at all (C14NError),
+        # which is an orthogonal libxml2 limitation, not a leak. Plain
+        # tostring() is the real assertion: the entity reference is
+        # preserved literally as "&xxe;" text, never expanded.
+        rendered = etree.tostring(outcome.raw_content).decode()
+        assert "super-secret-file-content" not in rendered
+    # NOT_FOUND (the entity reference left unresolved breaks the document)
+    # is an equally acceptable safe outcome -- either way, the secret must
+    # never appear anywhere reachable.

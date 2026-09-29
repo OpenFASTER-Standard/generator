@@ -10,6 +10,7 @@ from lxml import etree
 
 from reference_model.model import ResolutionOutcome, Status
 from reference_model.registry import Resolver, register
+from reference_model.selectors.xml_safety import SAFE_XML_PARSER
 
 _NSMAP = {"xs": "http://www.w3.org/2001/XMLSchema"}
 
@@ -35,7 +36,7 @@ class XPathSelector:
 
 def resolve(selector: XPathSelector, retrieval_uri: str) -> ResolutionOutcome:
     try:
-        tree = etree.parse(retrieval_uri)
+        tree = etree.parse(retrieval_uri, parser=SAFE_XML_PARSER)
     except OSError:
         # Missing/unreadable file -- the source is gone, same bucket as
         # "selector no longer matches anything" from the caller's view.
