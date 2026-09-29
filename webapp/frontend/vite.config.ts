@@ -10,6 +10,23 @@ export default defineConfig({
     // point at.
     outDir: '../frontend_dist',
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        // frontend_dist/ is committed (this webapp runs from a bare
+        // clone via nohup+uvicorn, with no CI/deploy build step) --
+        // Vite's default content-hashed filenames mean every rebuild
+        // adds new tracked files rather than modifying existing ones,
+        // so a rebuild-and-commit that forgets to `git add -A` (only
+        // stages index.html, or only the new asset) leaves a
+        // committed index.html pointing at a bundle that was never
+        // added, or an orphaned old bundle nothing references anymore.
+        // Stable names mean every rebuild modifies the same paths in
+        // place instead.
+        entryFileNames: 'assets/[name].js',
+        chunkFileNames: 'assets/[name].js',
+        assetFileNames: 'assets/[name][extname]',
+      },
+    },
   },
   test: {
     environment: 'jsdom',

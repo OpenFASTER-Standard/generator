@@ -1,32 +1,18 @@
-# React + TypeScript + Vite
+# MiKaDiv-FM References webapp frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+A Vite + React + TypeScript single-page app serving `generator`'s references
+catalog: browsing pages and their revision history, browsing citable
+candidates and submitting new citations, and the drift-review pipeline. See
+`docs/specs/2026-09-29-webapp-react-rebuild-design.md`.
 
-Currently, two official plugins are available:
+Built entirely from `@openfaster-standard/ui` (the shared OpenFASTER
+component library) plus React Router for client-side routing. `webapp/app.py`
+(FastAPI) serves this build's output (`../frontend_dist/`, see
+`vite.config.ts`) and the `/api/*` endpoints it calls.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Commands
 
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
-```
-
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+- `npm run dev` -- Vite dev server with hot reload.
+- `npm run build` -- typechecks (`tsc -b`) then builds to `../frontend_dist/`.
+- `npm test` -- runs the Vitest suite (`src/**/*.test.tsx`).
+- `npm run lint` -- oxlint.
