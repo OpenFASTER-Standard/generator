@@ -35,3 +35,10 @@ jobs:
       - run: npm run lint
       - run: npm run build
       - run: npm test
+      - name: Verify committed frontend_dist/ matches this build
+        # frontend_dist/ *is* the deployed artifact (this webapp runs from
+        # a bare clone via nohup+uvicorn, no CI/deploy build step -- see
+        # vite.config.ts's own comment) -- fail loudly if a contributor
+        # edited src/ and forgot to rebuild-and-commit, rather than
+        # silently serving a stale bundle forever.
+        run: git diff --exit-code -- ../frontend_dist || (echo "::error::webapp/frontend_dist/ is out of date -- run 'npm run build' in webapp/frontend and commit the result" && exit 1)
