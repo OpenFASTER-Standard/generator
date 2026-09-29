@@ -84,6 +84,7 @@ export function AddCitationView() {
   const [comment, setComment] = useState("")
   const [isCorrection, setIsCorrection] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
+  const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
     fetchCandidates()
@@ -102,7 +103,8 @@ export function AddCitationView() {
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!citeTarget) return
+    if (!citeTarget || submitting) return
+    setSubmitting(true)
     submitCitation({
       family: citeTarget.family,
       xpath: citeTarget.candidate.xpath,
@@ -113,6 +115,7 @@ export function AddCitationView() {
     })
       .then(({ fact_key }) => navigate(`/pages/${encodeURIComponent(fact_key)}`))
       .catch((err) => setSubmitError(err.message))
+      .finally(() => setSubmitting(false))
   }
 
   if (error) {
@@ -168,7 +171,9 @@ export function AddCitationView() {
             <Label htmlFor="is-correction-input">Is correction</Label>
             <Checkbox id="is-correction-input" checked={isCorrection} onCheckedChange={(checked) => setIsCorrection(checked === true)} />
 
-            <Button type="submit">Submit citation</Button>
+            <Button type="submit" disabled={submitting}>
+              Submit citation
+            </Button>
             {submitError && (
               <Alert variant="destructive">
                 <AlertDescription>Failed to submit citation: {submitError}</AlertDescription>

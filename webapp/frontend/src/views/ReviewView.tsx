@@ -35,6 +35,7 @@ export function ReviewView() {
   const [reviewer, setReviewer] = useState("")
   const [reasoning, setReasoning] = useState("")
   const [submitError, setSubmitError] = useState<string | null>(null)
+  const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
     fetchReview()
@@ -50,7 +51,12 @@ export function ReviewView() {
   }
 
   function handleVerdict(verdict: "approved" | "rejected") {
-    if (!target) return
+    if (!target || submitting) return
+    if (!reviewer.trim() || !reasoning.trim()) {
+      setSubmitError("Reviewer and reasoning are both required")
+      return
+    }
+    setSubmitting(true)
     submitReview({
       fact_key: target.factKey,
       leaf_reference_id: target.leaf.leaf.reference_id,
@@ -61,7 +67,7 @@ export function ReviewView() {
       .then(() => {
         setReview((prev) => {
           if (!prev) return prev
-          const remaining = prev.flagged[target.factKey].filter(
+          const remaining = (prev.flagged[target.factKey] ?? []).filter(
             (l) => l.leaf.reference_id !== target.leaf.leaf.reference_id
           )
           const nextFlagged = { ...prev.flagged }
@@ -75,6 +81,7 @@ export function ReviewView() {
         setTarget(null)
       })
       .catch((e) => setSubmitError(e.message))
+      .finally(() => setSubmitting(false))
   }
 
   if (error) {
@@ -111,6 +118,15 @@ export function ReviewView() {
             {review.deserialization_failures.length} catalog entr
             {review.deserialization_failures.length === 1 ? "y is" : "ies are"} corrupted and cannot be checked:{" "}
             {review.deserialization_failures.join(", ")}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {review.excluded_keys.length > 0 && (
+        <Alert variant="destructive">
+          <AlertDescription>
+            {review.excluded_keys.length} page{review.excluded_keys.length === 1 ? "" : "s"} could not be checked
+            this run because a family it cites didn't resolve: {review.excluded_keys.join(", ")}
           </AlertDescription>
         </Alert>
       )}
@@ -165,10 +181,19 @@ export function ReviewView() {
             <Label htmlFor="reasoning-input">Reasoning</Label>
             <Textarea id="reasoning-input" required value={reasoning} onChange={(e) => setReasoning(e.target.value)} />
 
-            <Button type="button" onClick={() => handleVerdict("approved")}>
+            <Button
+              type="button"
+              disabled={submitting || !reviewer.trim() || !reasoning.trim()}
+              onClick={() => handleVerdict("approved")}
+            >
               Approve
             </Button>
-            <Button type="button" variant="destructive" onClick={() => handleVerdict("rejected")}>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={submitting || !reviewer.trim() || !reasoning.trim()}
+              onClick={() => handleVerdict("rejected")}
+            >
               Reject
             </Button>
             {submitError && (

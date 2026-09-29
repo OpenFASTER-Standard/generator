@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { useParams } from "react-router-dom"
+import { Link, useParams } from "react-router-dom"
 import {
   Table,
   TableHeader,
@@ -44,6 +44,7 @@ export function PageDetailView() {
 
   return (
     <div>
+      <Link to="/">&larr; Back to pages</Link>
       <h2>{page.fact_key}</h2>
       <p>
         {family} / {selectorType} / {referenceId}

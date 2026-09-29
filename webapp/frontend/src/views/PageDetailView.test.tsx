@@ -51,4 +51,29 @@ describe("PageDetailView", () => {
     expect(rows[2]).toHaveTextContent("first")
     expect(rows[2]).not.toHaveTextContent("Correction")
   })
+
+  it("links back to the pages index", async () => {
+    vi.spyOn(api, "fetchPage").mockResolvedValue({
+      fact_key: "k",
+      current: {
+        revision_id: "r1",
+        reference: {},
+        author: "a1",
+        comment: "first",
+        is_correction: false,
+        created_at: "2026-01-01T00:00:00Z",
+      },
+      history: [],
+    })
+
+    render(
+      <MemoryRouter initialEntries={["/pages/k"]}>
+        <Routes>
+          <Route path="/pages/:factKey" element={<PageDetailView />} />
+        </Routes>
+      </MemoryRouter>
+    )
+
+    expect(await screen.findByRole("link", { name: /back to pages/i })).toHaveAttribute("href", "/")
+  })
 })

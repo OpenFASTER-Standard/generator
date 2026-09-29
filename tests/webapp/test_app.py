@@ -402,6 +402,28 @@ def test_post_reviews_rejects_an_invalid_verdict_string(tmp_path, monkeypatch):
     assert response.status_code == 400
 
 
+def test_post_reviews_rejects_a_blank_reviewer_or_reasoning(tmp_path, monkeypatch):
+    # A review's whole point is accountability -- a blank reviewer or
+    # reasoning would permanently suppress a drift finding with no record
+    # of who did it or why. AddCitationRequest already rejects a blank
+    # author for the same reason (see its own _reject_blank validator);
+    # SubmitReviewRequest must too.
+    monkeypatch.setenv("REFERENCES_CATALOG_PATH", str(tmp_path / "references.json"))
+    (tmp_path / "references.json").write_text("{}")
+    monkeypatch.setenv("MIKADIV_REVIEWS_DIR", str(tmp_path / "reviews"))
+    client = TestClient(app)
+
+    blank_reviewer = client.post("/api/reviews", json={
+        "fact_key": "k", "leaf_reference_id": "r", "reviewer": "  ", "verdict": "approved", "reasoning": "x",
+    })
+    assert blank_reviewer.status_code == 422
+
+    blank_reasoning = client.post("/api/reviews", json={
+        "fact_key": "k", "leaf_reference_id": "r", "reviewer": "r", "verdict": "approved", "reasoning": "   ",
+    })
+    assert blank_reasoning.status_code == 422
+
+
 def test_get_review_serializes_a_real_content_drift_leaf_without_500(tmp_path, monkeypatch):
     # Real bug, found during manual Playwright verification: for an
     # XPathSelector, ResolutionOutcome.raw_content on a RESOLVED/CONTENT-drift

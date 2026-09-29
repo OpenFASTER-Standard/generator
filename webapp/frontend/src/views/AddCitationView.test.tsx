@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from "vitest"
 import { render, screen, within, fireEvent, waitFor } from "@testing-library/react"
-import { MemoryRouter } from "react-router-dom"
+import { MemoryRouter, Routes, Route } from "react-router-dom"
 import { AddCitationView } from "./AddCitationView"
 import * as api from "../api"
 
@@ -37,8 +37,11 @@ describe("AddCitationView", () => {
     vi.spyOn(api, "fetchCandidates").mockResolvedValue(candidates as any)
     vi.spyOn(api, "submitCitation").mockResolvedValue({ fact_key: "new-key", revision: {} as any })
     render(
-      <MemoryRouter>
-        <AddCitationView />
+      <MemoryRouter initialEntries={["/add"]}>
+        <Routes>
+          <Route path="/add" element={<AddCitationView />} />
+          <Route path="/pages/:factKey" element={<div>landed on page detail</div>} />
+        </Routes>
       </MemoryRouter>
     )
 
@@ -54,5 +57,33 @@ describe("AddCitationView", () => {
         expect.objectContaining({ family: "Family-A", xpath: "//Foo", fact_key: "new-key", author: "me" })
       )
     )
+    expect(await screen.findByText("landed on page detail")).toBeInTheDocument()
+  })
+
+  it("submits exactly once even if the submit button is clicked twice rapidly", async () => {
+    vi.spyOn(api, "fetchCandidates").mockResolvedValue(candidates as any)
+    let resolveSubmit: (v: { fact_key: string; revision: any }) => void
+    vi.spyOn(api, "submitCitation").mockReturnValue(
+      new Promise((resolve) => {
+        resolveSubmit = resolve
+      })
+    )
+    render(
+      <MemoryRouter>
+        <AddCitationView />
+      </MemoryRouter>
+    )
+
+    fireEvent.click(await screen.findByText(/Family-A/))
+    const fooRow = (await screen.findByText("Foo")).closest("tr")!
+    fireEvent.click(within(fooRow).getByText("Cite this"))
+    fireEvent.change(screen.getByLabelText(/Fact key/i), { target: { value: "new-key" } })
+    fireEvent.change(screen.getByLabelText(/Author/i), { target: { value: "me" } })
+
+    fireEvent.click(screen.getByText("Submit citation"))
+    fireEvent.click(screen.getByText("Submit citation"))
+
+    resolveSubmit!({ fact_key: "new-key", revision: {} as any })
+    await waitFor(() => expect(api.submitCitation).toHaveBeenCalledTimes(1))
   })
 })

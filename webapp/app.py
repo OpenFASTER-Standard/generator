@@ -76,6 +76,17 @@ class SubmitReviewRequest(BaseModel):
     verdict: str  # "approved" | "rejected"
     reasoning: str
 
+    @field_validator("reviewer", "reasoning")
+    @classmethod
+    def _reject_blank(cls, value: str) -> str:
+        # A review's whole point is accountability: a blank reviewer or
+        # reasoning would permanently suppress a drift finding with no
+        # record of who did it or why. Same reasoning as
+        # AddCitationRequest's own _reject_blank validator on author.
+        if not value.strip():
+            raise ValueError("must not be blank")
+        return value
+
 
 @app.get("/api/pages")
 def list_pages_endpoint() -> dict:
