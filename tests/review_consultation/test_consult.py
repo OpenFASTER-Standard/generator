@@ -11,7 +11,7 @@ from review_recording.record import Verdict, record_review
 from review_surfacing.summarize import summarize_for_review
 from staleness_sweep.sweep import sweep
 
-REAL_MODULE_ROOT = "/work/ontologies/mikadiv-fm/sources"
+REAL_CORPUS_ROOT = "/work/ontologies/mikadiv-fm/sources"
 AORDNR_XPATH = (
     "/xs:schema/xs:complexType[@name='AmtlicheOrdnungsnummerMa23ListeType']"
     "/xs:sequence/xs:element[@name='AOrdNr']"
@@ -26,29 +26,29 @@ def _real_meldeart23_subject_document():
     return SubjectDocument(
         family="MiKaDiv_FM_Meldeart23",
         version="1.02",
-        retrieval_uri=f"{REAL_MODULE_ROOT}/1.02/xsd/MiKaDiv_FM_Meldeart23_1.02.xsd",
+        retrieval_uri=f"{REAL_CORPUS_ROOT}/1.02/xsd/MiKaDiv_FM_Meldeart23_1.02.xsd",
     )
 
 
-def _write_snapshot(module_root, version, xsd_text):
-    snapshot = module_root / version
-    shutil.copytree(module_root / "1.02", snapshot)
+def _write_snapshot(corpus_root, version, xsd_text):
+    snapshot = corpus_root / version
+    shutil.copytree(corpus_root / "1.02", snapshot)
     (snapshot / "xsd" / "MiKaDiv_FM_Meldeart23_1.02.xsd").write_text(xsd_text, encoding="utf-8")
-    (module_root / "_current").write_text(version)
+    (corpus_root / "_current").write_text(version)
 
 
 def test_approved_review_suppresses_matching_content_drift(tmp_path):
-    module_root = tmp_path / "mikadiv-fm-sources"
-    shutil.copytree(REAL_MODULE_ROOT, module_root)
-    original = (module_root / "1.02" / "xsd" / "MiKaDiv_FM_Meldeart23_1.02.xsd").read_text(encoding="utf-8")
+    corpus_root = tmp_path / "mikadiv-fm-sources"
+    shutil.copytree(REAL_CORPUS_ROOT, corpus_root)
+    original = (corpus_root / "1.02" / "xsd" / "MiKaDiv_FM_Meldeart23_1.02.xsd").read_text(encoding="utf-8")
     mutated = original.replace(
         '<xs:element name="AbgefKapitalertragsteuer" type="std:Dezimal14dot2Type">',
         '<xs:element name="AbgefKapitalertragsteuer" type="std:Dezimal14dot2Type" minOccurs="0">',
     )
-    _write_snapshot(module_root, "1.03", mutated)
+    _write_snapshot(corpus_root, "1.03", mutated)
 
     leaf = cite(_real_meldeart23_subject_document(), XPathSelector.create(ABGEF_XPATH))
-    summary = summarize_for_review(sweep({"fact-1": leaf}, str(module_root)))
+    summary = summarize_for_review(sweep({"fact-1": leaf}, str(corpus_root)))
     (flagged_leaf,) = summary.flagged["fact-1"]
 
     record_review(
@@ -67,17 +67,17 @@ def test_approved_review_suppresses_matching_content_drift(tmp_path):
 
 
 def test_content_drift_resurfaces_after_further_drift(tmp_path):
-    module_root = tmp_path / "mikadiv-fm-sources"
-    shutil.copytree(REAL_MODULE_ROOT, module_root)
-    original = (module_root / "1.02" / "xsd" / "MiKaDiv_FM_Meldeart23_1.02.xsd").read_text(encoding="utf-8")
+    corpus_root = tmp_path / "mikadiv-fm-sources"
+    shutil.copytree(REAL_CORPUS_ROOT, corpus_root)
+    original = (corpus_root / "1.02" / "xsd" / "MiKaDiv_FM_Meldeart23_1.02.xsd").read_text(encoding="utf-8")
     first_mutation = original.replace(
         '<xs:element name="AbgefKapitalertragsteuer" type="std:Dezimal14dot2Type">',
         '<xs:element name="AbgefKapitalertragsteuer" type="std:Dezimal14dot2Type" minOccurs="0">',
     )
-    _write_snapshot(module_root, "1.03", first_mutation)
+    _write_snapshot(corpus_root, "1.03", first_mutation)
 
     leaf = cite(_real_meldeart23_subject_document(), XPathSelector.create(ABGEF_XPATH))
-    summary_v1 = summarize_for_review(sweep({"fact-1": leaf}, str(module_root)))
+    summary_v1 = summarize_for_review(sweep({"fact-1": leaf}, str(corpus_root)))
     (flagged_leaf_v1,) = summary_v1.flagged["fact-1"]
 
     record_review(
@@ -91,11 +91,11 @@ def test_content_drift_resurfaces_after_further_drift(tmp_path):
 
     second_mutation = first_mutation.replace('minOccurs="0"', 'minOccurs="0" maxOccurs="2"')
     assert second_mutation != first_mutation
-    (module_root / "1.03" / "xsd" / "MiKaDiv_FM_Meldeart23_1.02.xsd").write_text(
+    (corpus_root / "1.03" / "xsd" / "MiKaDiv_FM_Meldeart23_1.02.xsd").write_text(
         second_mutation, encoding="utf-8"
     )
 
-    summary_v2 = summarize_for_review(sweep({"fact-1": leaf}, str(module_root)))
+    summary_v2 = summarize_for_review(sweep({"fact-1": leaf}, str(corpus_root)))
     reviews = load_reviews(str(tmp_path / "reviews"))
     filtered = apply_reviews(summary_v2, reviews)
 
@@ -105,14 +105,14 @@ def test_content_drift_resurfaces_after_further_drift(tmp_path):
 
 
 def test_approved_review_suppresses_matching_structural_drift(tmp_path):
-    module_root = tmp_path / "mikadiv-fm-sources"
-    shutil.copytree(REAL_MODULE_ROOT, module_root)
-    original = (module_root / "1.02" / "xsd" / "MiKaDiv_FM_Meldeart23_1.02.xsd").read_text(encoding="utf-8")
+    corpus_root = tmp_path / "mikadiv-fm-sources"
+    shutil.copytree(REAL_CORPUS_ROOT, corpus_root)
+    original = (corpus_root / "1.02" / "xsd" / "MiKaDiv_FM_Meldeart23_1.02.xsd").read_text(encoding="utf-8")
     mutated = original.replace('name="AOrdNr"', 'name="AOrdNrRenamed"')
-    _write_snapshot(module_root, "1.03", mutated)
+    _write_snapshot(corpus_root, "1.03", mutated)
 
     leaf = cite(_real_meldeart23_subject_document(), XPathSelector.create(AORDNR_XPATH))
-    summary = summarize_for_review(sweep({"fact-1": leaf}, str(module_root)))
+    summary = summarize_for_review(sweep({"fact-1": leaf}, str(corpus_root)))
     (flagged_leaf,) = summary.flagged["fact-1"]
     assert flagged_leaf.fingerprint == "NOT_FOUND"
 
@@ -132,17 +132,17 @@ def test_approved_review_suppresses_matching_structural_drift(tmp_path):
 
 
 def test_rejected_review_does_not_suppress(tmp_path):
-    module_root = tmp_path / "mikadiv-fm-sources"
-    shutil.copytree(REAL_MODULE_ROOT, module_root)
-    original = (module_root / "1.02" / "xsd" / "MiKaDiv_FM_Meldeart23_1.02.xsd").read_text(encoding="utf-8")
+    corpus_root = tmp_path / "mikadiv-fm-sources"
+    shutil.copytree(REAL_CORPUS_ROOT, corpus_root)
+    original = (corpus_root / "1.02" / "xsd" / "MiKaDiv_FM_Meldeart23_1.02.xsd").read_text(encoding="utf-8")
     mutated = original.replace(
         '<xs:element name="AbgefKapitalertragsteuer" type="std:Dezimal14dot2Type">',
         '<xs:element name="AbgefKapitalertragsteuer" type="std:Dezimal14dot2Type" minOccurs="0">',
     )
-    _write_snapshot(module_root, "1.03", mutated)
+    _write_snapshot(corpus_root, "1.03", mutated)
 
     leaf = cite(_real_meldeart23_subject_document(), XPathSelector.create(ABGEF_XPATH))
-    summary = summarize_for_review(sweep({"fact-1": leaf}, str(module_root)))
+    summary = summarize_for_review(sweep({"fact-1": leaf}, str(corpus_root)))
     (flagged_leaf,) = summary.flagged["fact-1"]
 
     record_review(
@@ -162,17 +162,17 @@ def test_rejected_review_does_not_suppress(tmp_path):
 
 
 def test_both_approved_and_rejected_for_same_fingerprint_stays_visible(tmp_path):
-    module_root = tmp_path / "mikadiv-fm-sources"
-    shutil.copytree(REAL_MODULE_ROOT, module_root)
-    original = (module_root / "1.02" / "xsd" / "MiKaDiv_FM_Meldeart23_1.02.xsd").read_text(encoding="utf-8")
+    corpus_root = tmp_path / "mikadiv-fm-sources"
+    shutil.copytree(REAL_CORPUS_ROOT, corpus_root)
+    original = (corpus_root / "1.02" / "xsd" / "MiKaDiv_FM_Meldeart23_1.02.xsd").read_text(encoding="utf-8")
     mutated = original.replace(
         '<xs:element name="AbgefKapitalertragsteuer" type="std:Dezimal14dot2Type">',
         '<xs:element name="AbgefKapitalertragsteuer" type="std:Dezimal14dot2Type" minOccurs="0">',
     )
-    _write_snapshot(module_root, "1.03", mutated)
+    _write_snapshot(corpus_root, "1.03", mutated)
 
     leaf = cite(_real_meldeart23_subject_document(), XPathSelector.create(ABGEF_XPATH))
-    summary = summarize_for_review(sweep({"fact-1": leaf}, str(module_root)))
+    summary = summarize_for_review(sweep({"fact-1": leaf}, str(corpus_root)))
     (flagged_leaf,) = summary.flagged["fact-1"]
 
     record_review(
@@ -204,20 +204,20 @@ def test_union_with_one_leaf_approved_key_remains_with_only_unreviewed_leaf(tmp_
     # different leaves sharing a (fact_key, drift_kind, fingerprint) triple
     # is exactly the collision apply_reviews() must not conflate. Approving
     # one must never suppress the other just because they look alike.
-    module_root = tmp_path / "mikadiv-fm-sources"
-    shutil.copytree(REAL_MODULE_ROOT, module_root)
-    original = (module_root / "1.02" / "xsd" / "MiKaDiv_FM_Meldeart23_1.02.xsd").read_text(encoding="utf-8")
+    corpus_root = tmp_path / "mikadiv-fm-sources"
+    shutil.copytree(REAL_CORPUS_ROOT, corpus_root)
+    original = (corpus_root / "1.02" / "xsd" / "MiKaDiv_FM_Meldeart23_1.02.xsd").read_text(encoding="utf-8")
     mutated = original.replace(
         '<xs:element name="AbgefKapitalertragsteuer" type="std:Dezimal14dot2Type">',
         '<xs:element name="AbgefKapitalertragsteuerRenamed" type="std:Dezimal14dot2Type">',
     ).replace('name="AOrdNr"', 'name="AOrdNrRenamed"')
-    _write_snapshot(module_root, "1.03", mutated)
+    _write_snapshot(corpus_root, "1.03", mutated)
 
     abgef_leaf = cite(_real_meldeart23_subject_document(), XPathSelector.create(ABGEF_XPATH))
     aordnr_leaf = cite(_real_meldeart23_subject_document(), XPathSelector.create(AORDNR_XPATH))
     union = cite_union([abgef_leaf, aordnr_leaf])
 
-    summary = summarize_for_review(sweep({"fact-1": union}, str(module_root)))
+    summary = summarize_for_review(sweep({"fact-1": union}, str(corpus_root)))
     assert len(summary.flagged["fact-1"]) == 2
     assert {fl.fingerprint for fl in summary.flagged["fact-1"]} == {"NOT_FOUND"}
     abgef_flagged = next(fl for fl in summary.flagged["fact-1"] if fl.leaf == abgef_leaf)
@@ -240,20 +240,20 @@ def test_union_with_one_leaf_approved_key_remains_with_only_unreviewed_leaf(tmp_
 
 
 def test_union_with_all_leaves_approved_key_is_dropped(tmp_path):
-    module_root = tmp_path / "mikadiv-fm-sources"
-    shutil.copytree(REAL_MODULE_ROOT, module_root)
-    original = (module_root / "1.02" / "xsd" / "MiKaDiv_FM_Meldeart23_1.02.xsd").read_text(encoding="utf-8")
+    corpus_root = tmp_path / "mikadiv-fm-sources"
+    shutil.copytree(REAL_CORPUS_ROOT, corpus_root)
+    original = (corpus_root / "1.02" / "xsd" / "MiKaDiv_FM_Meldeart23_1.02.xsd").read_text(encoding="utf-8")
     mutated = original.replace(
         '<xs:element name="AbgefKapitalertragsteuer" type="std:Dezimal14dot2Type">',
         '<xs:element name="AbgefKapitalertragsteuer" type="std:Dezimal14dot2Type" minOccurs="0">',
     ).replace('name="AOrdNr"', 'name="AOrdNrRenamed"')
-    _write_snapshot(module_root, "1.03", mutated)
+    _write_snapshot(corpus_root, "1.03", mutated)
 
     content_leaf = cite(_real_meldeart23_subject_document(), XPathSelector.create(ABGEF_XPATH))
     structural_leaf = cite(_real_meldeart23_subject_document(), XPathSelector.create(AORDNR_XPATH))
     union = cite_union([content_leaf, structural_leaf])
 
-    summary = summarize_for_review(sweep({"fact-1": union}, str(module_root)))
+    summary = summarize_for_review(sweep({"fact-1": union}, str(corpus_root)))
     for flagged_leaf in summary.flagged["fact-1"]:
         record_review(
             reviews_dir=str(tmp_path / "reviews"),
@@ -274,10 +274,10 @@ def test_unresolved_families_and_excluded_keys_pass_through_unchanged():
     fake_subject_document = SubjectDocument(
         family="NoSuchFamilyEver",
         version="1.02",
-        retrieval_uri=f"{REAL_MODULE_ROOT}/1.02/xsd/MiKaDiv_FM_Meldeart23_1.02.xsd",
+        retrieval_uri=f"{REAL_CORPUS_ROOT}/1.02/xsd/MiKaDiv_FM_Meldeart23_1.02.xsd",
     )
     leaf = cite(fake_subject_document, XPathSelector.create(AORDNR_XPATH))
-    summary = summarize_for_review(sweep({"fact-1": leaf}, REAL_MODULE_ROOT))
+    summary = summarize_for_review(sweep({"fact-1": leaf}, REAL_CORPUS_ROOT))
 
     filtered = apply_reviews(summary, [])
 

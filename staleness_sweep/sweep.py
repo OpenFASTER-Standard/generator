@@ -32,7 +32,7 @@ def _collect_families(reference: Reference) -> set[str]:
     return families
 
 
-def sweep(references: dict[str, Reference], module_root: str) -> SweepReport:
+def sweep(references: dict[str, Reference], corpus_root: str) -> SweepReport:
     all_families: set[str] = set()
     for reference in references.values():
         all_families |= _collect_families(reference)
@@ -43,7 +43,7 @@ def sweep(references: dict[str, Reference], module_root: str) -> SweepReport:
         # Sorted, not raw set iteration order -- a report meant to be
         # diffed/snapshot-compared by a later sub-project can't have an
         # order that reshuffles run to run under hash randomization.
-        location = resolve_family_location(module_root, family)
+        location = resolve_family_location(corpus_root, family)
         if location is not None:
             overrides[family] = location.retrieval_uri
         else:

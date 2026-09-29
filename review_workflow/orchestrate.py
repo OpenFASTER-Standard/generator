@@ -22,7 +22,7 @@ class WebReviewSummary:
     deserialization_failures: tuple[str, ...]  # fact_keys whose current revision isn't a valid Reference
 
 
-def get_review_summary(catalog_path: str | Path, module_root: str, reviews_dir: str) -> WebReviewSummary:
+def get_review_summary(catalog_path: str | Path, corpus_root: str, reviews_dir: str) -> WebReviewSummary:
     pages = list_pages(catalog_path)
 
     references = {}
@@ -33,7 +33,7 @@ def get_review_summary(catalog_path: str | Path, module_root: str, reviews_dir: 
         except ReferenceDeserializationError:
             deserialization_failures.append(fact_key)
 
-    report = sweep(references, module_root)
+    report = sweep(references, corpus_root)
     summary = summarize_for_review(report)
     reviews = load_reviews(reviews_dir)
     summary = apply_reviews(summary, reviews)

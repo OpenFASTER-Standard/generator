@@ -28,7 +28,7 @@ class FamilyNotCitableError(GeneratorError):
 
 
 def add_citation(
-    module_root: str,
+    corpus_root: str,
     catalog_path: str | Path,
     family: str,
     xpath: str,
@@ -40,7 +40,7 @@ def add_citation(
     # Resolves only the one family requested -- an unrelated broken
     # manifest entry for some OTHER family must never prevent citing this
     # one. See resolve_family_location()'s own docstring.
-    location = resolve_family_location(module_root, family)
+    location = resolve_family_location(corpus_root, family)
     if location is None:
         raise FamilyNotFoundError(f"no such family in the current corpus snapshot: {family!r}")
     if not location.retrieval_uri.endswith(".xsd"):

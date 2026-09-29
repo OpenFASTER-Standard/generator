@@ -9,7 +9,7 @@ from reference_model.selectors.xpath_selector import XPathSelector
 from reference_model.serialize import to_json_dict
 from references_catalog.catalog import get_history
 
-REAL_MODULE_ROOT = "/work/ontologies/mikadiv-fm/sources"
+REAL_CORPUS_ROOT = "/work/ontologies/mikadiv-fm/sources"
 REAL_XSD = "/work/ontologies/mikadiv-fm/sources/1.02/xsd/MiKaDiv_FM_Meldeart23_1.02.xsd"
 AORDNR_XPATH = (
     "/xs:schema/xs:complexType[@name='AmtlicheOrdnungsnummerMa23ListeType']"
@@ -31,7 +31,7 @@ def test_add_citation_creates_a_page_matching_a_direct_cite_call(tmp_path):
     catalog_path = _empty_catalog(tmp_path)
 
     revision = add_citation(
-        REAL_MODULE_ROOT, catalog_path,
+        REAL_CORPUS_ROOT, catalog_path,
         family="MiKaDiv_FM_Meldeart23", xpath=AORDNR_XPATH,
         fact_key="fact-1", author="julian", comment="initial citation", is_correction=False,
     )
@@ -55,7 +55,7 @@ def test_add_citation_raises_family_not_found_without_creating_a_page(tmp_path):
 
     with pytest.raises(FamilyNotFoundError):
         add_citation(
-            REAL_MODULE_ROOT, catalog_path,
+            REAL_CORPUS_ROOT, catalog_path,
             family="NoSuchFamilyEver", xpath="/x",
             fact_key="fact-2", author="julian", comment="x", is_correction=False,
         )
@@ -67,12 +67,12 @@ def test_add_citation_twice_for_same_fact_key_appends_a_second_revision(tmp_path
     catalog_path = _empty_catalog(tmp_path)
 
     add_citation(
-        REAL_MODULE_ROOT, catalog_path,
+        REAL_CORPUS_ROOT, catalog_path,
         family="MiKaDiv_FM_Meldeart23", xpath=AORDNR_XPATH,
         fact_key="fact-3", author="julian", comment="first version", is_correction=False,
     )
     revision_2 = add_citation(
-        REAL_MODULE_ROOT, catalog_path,
+        REAL_CORPUS_ROOT, catalog_path,
         family="MiKaDiv_FM_Meldeart23", xpath=ABGEF_XPATH,
         fact_key="fact-3", author="julian", comment="corrected", is_correction=True,
     )
@@ -88,7 +88,7 @@ def test_add_citation_with_an_xpath_that_does_not_resolve_raises_citation_error(
 
     with pytest.raises(CitationError):
         add_citation(
-            REAL_MODULE_ROOT, catalog_path,
+            REAL_CORPUS_ROOT, catalog_path,
             family="MiKaDiv_FM_Meldeart23", xpath="/xs:schema/xs:complexType[@name='NoSuchThing']",
             fact_key="fact-4", author="julian", comment="x", is_correction=False,
         )
@@ -97,8 +97,8 @@ def test_add_citation_with_an_xpath_that_does_not_resolve_raises_citation_error(
 
 
 def _corpus_with_one_healthy_and_one_broken_family(tmp_path) -> str:
-    module_root = tmp_path / "corpus"
-    snapshot_dir = module_root / "1.0"
+    corpus_root = tmp_path / "corpus"
+    snapshot_dir = corpus_root / "1.0"
     snapshot_dir.mkdir(parents=True)
     (snapshot_dir / "healthy.xsd").write_text(
         '<?xml version="1.0" encoding="UTF-8"?>'
@@ -111,16 +111,16 @@ def _corpus_with_one_healthy_and_one_broken_family(tmp_path) -> str:
         json.dumps({"HealthyFamily": "healthy.xsd", "BrokenFamily": "does-not-exist.xsd"}),
         encoding="utf-8",
     )
-    (module_root / "_current").write_text("1.0", encoding="utf-8")
-    return str(module_root)
+    (corpus_root / "_current").write_text("1.0", encoding="utf-8")
+    return str(corpus_root)
 
 
 def test_add_citation_succeeds_for_a_healthy_family_despite_an_unrelated_broken_manifest_entry(tmp_path):
-    module_root = _corpus_with_one_healthy_and_one_broken_family(tmp_path)
+    corpus_root = _corpus_with_one_healthy_and_one_broken_family(tmp_path)
     catalog_path = _empty_catalog(tmp_path)
 
     revision = add_citation(
-        module_root, catalog_path,
+        corpus_root, catalog_path,
         family="HealthyFamily", xpath="/xs:schema/xs:element[@name='Foo']",
         fact_key="fact-5", author="julian", comment="x", is_correction=False,
     )
@@ -133,7 +133,7 @@ def test_add_citation_rejects_a_non_xsd_family_with_a_clear_error(tmp_path):
 
     with pytest.raises(FamilyNotCitableError):
         add_citation(
-            REAL_MODULE_ROOT, catalog_path,
+            REAL_CORPUS_ROOT, catalog_path,
             family="khb_mikadiv_fm_de", xpath="/x",
             fact_key="fact-6", author="julian", comment="x", is_correction=False,
         )

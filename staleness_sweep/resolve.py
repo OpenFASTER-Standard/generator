@@ -27,16 +27,16 @@ class FamilyLocation:
     retrieval_uri: str
 
 
-def _load_current_manifest(module_root: str) -> tuple[Path, dict[str, str], str] | None:
-    module_root_path = Path(module_root)
-    current_path = module_root_path / "_current"
+def _load_current_manifest(corpus_root: str) -> tuple[Path, dict[str, str], str] | None:
+    corpus_root_path = Path(corpus_root)
+    current_path = corpus_root_path / "_current"
     if not current_path.exists():
         return None
 
     snapshot = current_path.read_text().strip()
-    resolved_module_root = module_root_path.resolve()
-    snapshot_dir = (module_root_path / snapshot).resolve()
-    if not snapshot_dir.is_relative_to(resolved_module_root):
+    resolved_corpus_root = corpus_root_path.resolve()
+    snapshot_dir = (corpus_root_path / snapshot).resolve()
+    if not snapshot_dir.is_relative_to(resolved_corpus_root):
         # _current is the one file this whole convention expects a human to
         # hand-edit on every re-fetch -- exactly the place a copy-paste
         # mistake (or a malicious edit) is most likely, and the manifest's
@@ -44,7 +44,7 @@ def _load_current_manifest(module_root: str) -> tuple[Path, dict[str, str], str]
         # there is only ever measured relative to whatever snapshot_dir
         # this bad pointer itself chose.
         raise CorpusIntegrityError(
-            f"_current names snapshot {snapshot!r}, which escapes module_root {module_root!r}"
+            f"_current names snapshot {snapshot!r}, which escapes corpus_root {corpus_root!r}"
         )
 
     manifest_path = snapshot_dir / "_manifest.json"
@@ -80,26 +80,26 @@ def _resolve_family_path(snapshot_dir: Path, snapshot: str, family: str, manifes
     return str(resolved_path)
 
 
-def list_current_families(module_root: str) -> list[str]:
+def list_current_families(corpus_root: str) -> list[str]:
     # Deliberately does not resolve any family's file path -- a caller
     # that needs to enumerate family names without one broken manifest
     # entry (a missing file, an escaping path) taking down the whole
     # listing should use this instead, then resolve each family
     # individually via resolve_family_location().
-    result = _load_current_manifest(module_root)
+    result = _load_current_manifest(corpus_root)
     if result is None:
         return []
     _snapshot_dir, manifest, _snapshot = result
     return sorted(manifest.keys())
 
 
-def resolve_family_location(module_root: str, family: str) -> FamilyLocation | None:
+def resolve_family_location(corpus_root: str, family: str) -> FamilyLocation | None:
     # Resolves exactly one family, so a broken manifest entry for some
     # OTHER family never prevents citing or listing this one -- callers
     # needing every family's location loop over list_current_families()
     # and call this once per name, so one broken entry excludes only
     # itself rather than failing the whole batch.
-    result = _load_current_manifest(module_root)
+    result = _load_current_manifest(corpus_root)
     if result is None:
         return None
     snapshot_dir, manifest, snapshot = result

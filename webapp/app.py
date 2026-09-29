@@ -26,7 +26,7 @@ from review_recording.record import Verdict
 from review_workflow.orchestrate import get_review_summary, submit_review
 
 DEFAULT_CATALOG_PATH = "/work/ontologies/mikadiv-fm/references.json"
-DEFAULT_MODULE_ROOT = "/work/ontologies/mikadiv-fm/sources"
+DEFAULT_CORPUS_ROOT = "/work/ontologies/mikadiv-fm/sources"
 DEFAULT_REVIEWS_DIR = "/work/ontologies/mikadiv-fm/reviews"
 
 app = FastAPI()
@@ -47,13 +47,13 @@ def _catalog_path() -> Path:
     return Path(os.environ.get("REFERENCES_CATALOG_PATH", DEFAULT_CATALOG_PATH))
 
 
-def _module_root() -> str:
+def _corpus_root() -> str:
     # Same call-time-read pattern as _catalog_path(), for the same reason.
-    return os.environ.get("MIKADIV_MODULE_ROOT", DEFAULT_MODULE_ROOT)
+    return os.environ.get("MIKADIV_CORPUS_ROOT", DEFAULT_CORPUS_ROOT)
 
 
 def _reviews_dir() -> str:
-    # Same call-time-read pattern as _catalog_path()/_module_root().
+    # Same call-time-read pattern as _catalog_path()/_corpus_root().
     return os.environ.get("MIKADIV_REVIEWS_DIR", DEFAULT_REVIEWS_DIR)
 
 
@@ -124,7 +124,7 @@ def get_page(fact_key: str) -> dict:
 
 @app.get("/api/candidates")
 def list_candidates_endpoint() -> dict:
-    results = list_corpus_candidates(_module_root())
+    results = list_corpus_candidates(_corpus_root())
     return {
         family: {
             "candidates": [dataclasses.asdict(c) for c in result.candidates],
@@ -140,7 +140,7 @@ def add_citation_endpoint(request: AddCitationRequest) -> dict:
     # from GeneratorError, so generator_error_handler() maps them to 400
     # uniformly -- no try/except needed here.
     revision = add_citation(
-        _module_root(),
+        _corpus_root(),
         _catalog_path(),
         request.family,
         request.xpath,
@@ -168,7 +168,7 @@ def _serialize_flagged_leaf(flagged_leaf) -> dict:
 
 @app.get("/api/review")
 def get_review_endpoint() -> dict:
-    result = get_review_summary(_catalog_path(), _module_root(), _reviews_dir())
+    result = get_review_summary(_catalog_path(), _corpus_root(), _reviews_dir())
     return {
         "flagged": {
             fact_key: [_serialize_flagged_leaf(fl) for fl in entries]
@@ -193,7 +193,7 @@ def submit_review_endpoint(request: SubmitReviewRequest) -> dict:
     except ValueError:
         raise HTTPException(status_code=400, detail=f"invalid verdict: {request.verdict!r}")
 
-    result = get_review_summary(_catalog_path(), _module_root(), _reviews_dir())
+    result = get_review_summary(_catalog_path(), _corpus_root(), _reviews_dir())
     entries = result.summary.flagged.get(request.fact_key, ())
     flagged = next((fl for fl in entries if fl.leaf.reference_id == request.leaf_reference_id), None)
     if flagged is None:

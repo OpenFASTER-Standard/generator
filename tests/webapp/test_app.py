@@ -10,7 +10,7 @@ from reference_model.selectors.xpath_selector import XPathSelector
 from references_catalog.catalog import add_revision
 from webapp.app import app
 
-REAL_MODULE_ROOT = "/work/ontologies/mikadiv-fm/sources"
+REAL_CORPUS_ROOT = "/work/ontologies/mikadiv-fm/sources"
 REAL_XSD = "/work/ontologies/mikadiv-fm/sources/1.02/xsd/MiKaDiv_FM_Meldeart23_1.02.xsd"
 AORDNR_XPATH = (
     "/xs:schema/xs:complexType[@name='AmtlicheOrdnungsnummerMa23ListeType']"
@@ -152,15 +152,15 @@ REAL_XSD_FAMILIES = {
 
 
 def _synthetic_corpus(tmp_path, xsd_content: str) -> str:
-    module_root = tmp_path / "corpus"
-    snapshot_dir = module_root / "1.0"
+    corpus_root = tmp_path / "corpus"
+    snapshot_dir = corpus_root / "1.0"
     snapshot_dir.mkdir(parents=True)
     (snapshot_dir / "test.xsd").write_text(xsd_content, encoding="utf-8")
     (snapshot_dir / "_manifest.json").write_text(
         json.dumps({"TestFamily": "test.xsd"}), encoding="utf-8"
     )
-    (module_root / "_current").write_text("1.0", encoding="utf-8")
-    return str(module_root)
+    (corpus_root / "_current").write_text("1.0", encoding="utf-8")
+    return str(corpus_root)
 
 
 _VALID_XSD = """<?xml version="1.0" encoding="UTF-8"?>
@@ -186,7 +186,7 @@ def test_list_candidates_endpoint_returns_the_real_13_xsd_families():
 
 
 def test_list_candidates_endpoint_surfaces_excluded_candidates(tmp_path, monkeypatch):
-    module_root = _synthetic_corpus(
+    corpus_root = _synthetic_corpus(
         tmp_path,
         '<?xml version="1.0" encoding="UTF-8"?>'
         '<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:vendor="urn:vendor">'
@@ -194,7 +194,7 @@ def test_list_candidates_endpoint_surfaces_excluded_candidates(tmp_path, monkeyp
         '<vendor:wrapper><xs:element name="Decoy" type="xs:string"/></vendor:wrapper>'
         "</xs:schema>",
     )
-    monkeypatch.setenv("MIKADIV_MODULE_ROOT", module_root)
+    monkeypatch.setenv("MIKADIV_CORPUS_ROOT", corpus_root)
     client = TestClient(app)
 
     response = client.get("/api/candidates")
@@ -208,9 +208,9 @@ def test_list_candidates_endpoint_surfaces_excluded_candidates(tmp_path, monkeyp
 def test_add_citation_endpoint_creates_a_page_retrievable_via_get_pages(tmp_path, monkeypatch):
     catalog_path = tmp_path / "references.json"
     catalog_path.write_text("{}", encoding="utf-8")
-    module_root = _synthetic_corpus(tmp_path, _VALID_XSD)
+    corpus_root = _synthetic_corpus(tmp_path, _VALID_XSD)
     monkeypatch.setenv("REFERENCES_CATALOG_PATH", str(catalog_path))
-    monkeypatch.setenv("MIKADIV_MODULE_ROOT", module_root)
+    monkeypatch.setenv("MIKADIV_CORPUS_ROOT", corpus_root)
 
     client = TestClient(app)
     response = client.post("/api/citations", json={
@@ -233,9 +233,9 @@ def test_add_citation_endpoint_creates_a_page_retrievable_via_get_pages(tmp_path
 def test_add_citation_endpoint_returns_400_for_unknown_family(tmp_path, monkeypatch):
     catalog_path = tmp_path / "references.json"
     catalog_path.write_text("{}", encoding="utf-8")
-    module_root = _synthetic_corpus(tmp_path, _VALID_XSD)
+    corpus_root = _synthetic_corpus(tmp_path, _VALID_XSD)
     monkeypatch.setenv("REFERENCES_CATALOG_PATH", str(catalog_path))
-    monkeypatch.setenv("MIKADIV_MODULE_ROOT", module_root)
+    monkeypatch.setenv("MIKADIV_CORPUS_ROOT", corpus_root)
 
     client = TestClient(app)
     response = client.post("/api/citations", json={
@@ -254,9 +254,9 @@ def test_add_citation_endpoint_returns_400_for_unknown_family(tmp_path, monkeypa
 def test_add_citation_endpoint_returns_400_for_a_candidate_that_went_stale(tmp_path, monkeypatch):
     catalog_path = tmp_path / "references.json"
     catalog_path.write_text("{}", encoding="utf-8")
-    module_root = _synthetic_corpus(tmp_path, _VALID_XSD)
+    corpus_root = _synthetic_corpus(tmp_path, _VALID_XSD)
     monkeypatch.setenv("REFERENCES_CATALOG_PATH", str(catalog_path))
-    monkeypatch.setenv("MIKADIV_MODULE_ROOT", module_root)
+    monkeypatch.setenv("MIKADIV_CORPUS_ROOT", corpus_root)
     client = TestClient(app)
 
     # The xpath is valid right now -- confirm the candidate genuinely
@@ -266,7 +266,7 @@ def test_add_citation_endpoint_returns_400_for_a_candidate_that_went_stale(tmp_p
 
     # Mutate the real underlying file so the same xpath no longer resolves
     # -- simulates a candidate going stale between listing and submission.
-    (Path(module_root) / "1.0" / "test.xsd").write_text(_XSD_WITHOUT_FOO, encoding="utf-8")
+    (Path(corpus_root) / "1.0" / "test.xsd").write_text(_XSD_WITHOUT_FOO, encoding="utf-8")
 
     response = client.post("/api/citations", json={
         "family": "TestFamily",
@@ -282,24 +282,24 @@ def test_add_citation_endpoint_returns_400_for_a_candidate_that_went_stale(tmp_p
 
 
 def _corpus_with_one_healthy_and_one_broken_family(tmp_path) -> str:
-    module_root = tmp_path / "corpus"
-    snapshot_dir = module_root / "1.0"
+    corpus_root = tmp_path / "corpus"
+    snapshot_dir = corpus_root / "1.0"
     snapshot_dir.mkdir(parents=True)
     (snapshot_dir / "healthy.xsd").write_text(_VALID_XSD, encoding="utf-8")
     (snapshot_dir / "_manifest.json").write_text(
         json.dumps({"HealthyFamily": "healthy.xsd", "BrokenFamily": "does-not-exist.xsd"}),
         encoding="utf-8",
     )
-    (module_root / "_current").write_text("1.0", encoding="utf-8")
-    return str(module_root)
+    (corpus_root / "_current").write_text("1.0", encoding="utf-8")
+    return str(corpus_root)
 
 
 def test_add_citation_endpoint_rejects_a_blank_fact_key_without_creating_a_page(tmp_path, monkeypatch):
     catalog_path = tmp_path / "references.json"
     catalog_path.write_text("{}", encoding="utf-8")
-    module_root = _synthetic_corpus(tmp_path, _VALID_XSD)
+    corpus_root = _synthetic_corpus(tmp_path, _VALID_XSD)
     monkeypatch.setenv("REFERENCES_CATALOG_PATH", str(catalog_path))
-    monkeypatch.setenv("MIKADIV_MODULE_ROOT", module_root)
+    monkeypatch.setenv("MIKADIV_CORPUS_ROOT", corpus_root)
 
     client = TestClient(app)
     response = client.post("/api/citations", json={
@@ -318,9 +318,9 @@ def test_add_citation_endpoint_rejects_a_blank_fact_key_without_creating_a_page(
 def test_add_citation_endpoint_rejects_a_blank_author_without_creating_a_page(tmp_path, monkeypatch):
     catalog_path = tmp_path / "references.json"
     catalog_path.write_text("{}", encoding="utf-8")
-    module_root = _synthetic_corpus(tmp_path, _VALID_XSD)
+    corpus_root = _synthetic_corpus(tmp_path, _VALID_XSD)
     monkeypatch.setenv("REFERENCES_CATALOG_PATH", str(catalog_path))
-    monkeypatch.setenv("MIKADIV_MODULE_ROOT", module_root)
+    monkeypatch.setenv("MIKADIV_CORPUS_ROOT", corpus_root)
 
     client = TestClient(app)
     response = client.post("/api/citations", json={
@@ -337,8 +337,8 @@ def test_add_citation_endpoint_rejects_a_blank_author_without_creating_a_page(tm
 
 
 def test_list_candidates_endpoint_returns_200_despite_one_broken_family_in_manifest(tmp_path, monkeypatch):
-    module_root = _corpus_with_one_healthy_and_one_broken_family(tmp_path)
-    monkeypatch.setenv("MIKADIV_MODULE_ROOT", module_root)
+    corpus_root = _corpus_with_one_healthy_and_one_broken_family(tmp_path)
+    monkeypatch.setenv("MIKADIV_CORPUS_ROOT", corpus_root)
 
     client = TestClient(app)
     response = client.get("/api/candidates")
@@ -349,11 +349,11 @@ def test_list_candidates_endpoint_returns_200_despite_one_broken_family_in_manif
 
 
 def test_add_citation_endpoint_succeeds_for_healthy_family_despite_unrelated_broken_family(tmp_path, monkeypatch):
-    module_root = _corpus_with_one_healthy_and_one_broken_family(tmp_path)
+    corpus_root = _corpus_with_one_healthy_and_one_broken_family(tmp_path)
     catalog_path = tmp_path / "references.json"
     catalog_path.write_text("{}", encoding="utf-8")
     monkeypatch.setenv("REFERENCES_CATALOG_PATH", str(catalog_path))
-    monkeypatch.setenv("MIKADIV_MODULE_ROOT", module_root)
+    monkeypatch.setenv("MIKADIV_CORPUS_ROOT", corpus_root)
 
     client = TestClient(app)
     response = client.post("/api/citations", json={
@@ -475,16 +475,16 @@ def test_a_generator_error_maps_uniformly_to_its_own_http_status_with_a_real_det
 
 
 def test_get_candidates_maps_a_corpus_integrity_error_to_500_with_a_real_detail_message(tmp_path, monkeypatch):
-    module_root = tmp_path / "corpus"
-    module_root.mkdir()
-    (module_root / "_current").write_text("../escapes-module-root", encoding="utf-8")
-    monkeypatch.setenv("MIKADIV_MODULE_ROOT", str(module_root))
+    corpus_root = tmp_path / "corpus"
+    corpus_root.mkdir()
+    (corpus_root / "_current").write_text("../escapes-module-root", encoding="utf-8")
+    monkeypatch.setenv("MIKADIV_CORPUS_ROOT", str(corpus_root))
     client = TestClient(app)
 
     response = client.get("/api/candidates")
 
     assert response.status_code == 500
-    assert "escapes module_root" in response.json()["detail"]
+    assert "escapes corpus_root" in response.json()["detail"]
 
 
 def test_get_review_serializes_a_real_content_drift_leaf_without_500(tmp_path, monkeypatch):
@@ -494,9 +494,9 @@ def test_get_review_serializes_a_real_content_drift_leaf_without_500(tmp_path, m
     # dataclasses.asdict(FlaggedLeaf) leaves that object in place, and
     # FastAPI/pydantic then can't serialize it, so this endpoint 500s for
     # every genuine CONTENT-drift XPath finding, not just a contrived one.
-    module_root = tmp_path / "mikadiv-fm-sources"
-    shutil.copytree(REAL_MODULE_ROOT, module_root)
-    xsd_path = module_root / "1.02" / "xsd" / "MiKaDiv_FM_Meldeart23_1.02.xsd"
+    corpus_root = tmp_path / "mikadiv-fm-sources"
+    shutil.copytree(REAL_CORPUS_ROOT, corpus_root)
+    xsd_path = corpus_root / "1.02" / "xsd" / "MiKaDiv_FM_Meldeart23_1.02.xsd"
     original = xsd_path.read_text(encoding="utf-8")
     # Change an attribute's documentation text -- the element named by the
     # xpath still resolves (no structural drift), but its canonical content
@@ -513,7 +513,7 @@ def test_get_review_serializes_a_real_content_drift_leaf_without_500(tmp_path, m
     add_revision(str(catalog_path), "fact-drift", leaf, "julian", "initial", False)
 
     monkeypatch.setenv("REFERENCES_CATALOG_PATH", str(catalog_path))
-    monkeypatch.setenv("MIKADIV_MODULE_ROOT", str(module_root))
+    monkeypatch.setenv("MIKADIV_CORPUS_ROOT", str(corpus_root))
     monkeypatch.setenv("MIKADIV_REVIEWS_DIR", str(tmp_path / "reviews"))
     client = TestClient(app)
 

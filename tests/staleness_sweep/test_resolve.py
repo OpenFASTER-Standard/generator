@@ -5,7 +5,7 @@ import pytest
 
 from staleness_sweep.resolve import CorpusIntegrityError, resolve_family_location
 
-REAL_MODULE_ROOT = "/work/ontologies/mikadiv-fm/sources"
+REAL_CORPUS_ROOT = "/work/ontologies/mikadiv-fm/sources"
 
 
 def test_resolves_the_unversioned_din_family_too():
@@ -13,7 +13,7 @@ def test_resolves_the_unversioned_din_family_too():
     # no-current-pointer happy paths already -- this file's own remaining
     # coverage is the din (unversioned) family plus every CorpusIntegrityError
     # edge case, none of which that file exercises.
-    location = resolve_family_location(REAL_MODULE_ROOT, "din-norm-91379-datatypes")
+    location = resolve_family_location(REAL_CORPUS_ROOT, "din-norm-91379-datatypes")
     assert Path(location.retrieval_uri).exists()
 
 
@@ -46,44 +46,44 @@ def test_manifest_naming_a_nonexistent_file_raises(tmp_path):
 
 
 def test_manifest_entry_escaping_the_snapshot_directory_is_rejected(tmp_path):
-    module_root = tmp_path / "module"
-    module_root.mkdir()
-    snapshot_dir = module_root / "1.0"
+    corpus_root = tmp_path / "module"
+    corpus_root.mkdir()
+    snapshot_dir = corpus_root / "1.0"
     snapshot_dir.mkdir()
-    (module_root / "_current").write_text("1.0")
+    (corpus_root / "_current").write_text("1.0")
 
-    outside_file = tmp_path / "outside.xsd"  # sibling of module_root, not under it
+    outside_file = tmp_path / "outside.xsd"  # sibling of corpus_root, not under it
     outside_file.write_text("<outside/>")
     (snapshot_dir / "_manifest.json").write_text(json.dumps({"EscapingFamily": "../../outside.xsd"}))
 
     with pytest.raises(CorpusIntegrityError, match="escapes"):
-        resolve_family_location(str(module_root), "EscapingFamily")
+        resolve_family_location(str(corpus_root), "EscapingFamily")
 
 
-def test_current_pointer_naming_an_absolute_path_outside_module_root_is_rejected(tmp_path):
-    module_root = tmp_path / "module"
-    module_root.mkdir()
+def test_current_pointer_naming_an_absolute_path_outside_corpus_root_is_rejected(tmp_path):
+    corpus_root = tmp_path / "module"
+    corpus_root.mkdir()
     outside_dir = tmp_path / "outside-snapshot"
     outside_dir.mkdir()
     (outside_dir / "secret.xsd").write_text("<secret/>")
     (outside_dir / "_manifest.json").write_text(json.dumps({"Family": "secret.xsd"}))
-    (module_root / "_current").write_text(str(outside_dir))
+    (corpus_root / "_current").write_text(str(outside_dir))
 
     with pytest.raises(CorpusIntegrityError, match="escapes"):
-        resolve_family_location(str(module_root), "Family")
+        resolve_family_location(str(corpus_root), "Family")
 
 
-def test_current_pointer_with_dotdot_escaping_module_root_is_rejected(tmp_path):
-    module_root = tmp_path / "module"
-    module_root.mkdir()
+def test_current_pointer_with_dotdot_escaping_corpus_root_is_rejected(tmp_path):
+    corpus_root = tmp_path / "module"
+    corpus_root.mkdir()
     sibling_snapshot = tmp_path / "sibling-snapshot"
     sibling_snapshot.mkdir()
     (sibling_snapshot / "secret.xsd").write_text("<secret/>")
     (sibling_snapshot / "_manifest.json").write_text(json.dumps({"Family": "secret.xsd"}))
-    (module_root / "_current").write_text("../sibling-snapshot")
+    (corpus_root / "_current").write_text("../sibling-snapshot")
 
     with pytest.raises(CorpusIntegrityError, match="escapes"):
-        resolve_family_location(str(module_root), "Family")
+        resolve_family_location(str(corpus_root), "Family")
 
 
 def test_malformed_manifest_json_raises_corpus_integrity_error(tmp_path):

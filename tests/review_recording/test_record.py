@@ -8,8 +8,8 @@ from review_recording.record import Verdict, record_review
 from review_surfacing.summarize import summarize_for_review
 from staleness_sweep.sweep import sweep
 
-REAL_MODULE_ROOT = "/work/ontologies/mikadiv-fm/sources"
-REAL_MELDEART23_XSD = f"{REAL_MODULE_ROOT}/1.02/xsd/MiKaDiv_FM_Meldeart23_1.02.xsd"
+REAL_CORPUS_ROOT = "/work/ontologies/mikadiv-fm/sources"
+REAL_MELDEART23_XSD = f"{REAL_CORPUS_ROOT}/1.02/xsd/MiKaDiv_FM_Meldeart23_1.02.xsd"
 AORDNR_XPATH = (
     "/xs:schema/xs:complexType[@name='AmtlicheOrdnungsnummerMa23ListeType']"
     "/xs:sequence/xs:element[@name='AOrdNr']"
@@ -24,41 +24,41 @@ def _real_meldeart23_subject_document() -> SubjectDocument:
     return SubjectDocument(family="MiKaDiv_FM_Meldeart23", version="1.02", retrieval_uri=REAL_MELDEART23_XSD)
 
 
-def _make_content_and_structural_snapshot(module_root):
-    shutil.copytree(REAL_MODULE_ROOT, module_root)
-    original = (module_root / "1.02" / "xsd" / "MiKaDiv_FM_Meldeart23_1.02.xsd").read_text(encoding="utf-8")
+def _make_content_and_structural_snapshot(corpus_root):
+    shutil.copytree(REAL_CORPUS_ROOT, corpus_root)
+    original = (corpus_root / "1.02" / "xsd" / "MiKaDiv_FM_Meldeart23_1.02.xsd").read_text(encoding="utf-8")
     mutated = original.replace(
         '<xs:element name="AbgefKapitalertragsteuer" type="std:Dezimal14dot2Type">',
         '<xs:element name="AbgefKapitalertragsteuer" type="std:Dezimal14dot2Type" minOccurs="0">',
     ).replace('name="AOrdNr"', 'name="AOrdNrRenamed"')
     assert mutated != original
 
-    new_snapshot = module_root / "1.03"
-    shutil.copytree(module_root / "1.02", new_snapshot)
+    new_snapshot = corpus_root / "1.03"
+    shutil.copytree(corpus_root / "1.02", new_snapshot)
     (new_snapshot / "xsd" / "MiKaDiv_FM_Meldeart23_1.02.xsd").write_text(mutated, encoding="utf-8")
-    (module_root / "_current").write_text("1.03")
+    (corpus_root / "_current").write_text("1.03")
 
 
-def _content_flagged_leaf(module_root):
+def _content_flagged_leaf(corpus_root):
     leaf = cite(_real_meldeart23_subject_document(), XPathSelector.create(ABGEF_XPATH))
-    report = sweep({"fact-1": leaf}, str(module_root))
+    report = sweep({"fact-1": leaf}, str(corpus_root))
     summary = summarize_for_review(report)
     (flagged_leaf,) = summary.flagged["fact-1"]
     return flagged_leaf
 
 
-def _structural_flagged_leaf(module_root):
+def _structural_flagged_leaf(corpus_root):
     leaf = cite(_real_meldeart23_subject_document(), XPathSelector.create(AORDNR_XPATH))
-    report = sweep({"fact-1": leaf}, str(module_root))
+    report = sweep({"fact-1": leaf}, str(corpus_root))
     summary = summarize_for_review(report)
     (flagged_leaf,) = summary.flagged["fact-1"]
     return flagged_leaf
 
 
 def test_record_review_returns_a_resolvable_leaf(tmp_path):
-    module_root = tmp_path / "mikadiv-fm-sources"
-    _make_content_and_structural_snapshot(module_root)
-    flagged_leaf = _content_flagged_leaf(module_root)
+    corpus_root = tmp_path / "mikadiv-fm-sources"
+    _make_content_and_structural_snapshot(corpus_root)
+    flagged_leaf = _content_flagged_leaf(corpus_root)
 
     leaf = record_review(
         reviews_dir=str(tmp_path / "reviews"),
@@ -78,9 +78,9 @@ def test_record_review_returns_a_resolvable_leaf(tmp_path):
 
 
 def test_record_review_writes_the_full_document_shape(tmp_path):
-    module_root = tmp_path / "mikadiv-fm-sources"
-    _make_content_and_structural_snapshot(module_root)
-    flagged_leaf = _structural_flagged_leaf(module_root)
+    corpus_root = tmp_path / "mikadiv-fm-sources"
+    _make_content_and_structural_snapshot(corpus_root)
+    flagged_leaf = _structural_flagged_leaf(corpus_root)
 
     leaf = record_review(
         reviews_dir=str(tmp_path / "reviews"),
@@ -104,9 +104,9 @@ def test_record_review_writes_the_full_document_shape(tmp_path):
 
 
 def test_record_review_writes_the_content_fingerprint(tmp_path):
-    module_root = tmp_path / "mikadiv-fm-sources"
-    _make_content_and_structural_snapshot(module_root)
-    flagged_leaf = _content_flagged_leaf(module_root)
+    corpus_root = tmp_path / "mikadiv-fm-sources"
+    _make_content_and_structural_snapshot(corpus_root)
+    flagged_leaf = _content_flagged_leaf(corpus_root)
 
     leaf = record_review(
         reviews_dir=str(tmp_path / "reviews"),
@@ -123,9 +123,9 @@ def test_record_review_writes_the_content_fingerprint(tmp_path):
 
 
 def test_record_review_creates_reviews_dir_if_missing(tmp_path):
-    module_root = tmp_path / "mikadiv-fm-sources"
-    _make_content_and_structural_snapshot(module_root)
-    flagged_leaf = _content_flagged_leaf(module_root)
+    corpus_root = tmp_path / "mikadiv-fm-sources"
+    _make_content_and_structural_snapshot(corpus_root)
+    flagged_leaf = _content_flagged_leaf(corpus_root)
 
     reviews_dir = tmp_path / "does-not-exist-yet"
     assert not reviews_dir.exists()
@@ -146,9 +146,9 @@ def test_record_review_creates_reviews_dir_if_missing(tmp_path):
 
 
 def test_unmodified_review_record_is_unchanged_on_recheck(tmp_path):
-    module_root = tmp_path / "mikadiv-fm-sources"
-    _make_content_and_structural_snapshot(module_root)
-    flagged_leaf = _content_flagged_leaf(module_root)
+    corpus_root = tmp_path / "mikadiv-fm-sources"
+    _make_content_and_structural_snapshot(corpus_root)
+    flagged_leaf = _content_flagged_leaf(corpus_root)
 
     leaf = record_review(
         reviews_dir=str(tmp_path / "reviews"),
@@ -165,9 +165,9 @@ def test_unmodified_review_record_is_unchanged_on_recheck(tmp_path):
 
 
 def test_two_calls_with_identical_arguments_produce_independent_records(tmp_path):
-    module_root = tmp_path / "mikadiv-fm-sources"
-    _make_content_and_structural_snapshot(module_root)
-    flagged_leaf = _content_flagged_leaf(module_root)
+    corpus_root = tmp_path / "mikadiv-fm-sources"
+    _make_content_and_structural_snapshot(corpus_root)
+    flagged_leaf = _content_flagged_leaf(corpus_root)
 
     kwargs = dict(
         reviews_dir=str(tmp_path / "reviews"),

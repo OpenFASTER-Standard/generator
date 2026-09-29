@@ -7,11 +7,11 @@ from reference_model.selectors.xpath_selector import XPathSelector
 from reference_model.serialize import to_json_dict
 from staleness_sweep.resolve import resolve_family_location
 
-MODULE_ROOT = "/work/ontologies/mikadiv-fm/sources"
+CORPUS_ROOT = "/work/ontologies/mikadiv-fm/sources"
 
 
 def _real_leaf(xpath: str):
-    location = resolve_family_location(MODULE_ROOT, "MiKaDiv_FM_Meldeart23")
+    location = resolve_family_location(CORPUS_ROOT, "MiKaDiv_FM_Meldeart23")
     subject_document = SubjectDocument(
         family="MiKaDiv_FM_Meldeart23", version="1.02", retrieval_uri=location.retrieval_uri
     )

@@ -8,8 +8,8 @@ from reference_model.selectors.xpath_selector import XPathSelector
 from review_surfacing.summarize import DriftKind, summarize_for_review
 from staleness_sweep.sweep import FamilyResolutionFailure, sweep
 
-REAL_MODULE_ROOT = "/work/ontologies/mikadiv-fm/sources"
-REAL_MELDEART23_XSD = f"{REAL_MODULE_ROOT}/1.02/xsd/MiKaDiv_FM_Meldeart23_1.02.xsd"
+REAL_CORPUS_ROOT = "/work/ontologies/mikadiv-fm/sources"
+REAL_MELDEART23_XSD = f"{REAL_CORPUS_ROOT}/1.02/xsd/MiKaDiv_FM_Meldeart23_1.02.xsd"
 AORDNR_XPATH = (
     "/xs:schema/xs:complexType[@name='AmtlicheOrdnungsnummerMa23ListeType']"
     "/xs:sequence/xs:element[@name='AOrdNr']"
@@ -29,28 +29,28 @@ def _real_meldeart23_subject_document() -> SubjectDocument:
     return SubjectDocument(family="MiKaDiv_FM_Meldeart23", version="1.02", retrieval_uri=REAL_MELDEART23_XSD)
 
 
-def _make_content_and_structural_snapshot(module_root):
-    """Copies the real corpus into module_root, then creates a synthetic
+def _make_content_and_structural_snapshot(corpus_root):
+    """Copies the real corpus into corpus_root, then creates a synthetic
     1.03 snapshot that content-drifts ABGEF and structurally breaks AOrdNr,
     leaving MELDEART_DOC_XPATH's own target untouched. Points _current at
     1.03. Never touches the real /work/ontologies repo."""
-    shutil.copytree(REAL_MODULE_ROOT, module_root)
-    original = (module_root / "1.02" / "xsd" / "MiKaDiv_FM_Meldeart23_1.02.xsd").read_text(encoding="utf-8")
+    shutil.copytree(REAL_CORPUS_ROOT, corpus_root)
+    original = (corpus_root / "1.02" / "xsd" / "MiKaDiv_FM_Meldeart23_1.02.xsd").read_text(encoding="utf-8")
     mutated = original.replace(
         '<xs:element name="AbgefKapitalertragsteuer" type="std:Dezimal14dot2Type">',
         '<xs:element name="AbgefKapitalertragsteuer" type="std:Dezimal14dot2Type" minOccurs="0">',
     ).replace('name="AOrdNr"', 'name="AOrdNrRenamed"')
     assert mutated != original
 
-    new_snapshot = module_root / "1.03"
-    shutil.copytree(module_root / "1.02", new_snapshot)
+    new_snapshot = corpus_root / "1.03"
+    shutil.copytree(corpus_root / "1.02", new_snapshot)
     (new_snapshot / "xsd" / "MiKaDiv_FM_Meldeart23_1.02.xsd").write_text(mutated, encoding="utf-8")
-    (module_root / "_current").write_text("1.03")
+    (corpus_root / "_current").write_text("1.03")
 
 
 def test_healthy_report_produces_an_entirely_empty_summary():
     leaf = cite(_real_meldeart23_subject_document(), XPathSelector.create(AORDNR_XPATH))
-    report = sweep({"fact-1": leaf}, REAL_MODULE_ROOT)
+    report = sweep({"fact-1": leaf}, REAL_CORPUS_ROOT)
 
     summary = summarize_for_review(report)
 
@@ -60,7 +60,7 @@ def test_healthy_report_produces_an_entirely_empty_summary():
 
 
 def test_empty_sweep_report_produces_an_empty_summary():
-    report = sweep({}, REAL_MODULE_ROOT)
+    report = sweep({}, REAL_CORPUS_ROOT)
     summary = summarize_for_review(report)
 
     assert summary.flagged == {}
@@ -69,11 +69,11 @@ def test_empty_sweep_report_produces_an_empty_summary():
 
 
 def test_content_drift_is_classified_as_content(tmp_path):
-    module_root = tmp_path / "mikadiv-fm-sources"
-    _make_content_and_structural_snapshot(module_root)
+    corpus_root = tmp_path / "mikadiv-fm-sources"
+    _make_content_and_structural_snapshot(corpus_root)
 
     leaf = cite(_real_meldeart23_subject_document(), XPathSelector.create(ABGEF_XPATH))
-    report = sweep({"fact-1": leaf}, str(module_root))
+    report = sweep({"fact-1": leaf}, str(corpus_root))
 
     summary = summarize_for_review(report)
 
@@ -89,11 +89,11 @@ def test_content_drift_is_classified_as_content(tmp_path):
 
 
 def test_structural_drift_is_classified_as_structural(tmp_path):
-    module_root = tmp_path / "mikadiv-fm-sources"
-    _make_content_and_structural_snapshot(module_root)
+    corpus_root = tmp_path / "mikadiv-fm-sources"
+    _make_content_and_structural_snapshot(corpus_root)
 
     leaf = cite(_real_meldeart23_subject_document(), XPathSelector.create(AORDNR_XPATH))
-    report = sweep({"fact-1": leaf}, str(module_root))
+    report = sweep({"fact-1": leaf}, str(corpus_root))
 
     summary = summarize_for_review(report)
 
@@ -105,11 +105,11 @@ def test_structural_drift_is_classified_as_structural(tmp_path):
 
 
 def test_content_drift_fingerprint_is_the_new_content_hash(tmp_path):
-    module_root = tmp_path / "mikadiv-fm-sources"
-    _make_content_and_structural_snapshot(module_root)
+    corpus_root = tmp_path / "mikadiv-fm-sources"
+    _make_content_and_structural_snapshot(corpus_root)
 
     leaf = cite(_real_meldeart23_subject_document(), XPathSelector.create(ABGEF_XPATH))
-    report = sweep({"fact-1": leaf}, str(module_root))
+    report = sweep({"fact-1": leaf}, str(corpus_root))
     summary = summarize_for_review(report)
 
     (flagged_leaf,) = summary.flagged["fact-1"]
@@ -119,11 +119,11 @@ def test_content_drift_fingerprint_is_the_new_content_hash(tmp_path):
 
 
 def test_structural_drift_fingerprint_is_the_status_name(tmp_path):
-    module_root = tmp_path / "mikadiv-fm-sources"
-    _make_content_and_structural_snapshot(module_root)
+    corpus_root = tmp_path / "mikadiv-fm-sources"
+    _make_content_and_structural_snapshot(corpus_root)
 
     leaf = cite(_real_meldeart23_subject_document(), XPathSelector.create(AORDNR_XPATH))
-    report = sweep({"fact-1": leaf}, str(module_root))
+    report = sweep({"fact-1": leaf}, str(corpus_root))
     summary = summarize_for_review(report)
 
     (flagged_leaf,) = summary.flagged["fact-1"]
@@ -131,15 +131,15 @@ def test_structural_drift_fingerprint_is_the_status_name(tmp_path):
 
 
 def test_union_mixing_healthy_content_and_structural_leaves(tmp_path):
-    module_root = tmp_path / "mikadiv-fm-sources"
-    _make_content_and_structural_snapshot(module_root)
+    corpus_root = tmp_path / "mikadiv-fm-sources"
+    _make_content_and_structural_snapshot(corpus_root)
 
     healthy_leaf = cite(_real_meldeart23_subject_document(), XPathSelector.create(MELDEART_DOC_XPATH))
     content_leaf = cite(_real_meldeart23_subject_document(), XPathSelector.create(ABGEF_XPATH))
     structural_leaf = cite(_real_meldeart23_subject_document(), XPathSelector.create(AORDNR_XPATH))
     union = cite_union([healthy_leaf, content_leaf, structural_leaf])
 
-    report = sweep({"fact-1": union}, str(module_root))
+    report = sweep({"fact-1": union}, str(corpus_root))
     summary = summarize_for_review(report)
 
     flagged_by_kind = {fl.drift_kind: fl for fl in summary.flagged["fact-1"]}
@@ -154,7 +154,7 @@ def test_unresolved_families_and_excluded_keys_pass_through_verbatim():
         family="NoSuchFamilyEver", version="1.02", retrieval_uri=REAL_MELDEART23_XSD
     )
     leaf = cite(fake_subject_document, XPathSelector.create(AORDNR_XPATH))
-    report = sweep({"fact-1": leaf}, REAL_MODULE_ROOT)
+    report = sweep({"fact-1": leaf}, REAL_CORPUS_ROOT)
 
     summary = summarize_for_review(report)
 
@@ -174,23 +174,23 @@ def test_ambiguous_drift_is_also_classified_as_structural(tmp_path):
     # AmtlicheOrdnungsnummerMa23ListeType complexType block makes AORDNR_XPATH
     # match two real elements instead of one -- a genuine AMBIGUOUS outcome,
     # not a hand-constructed one.
-    module_root = tmp_path / "mikadiv-fm-sources"
-    shutil.copytree(REAL_MODULE_ROOT, module_root)
+    corpus_root = tmp_path / "mikadiv-fm-sources"
+    shutil.copytree(REAL_CORPUS_ROOT, corpus_root)
 
-    original = (module_root / "1.02" / "xsd" / "MiKaDiv_FM_Meldeart23_1.02.xsd").read_text(encoding="utf-8")
+    original = (corpus_root / "1.02" / "xsd" / "MiKaDiv_FM_Meldeart23_1.02.xsd").read_text(encoding="utf-8")
     block_start = original.index('<xs:complexType name="AmtlicheOrdnungsnummerMa23ListeType">')
     block_end = original.index("</xs:complexType>", block_start) + len("</xs:complexType>")
     duplicated_block = original[block_start:block_end]
     mutated = original[:block_end] + duplicated_block + original[block_end:]
     assert mutated != original
 
-    new_snapshot = module_root / "1.03"
-    shutil.copytree(module_root / "1.02", new_snapshot)
+    new_snapshot = corpus_root / "1.03"
+    shutil.copytree(corpus_root / "1.02", new_snapshot)
     (new_snapshot / "xsd" / "MiKaDiv_FM_Meldeart23_1.02.xsd").write_text(mutated, encoding="utf-8")
-    (module_root / "_current").write_text("1.03")
+    (corpus_root / "_current").write_text("1.03")
 
     leaf = cite(_real_meldeart23_subject_document(), XPathSelector.create(AORDNR_XPATH))
-    report = sweep({"fact-1": leaf}, str(module_root))
+    report = sweep({"fact-1": leaf}, str(corpus_root))
 
     summary = summarize_for_review(report)
 
@@ -219,7 +219,7 @@ def test_uncitable_drift_is_also_classified_as_structural():
         hash_changed=None,
         new_content_hash=None,
     )
-    report = sweep({"fact-1": leaf}, REAL_MODULE_ROOT)
+    report = sweep({"fact-1": leaf}, REAL_CORPUS_ROOT)
     report.results_by_key["fact-1"][:] = [fake_result]
 
     summary = summarize_for_review(report)
@@ -242,7 +242,7 @@ def test_classify_raises_if_content_drift_has_no_new_content_hash():
         hash_changed=True,
         new_content_hash=None,
     )
-    report = sweep({"fact-1": leaf}, REAL_MODULE_ROOT)
+    report = sweep({"fact-1": leaf}, REAL_CORPUS_ROOT)
     report.results_by_key["fact-1"][:] = [fake_result]
 
     with pytest.raises(AssertionError):

@@ -1,7 +1,7 @@
 from discovery.xsd_discoverer import Candidate
 from discovery.corpus_candidates import list_corpus_candidates
 
-REAL_MODULE_ROOT = "/work/ontologies/mikadiv-fm/sources"
+REAL_CORPUS_ROOT = "/work/ontologies/mikadiv-fm/sources"
 
 REAL_XSD_FAMILIES = {
     "MiKaDiv_FM",
@@ -37,23 +37,23 @@ REAL_PER_FAMILY_COUNTS = {
 
 
 def test_returns_exactly_the_13_real_xsd_families_never_any_pdf_family():
-    result = list_corpus_candidates(REAL_MODULE_ROOT)
+    result = list_corpus_candidates(REAL_CORPUS_ROOT)
     assert set(result.keys()) == REAL_XSD_FAMILIES
 
 
 def test_real_per_family_candidate_counts_match_live_verification():
-    result = list_corpus_candidates(REAL_MODULE_ROOT)
+    result = list_corpus_candidates(REAL_CORPUS_ROOT)
     for family, expected_count in REAL_PER_FAMILY_COUNTS.items():
         assert len(result[family].candidates) == expected_count, family
 
 
 def test_total_real_candidate_count_across_the_whole_corpus_is_422():
-    result = list_corpus_candidates(REAL_MODULE_ROOT)
+    result = list_corpus_candidates(REAL_CORPUS_ROOT)
     assert sum(len(r.candidates) for r in result.values()) == 422
 
 
 def test_a_known_real_candidate_appears_with_the_correct_xpath():
-    result = list_corpus_candidates(REAL_MODULE_ROOT)
+    result = list_corpus_candidates(REAL_CORPUS_ROOT)
     aordnr_xpath = (
         "/xs:schema/xs:complexType[@name='AmtlicheOrdnungsnummerMa23ListeType']"
         "/xs:sequence/xs:element[@name='AOrdNr']"
@@ -70,7 +70,7 @@ def test_returns_the_real_candidate_type_with_no_family_or_location_fields():
     # the real DiscoveryResult (candidates + excluded) discover_candidates()
     # itself produces, per the 2026-09-29 audit finding on that duplication
     # silently dropping `excluded`.
-    result = list_corpus_candidates(REAL_MODULE_ROOT)
+    result = list_corpus_candidates(REAL_CORPUS_ROOT)
     sample = result["MiKaDiv_FM_Meldeart23"].candidates[0]
     assert isinstance(sample, Candidate)
     assert not hasattr(sample, "family")
@@ -84,8 +84,8 @@ def test_on_corpus_with_no_current_pointer_returns_empty_dict(tmp_path):
 def _synthetic_corpus(tmp_path, entries: dict) -> str:
     import json
 
-    module_root = tmp_path / "corpus"
-    snapshot_dir = module_root / "1.0"
+    corpus_root = tmp_path / "corpus"
+    snapshot_dir = corpus_root / "1.0"
     snapshot_dir.mkdir(parents=True)
     manifest = {}
     for family, (filename, content) in entries.items():
@@ -93,8 +93,8 @@ def _synthetic_corpus(tmp_path, entries: dict) -> str:
             (snapshot_dir / filename).write_text(content, encoding="utf-8")
         manifest[family] = filename
     (snapshot_dir / "_manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
-    (module_root / "_current").write_text("1.0", encoding="utf-8")
-    return str(module_root)
+    (corpus_root / "_current").write_text("1.0", encoding="utf-8")
+    return str(corpus_root)
 
 
 _VALID_XSD = (
@@ -106,12 +106,12 @@ _VALID_XSD = (
 
 
 def test_list_corpus_candidates_skips_a_family_whose_manifest_entry_is_broken_but_keeps_others(tmp_path):
-    module_root = _synthetic_corpus(tmp_path, {
+    corpus_root = _synthetic_corpus(tmp_path, {
         "GoodFamily": ("good.xsd", _VALID_XSD),
         "BrokenFamily": ("does-not-exist.xsd", None),
     })
 
-    result = list_corpus_candidates(module_root)
+    result = list_corpus_candidates(corpus_root)
 
     assert "GoodFamily" in result
     assert len(result["GoodFamily"].candidates) == 1
@@ -119,12 +119,12 @@ def test_list_corpus_candidates_skips_a_family_whose_manifest_entry_is_broken_bu
 
 
 def test_list_corpus_candidates_skips_a_family_with_corrupt_xml_but_keeps_others(tmp_path):
-    module_root = _synthetic_corpus(tmp_path, {
+    corpus_root = _synthetic_corpus(tmp_path, {
         "GoodFamily": ("good.xsd", _VALID_XSD),
         "CorruptFamily": ("corrupt.xsd", "<not><valid>xml"),
     })
 
-    result = list_corpus_candidates(module_root)
+    result = list_corpus_candidates(corpus_root)
 
     assert "GoodFamily" in result
     assert len(result["GoodFamily"].candidates) == 1
@@ -147,11 +147,11 @@ def test_list_corpus_candidates_surfaces_excluded_candidates_not_just_real_ones(
     # used to be silently dropped one layer up here -- GET /api/candidates
     # could not tell "this schema has no such construct" from "it exists
     # but couldn't be given an unambiguous xpath".
-    module_root = _synthetic_corpus(tmp_path, {
+    corpus_root = _synthetic_corpus(tmp_path, {
         "AmbiguousFamily": ("ambiguous.xsd", _XSD_WITH_AMBIGUOUS_NAMES),
     })
 
-    result = list_corpus_candidates(module_root)
+    result = list_corpus_candidates(corpus_root)
 
     # Two "Decoy" elements share the same computed xpath (a non-XSD-namespace
     # ancestor doesn't affect the path): one is a real, correct candidate,

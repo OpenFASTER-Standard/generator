@@ -11,11 +11,11 @@ from discovery.xsd_discoverer import DiscoveryResult, discover_candidates
 from staleness_sweep.resolve import CorpusIntegrityError, list_current_families, resolve_family_location
 
 
-def list_corpus_candidates(module_root: str) -> dict[str, DiscoveryResult]:
+def list_corpus_candidates(corpus_root: str) -> dict[str, DiscoveryResult]:
     result: dict[str, DiscoveryResult] = {}
-    for family in list_current_families(module_root):
+    for family in list_current_families(corpus_root):
         try:
-            location = resolve_family_location(module_root, family)
+            location = resolve_family_location(corpus_root, family)
         except CorpusIntegrityError:
             # One family's manifest entry being broken (missing file,
             # escaping path) must not take down the listing for every

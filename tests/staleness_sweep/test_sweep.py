@@ -6,8 +6,8 @@ from reference_model.model import SubjectDocument, Status
 from reference_model.selectors.xpath_selector import XPathSelector
 from staleness_sweep.sweep import FamilyResolutionFailure, sweep
 
-REAL_MODULE_ROOT = "/work/ontologies/mikadiv-fm/sources"
-REAL_MELDEART23_XSD = f"{REAL_MODULE_ROOT}/1.02/xsd/MiKaDiv_FM_Meldeart23_1.02.xsd"
+REAL_CORPUS_ROOT = "/work/ontologies/mikadiv-fm/sources"
+REAL_MELDEART23_XSD = f"{REAL_CORPUS_ROOT}/1.02/xsd/MiKaDiv_FM_Meldeart23_1.02.xsd"
 AORDNR_XPATH = (
     "/xs:schema/xs:complexType[@name='AmtlicheOrdnungsnummerMa23ListeType']"
     "/xs:sequence/xs:element[@name='AOrdNr']"
@@ -24,7 +24,7 @@ def _real_meldeart23_subject_document() -> SubjectDocument:
 
 def test_sweep_reports_a_real_reference_as_unchanged():
     leaf = cite(_real_meldeart23_subject_document(), XPathSelector.create(AORDNR_XPATH))
-    report = sweep({"fact-1": leaf}, REAL_MODULE_ROOT)
+    report = sweep({"fact-1": leaf}, REAL_CORPUS_ROOT)
 
     assert report.family_resolution_failures == ()
     assert report.results_by_key["fact-1"][0].outcome.status == Status.RESOLVED
@@ -36,7 +36,7 @@ def test_sweep_reports_an_unresolvable_family_as_a_failure_not_a_leaf_result():
         family="NoSuchFamilyEver", version="1.02", retrieval_uri=REAL_MELDEART23_XSD
     )
     leaf = cite(fake_subject_document, XPathSelector.create(AORDNR_XPATH))
-    report = sweep({"fact-1": leaf}, REAL_MODULE_ROOT)
+    report = sweep({"fact-1": leaf}, REAL_CORPUS_ROOT)
 
     assert report.family_resolution_failures == (
         FamilyResolutionFailure(family="NoSuchFamilyEver", status=Status.NOT_FOUND),
@@ -45,7 +45,7 @@ def test_sweep_reports_an_unresolvable_family_as_a_failure_not_a_leaf_result():
 
 
 def test_sweep_with_no_references_returns_an_empty_report():
-    report = sweep({}, REAL_MODULE_ROOT)
+    report = sweep({}, REAL_CORPUS_ROOT)
     assert report.results_by_key == {}
     assert report.family_resolution_failures == ()
     assert report.excluded_keys == ()
@@ -59,7 +59,7 @@ def test_family_resolution_failures_are_sorted_deterministically():
         )
         for name in ("GhostZ", "GhostA", "GhostM")
     }
-    report = sweep(leaves, REAL_MODULE_ROOT)
+    report = sweep(leaves, REAL_CORPUS_ROOT)
 
     assert report.family_resolution_failures == (
         FamilyResolutionFailure(family="GhostA", status=Status.NOT_FOUND),
@@ -75,7 +75,7 @@ def test_excluded_keys_lists_every_key_touching_an_unresolved_family():
     )
     bad_leaf = cite(bad_subject_document, XPathSelector.create(ABGEF_XPATH))
 
-    report = sweep({"good-fact": good_leaf, "bad-fact": bad_leaf}, REAL_MODULE_ROOT)
+    report = sweep({"good-fact": good_leaf, "bad-fact": bad_leaf}, REAL_CORPUS_ROOT)
 
     assert report.excluded_keys == ("bad-fact",)
     assert "good-fact" in report.results_by_key
@@ -111,7 +111,7 @@ def test_two_references_same_family_different_stale_stored_uris_both_use_resolve
         XPathSelector.create(ABGEF_XPATH),
     )
 
-    report = sweep({"fact-a": leaf_a, "fact-b": leaf_b}, REAL_MODULE_ROOT)
+    report = sweep({"fact-a": leaf_a, "fact-b": leaf_b}, REAL_CORPUS_ROOT)
 
     # Both leaves' own stored URIs differ from each other AND from the
     # real current file -- if either fell back to its own stored path,
@@ -130,7 +130,7 @@ def test_family_nested_inside_a_union_is_still_collected():
     inner_union = cite_union([bad_leaf])
     outer_union = cite_union([good_leaf, inner_union])
 
-    report = sweep({"fact": outer_union}, REAL_MODULE_ROOT)
+    report = sweep({"fact": outer_union}, REAL_CORPUS_ROOT)
 
     assert "fact" not in report.results_by_key
     assert report.family_resolution_failures == (
@@ -156,7 +156,7 @@ def test_sweep_uses_the_resolved_current_path_not_a_leaf_own_stale_stored_uri(tm
     )
     leaf = cite(stale_subject_document, XPathSelector.create(ABGEF_XPATH))
 
-    report = sweep({"fact": leaf}, REAL_MODULE_ROOT)
+    report = sweep({"fact": leaf}, REAL_CORPUS_ROOT)
 
     # The leaf's own stored retrieval_uri (stale_copy) still has the
     # mutation baked into its stored hash, so falling back to checking
@@ -177,7 +177,7 @@ def test_union_with_one_unresolvable_family_is_fully_excluded_from_results():
     bad_leaf = cite(bad_subject_document, XPathSelector.create(ABGEF_XPATH))
     union = cite_union([good_leaf, bad_leaf])
 
-    report = sweep({"fact": union}, REAL_MODULE_ROOT)
+    report = sweep({"fact": union}, REAL_CORPUS_ROOT)
 
     assert "fact" not in report.results_by_key
     assert report.family_resolution_failures == (
@@ -189,21 +189,21 @@ def test_sweep_over_a_deliberately_changed_synthetic_snapshot(tmp_path):
     # The spec's own Definition of Done scenario: cite a real fact, then
     # sweep against a tmp_path copy of the corpus with one deliberate
     # change on a second, synthetic snapshot -- never the real repo.
-    module_root = tmp_path / "mikadiv-fm-sources"
-    shutil.copytree(REAL_MODULE_ROOT, module_root)
+    corpus_root = tmp_path / "mikadiv-fm-sources"
+    shutil.copytree(REAL_CORPUS_ROOT, corpus_root)
 
-    original = (module_root / "1.02" / "xsd" / "MiKaDiv_FM_Meldeart23_1.02.xsd").read_text(encoding="utf-8")
+    original = (corpus_root / "1.02" / "xsd" / "MiKaDiv_FM_Meldeart23_1.02.xsd").read_text(encoding="utf-8")
     mutated = original.replace('name="AOrdNr"', 'name="AOrdNrRenamed"')
 
-    new_snapshot = module_root / "1.03"
-    shutil.copytree(module_root / "1.02", new_snapshot)
+    new_snapshot = corpus_root / "1.03"
+    shutil.copytree(corpus_root / "1.02", new_snapshot)
     (new_snapshot / "xsd" / "MiKaDiv_FM_Meldeart23_1.02.xsd").write_text(mutated, encoding="utf-8")
-    (module_root / "_current").write_text("1.03")
+    (corpus_root / "_current").write_text("1.03")
 
     changed_leaf = cite(_real_meldeart23_subject_document(), XPathSelector.create(AORDNR_XPATH))
     unchanged_leaf = cite(_real_meldeart23_subject_document(), XPathSelector.create(ABGEF_XPATH))
 
-    report = sweep({"changed-fact": changed_leaf, "unchanged-fact": unchanged_leaf}, str(module_root))
+    report = sweep({"changed-fact": changed_leaf, "unchanged-fact": unchanged_leaf}, str(corpus_root))
 
     assert report.family_resolution_failures == ()
     assert report.results_by_key["changed-fact"][0].outcome.status == Status.NOT_FOUND
