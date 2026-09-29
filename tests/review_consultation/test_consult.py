@@ -10,8 +10,10 @@ from review_consultation.consult import ReviewLoadError, apply_reviews, load_rev
 from review_recording.record import Verdict, record_review
 from review_surfacing.summarize import summarize_for_review
 from staleness_sweep.sweep import sweep
+from tests.corpus_fixtures import REAL_CORPUS_ROOT, requires_real_corpus
 
-REAL_CORPUS_ROOT = "/work/ontologies/mikadiv-fm/sources"
+pytestmark = requires_real_corpus
+
 AORDNR_XPATH = (
     "/xs:schema/xs:complexType[@name='AmtlicheOrdnungsnummerMa23ListeType']"
     "/xs:sequence/xs:element[@name='AOrdNr']"

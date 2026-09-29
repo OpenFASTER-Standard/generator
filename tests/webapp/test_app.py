@@ -8,10 +8,10 @@ from reference_model.cite import cite
 from reference_model.model import SubjectDocument
 from reference_model.selectors.xpath_selector import XPathSelector
 from references_catalog.catalog import add_revision
+from tests.corpus_fixtures import REAL_CORPUS_ROOT, requires_real_corpus
 from webapp.app import app
 
-REAL_CORPUS_ROOT = "/work/ontologies/mikadiv-fm/sources"
-REAL_XSD = "/work/ontologies/mikadiv-fm/sources/1.02/xsd/MiKaDiv_FM_Meldeart23_1.02.xsd"
+REAL_XSD = f"{REAL_CORPUS_ROOT}/1.02/xsd/MiKaDiv_FM_Meldeart23_1.02.xsd"
 AORDNR_XPATH = (
     "/xs:schema/xs:complexType[@name='AmtlicheOrdnungsnummerMa23ListeType']"
     "/xs:sequence/xs:element[@name='AOrdNr']"
@@ -38,6 +38,7 @@ def test_list_pages_endpoint_returns_empty_object_when_catalog_is_empty(tmp_path
     assert response.json() == {}
 
 
+@requires_real_corpus
 def test_list_pages_endpoint_returns_real_pages_built_via_add_revision(tmp_path, monkeypatch):
     catalog_path = tmp_path / "references.json"
     catalog_path.write_text("{}", encoding="utf-8")
@@ -55,6 +56,7 @@ def test_list_pages_endpoint_returns_real_pages_built_via_add_revision(tmp_path,
     assert body["fact-1"]["current"]["comment"] == "initial"
 
 
+@requires_real_corpus
 def test_list_pages_endpoint_reflects_the_current_not_the_first_revision(tmp_path, monkeypatch):
     catalog_path = tmp_path / "references.json"
     catalog_path.write_text("{}", encoding="utf-8")
@@ -75,6 +77,7 @@ def test_list_pages_endpoint_reflects_the_current_not_the_first_revision(tmp_pat
     assert body["fact-1"]["current"]["reference"]["selector"]["value"] == ABGEF_XPATH
 
 
+@requires_real_corpus
 def test_get_page_endpoint_returns_full_history_for_a_real_page(tmp_path, monkeypatch):
     catalog_path = tmp_path / "references.json"
     catalog_path.write_text("{}", encoding="utf-8")
@@ -175,12 +178,20 @@ _XSD_WITHOUT_FOO = """<?xml version="1.0" encoding="UTF-8"?>
 """
 
 
-def test_list_candidates_endpoint_returns_the_real_13_xsd_families():
+@requires_real_corpus
+def test_list_candidates_endpoint_returns_the_real_13_xsd_families(monkeypatch):
+    # Explicit, not relying on DEFAULT_CORPUS_ROOT happening to already
+    # equal REAL_CORPUS_ROOT (which itself is overridable via
+    # MIKADIV_CORPUS_ROOT) -- this test's whole point is real data, so it
+    # says so directly rather than coincidentally getting it from a default.
+    monkeypatch.setenv("MIKADIV_CORPUS_ROOT", REAL_CORPUS_ROOT)
     client = TestClient(app)
     response = client.get("/api/candidates")
 
     assert response.status_code == 200
-    assert set(response.json().keys()) == REAL_XSD_FAMILIES
+    # <=, not ==: the real corpus is a separate repo this one doesn't
+    # control -- an upstream family addition shouldn't break this test.
+    assert REAL_XSD_FAMILIES <= set(response.json().keys())
     for family_result in response.json().values():
         assert set(family_result.keys()) == {"candidates", "excluded"}
 
@@ -368,7 +379,9 @@ def test_add_citation_endpoint_succeeds_for_healthy_family_despite_unrelated_bro
     assert response.status_code == 200
 
 
-def test_add_citation_endpoint_returns_400_for_a_non_xsd_family():
+@requires_real_corpus
+def test_add_citation_endpoint_returns_400_for_a_non_xsd_family(monkeypatch):
+    monkeypatch.setenv("MIKADIV_CORPUS_ROOT", REAL_CORPUS_ROOT)
     client = TestClient(app)
     response = client.post("/api/citations", json={
         "family": "khb_mikadiv_fm_de",
@@ -487,6 +500,7 @@ def test_get_candidates_maps_a_corpus_integrity_error_to_500_with_a_real_detail_
     assert "escapes corpus_root" in response.json()["detail"]
 
 
+@requires_real_corpus
 def test_get_review_serializes_a_real_content_drift_leaf_without_500(tmp_path, monkeypatch):
     # Real bug, found during manual Playwright verification: for an
     # XPathSelector, ResolutionOutcome.raw_content on a RESOLVED/CONTENT-drift
@@ -525,7 +539,15 @@ def test_get_review_serializes_a_real_content_drift_leaf_without_500(tmp_path, m
     assert flagged[0]["drift_kind"] == "CONTENT"
 
 
-def test_a_real_api_404_is_not_masked_by_the_spa_fallback():
+def test_a_real_api_404_is_not_masked_by_the_spa_fallback(tmp_path, monkeypatch):
+    # Explicit tmp_path catalog like every other test in this file, rather
+    # than silently depending on the real committed catalog file existing
+    # (and being valid JSON) at DEFAULT_CATALOG_PATH -- this test's own
+    # behavior (a missing fact_key 404s as JSON, not HTML) doesn't need
+    # real content at all.
+    catalog_path = tmp_path / "references.json"
+    catalog_path.write_text("{}", encoding="utf-8")
+    monkeypatch.setenv("REFERENCES_CATALOG_PATH", str(catalog_path))
     client = TestClient(app)
     response = client.get("/api/pages/does-not-exist-at-all")
     assert response.status_code == 404
@@ -533,6 +555,9 @@ def test_a_real_api_404_is_not_masked_by_the_spa_fallback():
 
 
 def test_an_unknown_non_api_path_gets_the_spa_shell():
+    # No catalog/corpus fixture needed here (unlike its neighbor above) --
+    # the SPA-fallback route never touches either; it only serves the
+    # already-built frontend_dist/index.html straight off disk.
     client = TestClient(app)
     response = client.get("/pages/whatever-react-router-will-own")
     assert response.status_code == 200

@@ -7,8 +7,10 @@ from reference_model.model import ResolutionOutcome, SubjectDocument, Status
 from reference_model.selectors.xpath_selector import XPathSelector
 from review_surfacing.summarize import DriftKind, summarize_for_review
 from staleness_sweep.sweep import FamilyResolutionFailure, sweep
+from tests.corpus_fixtures import REAL_CORPUS_ROOT, requires_real_corpus
 
-REAL_CORPUS_ROOT = "/work/ontologies/mikadiv-fm/sources"
+pytestmark = requires_real_corpus
+
 REAL_MELDEART23_XSD = f"{REAL_CORPUS_ROOT}/1.02/xsd/MiKaDiv_FM_Meldeart23_1.02.xsd"
 AORDNR_XPATH = (
     "/xs:schema/xs:complexType[@name='AmtlicheOrdnungsnummerMa23ListeType']"

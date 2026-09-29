@@ -8,8 +8,7 @@ from staleness_sweep.resolve import (
     list_current_families,
     resolve_family_location,
 )
-
-REAL_CORPUS_ROOT = "/work/ontologies/mikadiv-fm/sources"
+from tests.corpus_fixtures import REAL_CORPUS_ROOT, requires_real_corpus
 
 
 def _corpus_with_one_healthy_and_one_broken_family(tmp_path):
@@ -25,6 +24,7 @@ def _corpus_with_one_healthy_and_one_broken_family(tmp_path):
     return str(corpus_root)
 
 
+@requires_real_corpus
 def test_resolve_family_location_resolves_a_real_family():
     location = resolve_family_location(REAL_CORPUS_ROOT, "MiKaDiv_FM_Meldeart23")
     assert isinstance(location, FamilyLocation)

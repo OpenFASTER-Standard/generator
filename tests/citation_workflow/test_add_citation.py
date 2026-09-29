@@ -8,9 +8,11 @@ from reference_model.model import SubjectDocument
 from reference_model.selectors.xpath_selector import XPathSelector
 from reference_model.serialize import to_json_dict
 from references_catalog.catalog import get_history
+from tests.corpus_fixtures import REAL_CORPUS_ROOT, requires_real_corpus
 
-REAL_CORPUS_ROOT = "/work/ontologies/mikadiv-fm/sources"
-REAL_XSD = "/work/ontologies/mikadiv-fm/sources/1.02/xsd/MiKaDiv_FM_Meldeart23_1.02.xsd"
+pytestmark = requires_real_corpus
+
+REAL_XSD = f"{REAL_CORPUS_ROOT}/1.02/xsd/MiKaDiv_FM_Meldeart23_1.02.xsd"
 AORDNR_XPATH = (
     "/xs:schema/xs:complexType[@name='AmtlicheOrdnungsnummerMa23ListeType']"
     "/xs:sequence/xs:element[@name='AOrdNr']"

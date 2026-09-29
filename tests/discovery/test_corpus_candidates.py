@@ -1,7 +1,6 @@
 from discovery.xsd_discoverer import Candidate
 from discovery.corpus_candidates import list_corpus_candidates
-
-REAL_CORPUS_ROOT = "/work/ontologies/mikadiv-fm/sources"
+from tests.corpus_fixtures import REAL_CORPUS_ROOT, requires_real_corpus
 
 REAL_XSD_FAMILIES = {
     "MiKaDiv_FM",
@@ -36,22 +35,34 @@ REAL_PER_FAMILY_COUNTS = {
 }
 
 
-def test_returns_exactly_the_13_real_xsd_families_never_any_pdf_family():
+@requires_real_corpus
+def test_returns_at_least_the_13_real_xsd_families_never_any_pdf_family():
+    # <= (subset), not ==: the real corpus is a separate repo this one
+    # doesn't control -- an upstream family addition shouldn't break this
+    # repo's own tests for no reason. Still asserts every one of the 13
+    # known families is present, and no PDF family sneaks in.
     result = list_corpus_candidates(REAL_CORPUS_ROOT)
-    assert set(result.keys()) == REAL_XSD_FAMILIES
+    assert REAL_XSD_FAMILIES <= set(result.keys())
+    assert not any("khb_mikadiv_fm" in family for family in result.keys())
 
 
+@requires_real_corpus
 def test_real_per_family_candidate_counts_match_live_verification():
     result = list_corpus_candidates(REAL_CORPUS_ROOT)
     for family, expected_count in REAL_PER_FAMILY_COUNTS.items():
         assert len(result[family].candidates) == expected_count, family
 
 
-def test_total_real_candidate_count_across_the_whole_corpus_is_422():
+@requires_real_corpus
+def test_total_candidate_count_across_the_13_known_families_is_422():
+    # Sums only the 13 known families (not "== 422 across the whole
+    # result"), so an upstream family addition doesn't break this test the
+    # same way the exact-set assertion above used to.
     result = list_corpus_candidates(REAL_CORPUS_ROOT)
-    assert sum(len(r.candidates) for r in result.values()) == 422
+    assert sum(len(result[family].candidates) for family in REAL_XSD_FAMILIES) == 422
 
 
+@requires_real_corpus
 def test_a_known_real_candidate_appears_with_the_correct_xpath():
     result = list_corpus_candidates(REAL_CORPUS_ROOT)
     aordnr_xpath = (
@@ -64,6 +75,7 @@ def test_a_known_real_candidate_appears_with_the_correct_xpath():
     assert matches[0].tag == "element"
 
 
+@requires_real_corpus
 def test_returns_the_real_candidate_type_with_no_family_or_location_fields():
     # No second, hand-maintained "CorpusCandidate" dataclass duplicating
     # discovery.xsd_discoverer.Candidate field-for-field -- this returns

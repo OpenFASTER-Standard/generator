@@ -8,8 +8,9 @@ from review_recording.record import Verdict
 from review_surfacing.summarize import DriftKind, FlaggedLeaf
 from review_workflow.orchestrate import get_review_summary, submit_review
 from staleness_sweep.resolve import resolve_family_location
+from tests.corpus_fixtures import REAL_CORPUS_ROOT as CORPUS_ROOT, requires_real_corpus
 
-CORPUS_ROOT = "/work/ontologies/mikadiv-fm/sources"
+pytestmark = requires_real_corpus
 
 
 def _real_leaf(family: str, xpath: str):

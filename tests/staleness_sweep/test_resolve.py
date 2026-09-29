@@ -4,10 +4,10 @@ from pathlib import Path
 import pytest
 
 from staleness_sweep.resolve import CorpusIntegrityError, resolve_family_location
+from tests.corpus_fixtures import REAL_CORPUS_ROOT, requires_real_corpus
 
-REAL_CORPUS_ROOT = "/work/ontologies/mikadiv-fm/sources"
 
-
+@requires_real_corpus
 def test_resolves_the_unversioned_din_family_too():
     # test_resolve_family_location.py covers the real-family/unknown-family/
     # no-current-pointer happy paths already -- this file's own remaining

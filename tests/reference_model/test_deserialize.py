@@ -6,8 +6,7 @@ from reference_model.registry import Resolver, get_resolver, register, unregiste
 from reference_model.selectors.xpath_selector import XPathSelector
 from reference_model.serialize import to_json_dict
 from staleness_sweep.resolve import resolve_family_location
-
-CORPUS_ROOT = "/work/ontologies/mikadiv-fm/sources"
+from tests.corpus_fixtures import REAL_CORPUS_ROOT as CORPUS_ROOT, requires_real_corpus
 
 
 def _real_leaf(xpath: str):
@@ -18,11 +17,13 @@ def _real_leaf(xpath: str):
     return cite(subject_document, XPathSelector.create(xpath))
 
 
+@requires_real_corpus
 def test_leaf_round_trips_through_json():
     leaf = _real_leaf("/xs:schema/xs:complexType[@name='Meldeart23']")
     assert from_json_dict(to_json_dict(leaf)) == leaf
 
 
+@requires_real_corpus
 def test_union_round_trips_through_json_with_matching_reference_id_and_content_hash():
     leaf_a = _real_leaf("/xs:schema/xs:complexType[@name='Meldeart23']")
     leaf_b = _real_leaf(
@@ -36,6 +37,7 @@ def test_union_round_trips_through_json_with_matching_reference_id_and_content_h
     assert result.content_hash == union.content_hash
 
 
+@requires_real_corpus
 def test_missing_field_raises_deserialization_error():
     leaf = _real_leaf("/xs:schema/xs:complexType[@name='Meldeart23']")
     data = to_json_dict(leaf)
@@ -44,6 +46,7 @@ def test_missing_field_raises_deserialization_error():
         from_json_dict(data)
 
 
+@requires_real_corpus
 def test_unknown_selector_type_raises_deserialization_error():
     leaf = _real_leaf("/xs:schema/xs:complexType[@name='Meldeart23']")
     data = to_json_dict(leaf)
