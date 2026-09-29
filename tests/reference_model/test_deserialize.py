@@ -5,15 +5,15 @@ from reference_model.model import ResolutionOutcome, Status, SubjectDocument
 from reference_model.registry import Resolver, get_resolver, register, unregister
 from reference_model.selectors.xpath_selector import XPathSelector
 from reference_model.serialize import to_json_dict
-from staleness_sweep.resolve import resolve_current_location
+from staleness_sweep.resolve import resolve_family_location
 
 MODULE_ROOT = "/work/ontologies/mikadiv-fm/sources"
 
 
 def _real_leaf(xpath: str):
-    outcome = resolve_current_location(MODULE_ROOT, "MiKaDiv_FM_Meldeart23")
+    location = resolve_family_location(MODULE_ROOT, "MiKaDiv_FM_Meldeart23")
     subject_document = SubjectDocument(
-        family="MiKaDiv_FM_Meldeart23", version="1.02", retrieval_uri=outcome.raw_content
+        family="MiKaDiv_FM_Meldeart23", version="1.02", retrieval_uri=location.retrieval_uri
     )
     return cite(subject_document, XPathSelector.create(xpath))
 

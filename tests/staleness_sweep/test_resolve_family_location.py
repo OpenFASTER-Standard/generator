@@ -64,11 +64,3 @@ def test_list_current_families_returns_sorted_names_even_with_a_broken_entry(tmp
 
 def test_list_current_families_returns_empty_list_when_no_current_pointer(tmp_path):
     assert list_current_families(str(tmp_path)) == []
-
-
-def test_list_current_families_matches_list_current_locations_family_names():
-    from staleness_sweep.resolve import list_current_locations
-
-    names = list_current_families(REAL_MODULE_ROOT)
-    location_names = sorted(loc.family for loc in list_current_locations(REAL_MODULE_ROOT))
-    assert names == location_names

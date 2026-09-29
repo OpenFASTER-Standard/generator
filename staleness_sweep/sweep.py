@@ -7,13 +7,13 @@ from dataclasses import dataclass
 
 from reference_model.cite import LeafCheckResult, check_reference
 from reference_model.model import Leaf, Reference, Status
-from staleness_sweep.resolve import resolve_current_location
+from staleness_sweep.resolve import resolve_family_location
 
 
 @dataclass(frozen=True)
 class FamilyResolutionFailure:
     family: str
-    status: Status  # always NOT_FOUND -- see resolve_current_location
+    status: Status  # always NOT_FOUND -- resolve_family_location() distinguishes only found/not-found
 
 
 @dataclass(frozen=True)
@@ -43,11 +43,11 @@ def sweep(references: dict[str, Reference], module_root: str) -> SweepReport:
         # Sorted, not raw set iteration order -- a report meant to be
         # diffed/snapshot-compared by a later sub-project can't have an
         # order that reshuffles run to run under hash randomization.
-        outcome = resolve_current_location(module_root, family)
-        if outcome.status == Status.RESOLVED:
-            overrides[family] = outcome.raw_content
+        location = resolve_family_location(module_root, family)
+        if location is not None:
+            overrides[family] = location.retrieval_uri
         else:
-            failures.append(FamilyResolutionFailure(family=family, status=outcome.status))
+            failures.append(FamilyResolutionFailure(family=family, status=Status.NOT_FOUND))
 
     failed_families = {failure.family for failure in failures}
     results_by_key: dict[str, list[LeafCheckResult]] = {}

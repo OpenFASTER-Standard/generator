@@ -13,8 +13,6 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from errors import GeneratorError
-from reference_model.model import ResolutionOutcome, Status
-
 
 class CorpusIntegrityError(GeneratorError):
     # The corpus's own _current/_manifest.json is malformed or escapes its
@@ -82,38 +80,12 @@ def _resolve_family_path(snapshot_dir: Path, snapshot: str, family: str, manifes
     return str(resolved_path)
 
 
-def resolve_current_location(module_root: str, family: str) -> ResolutionOutcome:
-    result = _load_current_manifest(module_root)
-    if result is None:
-        return ResolutionOutcome(status=Status.NOT_FOUND)
-    snapshot_dir, manifest, snapshot = result
-    if family not in manifest:
-        return ResolutionOutcome(status=Status.NOT_FOUND)
-    resolved_path = _resolve_family_path(snapshot_dir, snapshot, family, manifest)
-    return ResolutionOutcome(status=Status.RESOLVED, raw_content=resolved_path)
-
-
-def list_current_locations(module_root: str) -> list[FamilyLocation]:
-    result = _load_current_manifest(module_root)
-    if result is None:
-        return []
-    snapshot_dir, manifest, snapshot = result
-    return [
-        FamilyLocation(
-            family=family,
-            version=snapshot,
-            retrieval_uri=_resolve_family_path(snapshot_dir, snapshot, family, manifest),
-        )
-        for family in sorted(manifest.keys())
-    ]
-
-
 def list_current_families(module_root: str) -> list[str]:
-    # Deliberately does not resolve any family's file path (unlike
-    # list_current_locations()) -- a caller that needs to enumerate family
-    # names without one broken manifest entry (a missing file, an escaping
-    # path) taking down the whole listing should use this instead, then
-    # resolve each family individually via resolve_family_location().
+    # Deliberately does not resolve any family's file path -- a caller
+    # that needs to enumerate family names without one broken manifest
+    # entry (a missing file, an escaping path) taking down the whole
+    # listing should use this instead, then resolve each family
+    # individually via resolve_family_location().
     result = _load_current_manifest(module_root)
     if result is None:
         return []
@@ -123,9 +95,10 @@ def list_current_families(module_root: str) -> list[str]:
 
 def resolve_family_location(module_root: str, family: str) -> FamilyLocation | None:
     # Resolves exactly one family, so a broken manifest entry for some
-    # OTHER family never prevents citing or listing this one -- unlike
-    # list_current_locations(), which resolves every family eagerly and
-    # therefore fails as a whole if any single entry is broken.
+    # OTHER family never prevents citing or listing this one -- callers
+    # needing every family's location loop over list_current_families()
+    # and call this once per name, so one broken entry excludes only
+    # itself rather than failing the whole batch.
     result = _load_current_manifest(module_root)
     if result is None:
         return None
