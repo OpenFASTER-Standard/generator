@@ -11,6 +11,7 @@ const reviewData = {
   unresolved_families: [{ family: "Fam-B", status: "NOT_FOUND" }],
   excluded_keys: ["excluded-key"],
   deserialization_failures: ["corrupt-key"],
+  check_failures: [],
 }
 
 beforeEach(() => {
@@ -36,6 +37,21 @@ describe("ReviewView", () => {
 
     // Three genuinely distinct alerts, not one generic warning reused.
     expect(new Set([deserializationAlert, unresolvedAlert, excludedAlert]).size).toBe(3)
+  })
+
+  it("shows a 4th, distinct alert for pages that failed to check due to an unexpected error", async () => {
+    vi.spyOn(api, "fetchReview").mockResolvedValue({
+      ...reviewData,
+      check_failures: [{ key: "exploding-key", error: "boom" }],
+    } as any)
+    render(
+      <MemoryRouter>
+        <ReviewView />
+      </MemoryRouter>
+    )
+
+    const checkFailureAlert = (await screen.findByText(/exploding-key/)).closest("[role='alert']")
+    expect(checkFailureAlert).toHaveTextContent(/unexpected error/i)
   })
 
   it("submits an approve verdict and removes the item -- and its whole fact_key group, since it was the only leaf -- from view", async () => {

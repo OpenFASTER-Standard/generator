@@ -112,4 +112,5 @@ def apply_reviews(summary: ReviewSummary, reviews: list[ReviewRecord]) -> Review
         flagged=flagged,
         unresolved_families=summary.unresolved_families,
         excluded_keys=summary.excluded_keys,
+        check_failures=summary.check_failures,
     )

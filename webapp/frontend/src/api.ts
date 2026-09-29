@@ -114,11 +114,17 @@ export interface FamilyResolutionFailure {
   status: string
 }
 
+export interface ReferenceCheckFailure {
+  key: string
+  error: string
+}
+
 export interface ReviewResponse {
   flagged: Record<string, FlaggedLeaf[]>
   unresolved_families: FamilyResolutionFailure[]
   excluded_keys: string[]
   deserialization_failures: string[]
+  check_failures: ReferenceCheckFailure[]
 }
 
 export interface SubmitReviewRequest {

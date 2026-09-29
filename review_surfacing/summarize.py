@@ -8,7 +8,7 @@ from enum import Enum
 
 from reference_model.cite import LeafCheckResult
 from reference_model.model import Leaf, ResolutionOutcome, Status
-from staleness_sweep.sweep import FamilyResolutionFailure, SweepReport
+from staleness_sweep.sweep import FamilyResolutionFailure, ReferenceCheckFailure, SweepReport
 
 
 class DriftKind(Enum):
@@ -29,6 +29,7 @@ class ReviewSummary:
     flagged: dict[str, tuple[FlaggedLeaf, ...]]
     unresolved_families: tuple[FamilyResolutionFailure, ...]
     excluded_keys: tuple[str, ...]
+    check_failures: tuple[ReferenceCheckFailure, ...] = ()
 
 
 def _classify(result: LeafCheckResult) -> FlaggedLeaf | None:
@@ -54,4 +55,5 @@ def summarize_for_review(report: SweepReport) -> ReviewSummary:
         flagged=flagged,
         unresolved_families=report.family_resolution_failures,
         excluded_keys=report.excluded_keys,
+        check_failures=report.check_failures,
     )

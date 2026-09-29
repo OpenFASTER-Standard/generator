@@ -539,6 +539,61 @@ def test_get_review_serializes_a_real_content_drift_leaf_without_500(tmp_path, m
     assert flagged[0]["drift_kind"] == "CONTENT"
 
 
+def test_get_review_isolates_one_unexpected_check_failure_from_every_other_page(tmp_path, monkeypatch):
+    # Real regression found in a whole-branch review: staleness_sweep.sweep()
+    # had no per-reference error isolation, so an unexpected exception
+    # while checking ANY ONE page (the exact shape of the real C14NError
+    # bug the same review found) 500'd this endpoint for every OTHER,
+    # healthy page too.
+    from dataclasses import dataclass
+
+    from reference_model.model import ContentHash, Leaf, ResolutionOutcome, Status, compute_leaf_reference_id
+    from reference_model.registry import Resolver, register, unregister
+
+    @dataclass(frozen=True)
+    class _ExplodingSelector:
+        type: str
+        value: str
+
+    register(
+        "ExplodingSelectorForWebappTest",
+        Resolver(
+            resolve=lambda s, u: ResolutionOutcome(status=Status.RESOLVED, raw_content="x"),
+            canonicalize_and_hash=lambda c: (_ for _ in ()).throw(RuntimeError("boom")),
+            selector_cls=_ExplodingSelector,
+        ),
+    )
+    try:
+        catalog_path = tmp_path / "references.json"
+        catalog_path.write_text("{}", encoding="utf-8")
+        healthy_leaf = cite(_subject_document(), XPathSelector.create(AORDNR_XPATH))
+        add_revision(str(catalog_path), "healthy-fact", healthy_leaf, "julian", "initial", False)
+
+        exploding_selector = _ExplodingSelector(type="ExplodingSelectorForWebappTest", value="/x")
+        exploding_leaf = Leaf(
+            reference_id=compute_leaf_reference_id("MiKaDiv_FM_Meldeart23", exploding_selector),
+            subject_document=_subject_document(),
+            selector=exploding_selector,
+            content_hash=ContentHash(algorithm="sha256", digest="0" * 64),
+            captured_at="2026-01-01T00:00:00Z",
+        )
+        add_revision(str(catalog_path), "exploding-fact", exploding_leaf, "julian", "initial", False)
+
+        monkeypatch.setenv("REFERENCES_CATALOG_PATH", str(catalog_path))
+        monkeypatch.setenv("MIKADIV_REVIEWS_DIR", str(tmp_path / "reviews"))
+        client = TestClient(app)
+
+        response = client.get("/api/review")
+
+        assert response.status_code == 200
+        assert "exploding-fact" in [f["key"] for f in response.json()["check_failures"]]
+        # The healthy page is entirely unaffected -- neither flagged nor excluded.
+        assert "healthy-fact" not in response.json()["flagged"]
+        assert "healthy-fact" not in response.json()["excluded_keys"]
+    finally:
+        unregister("ExplodingSelectorForWebappTest")
+
+
 def test_a_real_api_404_is_not_masked_by_the_spa_fallback(tmp_path, monkeypatch):
     # Explicit tmp_path catalog like every other test in this file, rather
     # than silently depending on the real committed catalog file existing

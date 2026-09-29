@@ -1,8 +1,10 @@
+import json
 import shutil
 from pathlib import Path
 
 from reference_model.cite import cite, cite_union
-from reference_model.model import SubjectDocument, Status
+from reference_model.model import ResolutionOutcome, SubjectDocument, Status
+from reference_model.registry import Resolver, register, unregister
 from reference_model.selectors.xpath_selector import XPathSelector
 from staleness_sweep.sweep import FamilyResolutionFailure, sweep
 from tests.corpus_fixtures import REAL_CORPUS_ROOT, requires_real_corpus
@@ -211,3 +213,50 @@ def test_sweep_over_a_deliberately_changed_synthetic_snapshot(tmp_path):
     assert report.results_by_key["changed-fact"][0].outcome.status == Status.NOT_FOUND
     assert report.results_by_key["unchanged-fact"][0].outcome.status == Status.RESOLVED
     assert report.results_by_key["unchanged-fact"][0].hash_changed is False
+
+
+def test_one_references_unexpected_check_failure_does_not_take_down_the_whole_sweep():
+    # Real regression found in a whole-branch review: sweep() had no
+    # per-reference error isolation, unlike every other seam in this
+    # codebase (list_corpus_candidates() isolates one corrupt XSD,
+    # resolve_family_location() isolates one broken manifest entry,
+    # get_review_summary() isolates one undeserializable catalog entry).
+    # An unexpected exception from a selector's own canonicalize_and_hash()
+    # (the exact shape of the real C14NError bug this same review found)
+    # must exclude only that one key, not 500 the whole review summary.
+    healthy_leaf = cite(_real_meldeart23_subject_document(), XPathSelector.create(AORDNR_XPATH))
+
+    from reference_model.model import Leaf, ContentHash, compute_leaf_reference_id
+    from dataclasses import dataclass
+
+    @dataclass(frozen=True)
+    class _ExplodingSelector:
+        type: str
+        value: str
+
+    def _exploding_resolve(selector, retrieval_uri):
+        return ResolutionOutcome(status=Status.RESOLVED, raw_content="does not matter")
+
+    def _exploding_canonicalize_and_hash(raw_content):
+        raise RuntimeError("simulated C14N-shaped failure")
+
+    register(
+        "ExplodingSelectorForSweepTest",
+        Resolver(resolve=_exploding_resolve, canonicalize_and_hash=_exploding_canonicalize_and_hash),
+    )
+    try:
+        selector = _ExplodingSelector(type="ExplodingSelectorForSweepTest", value="/x")
+        exploding_leaf = Leaf(
+            reference_id=compute_leaf_reference_id("MiKaDiv_FM_Meldeart23", selector),
+            subject_document=_real_meldeart23_subject_document(),
+            selector=selector,
+            content_hash=ContentHash(algorithm="sha256", digest="0" * 64),
+            captured_at="2026-01-01T00:00:00Z",
+        )
+
+        report = sweep({"exploding-fact": exploding_leaf, "healthy-fact": healthy_leaf}, REAL_CORPUS_ROOT)
+
+        assert "exploding-fact" in {f.key for f in report.check_failures}
+        assert report.results_by_key["healthy-fact"][0].outcome.status == Status.RESOLVED
+    finally:
+        unregister("ExplodingSelectorForSweepTest")

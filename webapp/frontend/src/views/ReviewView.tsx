@@ -132,6 +132,16 @@ export function ReviewView() {
         </Alert>
       )}
 
+      {review.check_failures.length > 0 && (
+        <Alert variant="destructive">
+          <AlertDescription>
+            {review.check_failures.length} page{review.check_failures.length === 1 ? "" : "s"} hit an unexpected
+            error while checking and could not be swept this run:{" "}
+            {review.check_failures.map((f) => f.key).join(", ")}
+          </AlertDescription>
+        </Alert>
+      )}
+
       {factKeys.length === 0 ? (
         <p>Nothing flagged for review.</p>
       ) : (

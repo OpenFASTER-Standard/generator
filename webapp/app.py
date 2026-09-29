@@ -177,6 +177,7 @@ def get_review_endpoint() -> dict:
         "unresolved_families": [dataclasses.asdict(f) for f in result.summary.unresolved_families],
         "excluded_keys": list(result.summary.excluded_keys),
         "deserialization_failures": list(result.deserialization_failures),
+        "check_failures": [dataclasses.asdict(f) for f in result.summary.check_failures],
     }
 
 
