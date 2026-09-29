@@ -34,7 +34,7 @@ describe("PageDetailView", () => {
           created_at: "2026-01-02T00:00:00Z",
         },
       ],
-    })
+    } as any)
 
     render(
       <MemoryRouter initialEntries={["/pages/k"]}>
@@ -57,14 +57,14 @@ describe("PageDetailView", () => {
       fact_key: "k",
       current: {
         revision_id: "r1",
-        reference: {},
+        reference: { subject_document: { family: "Fam" }, selector: { type: "XPathSelector" }, reference_id: "id" },
         author: "a1",
         comment: "first",
         is_correction: false,
         created_at: "2026-01-01T00:00:00Z",
       },
       history: [],
-    })
+    } as any)
 
     render(
       <MemoryRouter initialEntries={["/pages/k"]}>

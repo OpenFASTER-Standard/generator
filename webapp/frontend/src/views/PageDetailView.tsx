@@ -11,7 +11,7 @@ import {
   Alert,
   AlertDescription,
 } from "@openfaster-standard/ui"
-import { fetchPage, type PageDetail } from "../api"
+import { fetchPage, describeReference, type PageDetail } from "../api"
 
 export function PageDetailView() {
   const { factKey } = useParams<{ factKey: string }>()
@@ -37,10 +37,7 @@ export function PageDetailView() {
     return <p>Loading...</p>
   }
 
-  const reference = page.current.reference
-  const family = reference?.subject_document?.family ?? ""
-  const selectorType = reference?.selector?.type ?? ""
-  const referenceId = reference?.reference_id ?? ""
+  const { family, selectorType, referenceId } = describeReference(page.current.reference)
 
   return (
     <div>

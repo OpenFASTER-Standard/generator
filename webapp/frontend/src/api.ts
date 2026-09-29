@@ -1,8 +1,51 @@
 // Typed fetch wrappers for every /api/* endpoint webapp/app.py serves.
 
+// Mirrors reference_model.serialize.to_json_dict()'s real output shape for
+// reference_model.model.{Leaf,Union} -- a Leaf cites one subject document
+// via a selector; a Union has no subject_document/selector/captured_at of
+// its own, only `parts` (each a Reference in turn).
+export interface LeafReference {
+  reference_id: string
+  subject_document: { family: string; version: string; retrieval_uri: string }
+  selector: { type: string; [key: string]: unknown }
+  content_hash: { algorithm: string; digest: string }
+  captured_at: string
+}
+
+export interface UnionReference {
+  parts: Reference[]
+  reference_id: string
+  content_hash: { algorithm: string; digest: string }
+}
+
+export type Reference = LeafReference | UnionReference
+
+export interface ReferenceSummary {
+  family: string
+  selectorType: string
+  referenceId: string
+}
+
+// Single source of truth for "what does this Reference look like as three
+// summary fields" -- IndexView and PageDetailView each used to derive this
+// independently with the same four lines of optional-chaining, which
+// (a) silently rendered three blank cells for a Union (no subject_document/
+// selector to chain into) and (b) had to be found and fixed in two places
+// for any future reference_model shape change.
+export function describeReference(reference: Reference): ReferenceSummary {
+  if ("parts" in reference) {
+    return { family: "(union of multiple sources)", selectorType: "Union", referenceId: reference.reference_id }
+  }
+  return {
+    family: reference.subject_document.family,
+    selectorType: reference.selector.type,
+    referenceId: reference.reference_id,
+  }
+}
+
 export interface Revision {
   revision_id: string
-  reference: any
+  reference: Reference
   author: string
   comment: string
   is_correction: boolean

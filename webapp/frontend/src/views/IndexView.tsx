@@ -11,7 +11,7 @@ import {
   Alert,
   AlertDescription,
 } from "@openfaster-standard/ui"
-import { fetchPages, type PagesResponse } from "../api"
+import { fetchPages, describeReference, type PagesResponse } from "../api"
 
 export function IndexView() {
   const [pages, setPages] = useState<PagesResponse | null>(null)
@@ -54,10 +54,7 @@ export function IndexView() {
       <TableBody>
         {factKeys.map((factKey) => {
           const page = pages[factKey]
-          const reference = page.current.reference
-          const family = reference?.subject_document?.family ?? ""
-          const selectorType = reference?.selector?.type ?? ""
-          const referenceId = reference?.reference_id ?? ""
+          const { family, selectorType, referenceId } = describeReference(page.current.reference)
           return (
             <TableRow key={factKey}>
               <TableCell>
