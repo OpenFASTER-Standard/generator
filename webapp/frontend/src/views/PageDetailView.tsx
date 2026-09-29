@@ -11,6 +11,7 @@ import {
   Alert,
   AlertDescription,
 } from "@openfaster-standard/ui"
+import { LoadingSkeleton } from "../components/LoadingSkeleton"
 import { fetchPage, describeReference, type PageDetail } from "../api"
 
 export function PageDetailView() {
@@ -34,7 +35,7 @@ export function PageDetailView() {
   }
 
   if (page === null) {
-    return <p>Loading...</p>
+    return <LoadingSkeleton />
   }
 
   const { family, selectorType, referenceId } = describeReference(page.current.reference)

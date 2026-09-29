@@ -22,6 +22,7 @@ import {
   Alert,
   AlertDescription,
 } from "@openfaster-standard/ui"
+import { LoadingSkeleton } from "../components/LoadingSkeleton"
 import { fetchCandidates, submitCitation, type Candidate, type CandidatesResponse, type FamilyCandidates as FamilyCandidatesData } from "../api"
 
 function FamilyCandidates({
@@ -133,7 +134,7 @@ export function AddCitationView() {
   }
 
   if (candidatesByFamily === null) {
-    return <p>Loading...</p>
+    return <LoadingSkeleton />
   }
 
   const families = Object.keys(candidatesByFamily).sort()

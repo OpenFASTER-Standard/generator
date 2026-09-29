@@ -21,6 +21,7 @@ import {
   Alert,
   AlertDescription,
 } from "@openfaster-standard/ui"
+import { LoadingSkeleton } from "../components/LoadingSkeleton"
 import { fetchReview, submitReview, type FlaggedLeaf, type ReviewResponse } from "../api"
 
 interface ReviewTarget {
@@ -93,7 +94,7 @@ export function ReviewView() {
   }
 
   if (review === null) {
-    return <p>Loading...</p>
+    return <LoadingSkeleton />
   }
 
   const factKeys = Object.keys(review.flagged).sort()

@@ -11,6 +11,7 @@ import {
   Alert,
   AlertDescription,
 } from "@openfaster-standard/ui"
+import { LoadingSkeleton } from "../components/LoadingSkeleton"
 import { fetchPages, describeReference, type PagesResponse } from "../api"
 
 export function IndexView() {
@@ -32,7 +33,7 @@ export function IndexView() {
   }
 
   if (pages === null) {
-    return <p>Loading...</p>
+    return <LoadingSkeleton />
   }
 
   const factKeys = Object.keys(pages)
