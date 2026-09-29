@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from reference_model.model import Status
+from reference_model.model import Status, SubjectDocument
 from reference_model.registry import get_resolver
 from reference_model.selectors.xpath_selector import XPathSelector
 
@@ -115,13 +115,28 @@ def test_xpath_count_function_is_uncitable():
     assert outcome.status == Status.UNCITABLE
 
 
-def test_an_external_entity_declaration_is_not_expanded_into_cited_content(tmp_path: Path):
+def test_an_external_entity_declaration_never_reaches_a_real_citation(tmp_path: Path):
     # This system's entire input domain is externally authored regulatory
-    # XML (fetched from BZSt); a malicious/tampered XSD declaring a
-    # SYSTEM external entity must never have that entity's content reach a
+    # XML (fetched from BZSt); a malicious/tampered XSD declaring a SYSTEM
+    # external entity must never have that entity's content reach a
     # citation -- it would flow through canonicalization/hashing into the
     # catalog and, via GET /api/review's CONTENT-drift path, into a
     # browser. See the 2026-09-29 audit finding on this exact gap.
+    #
+    # Goes through the real cite() -> canonicalize_and_hash() path (not a
+    # hand-rolled etree.tostring() call that sidesteps it) -- a prior
+    # version of this test used method="c14n" directly and hit a real
+    # C14NError on the then-current resolve_entities=False hardening,
+    # dismissed in a comment as "an orthogonal libxml2 limitation" instead
+    # of being recognized as proof the hardening broke the production
+    # code path. That hardening also silently broke drift detection for
+    # any legitimate document using an internal entity (a real, different
+    # bug caught in a whole-branch review) -- SAFE_XML_PARSER no longer
+    # sets resolve_entities=False at all; the external-entity block below
+    # comes from no_network/load_dtd, which this test still exercises for
+    # real.
+    from reference_model.cite import CitationError, cite
+
     secret_path = tmp_path / "secret.txt"
     secret_path.write_text("super-secret-file-content", encoding="utf-8")
     malicious_xsd = tmp_path / "malicious.xsd"
@@ -138,21 +153,55 @@ def test_an_external_entity_declaration_is_not_expanded_into_cited_content(tmp_p
 """,
         encoding="utf-8",
     )
-
+    subject_document = SubjectDocument(
+        family="TestFamily", version="1", retrieval_uri=str(malicious_xsd)
+    )
     selector = XPathSelector.create("/xs:schema/xs:element[@name='AOrdNr']/xs:annotation/xs:documentation")
-    outcome = _resolver().resolve(selector, str(malicious_xsd))
 
-    if outcome.status == Status.RESOLVED:
-        from lxml import etree
+    # The external entity breaks parsing outright (blocked, not expanded),
+    # so citation fails safely rather than succeeding with leaked content.
+    with pytest.raises(CitationError):
+        cite(subject_document, selector)
 
-        # Not method="c14n" -- an unresolved entity reference node (exactly
-        # what SAFE_XML_PARSER's resolve_entities=False leaves behind) is
-        # not something C14N knows how to serialize at all (C14NError),
-        # which is an orthogonal libxml2 limitation, not a leak. Plain
-        # tostring() is the real assertion: the entity reference is
-        # preserved literally as "&xxe;" text, never expanded.
-        rendered = etree.tostring(outcome.raw_content).decode()
-        assert "super-secret-file-content" not in rendered
-    # NOT_FOUND (the entity reference left unresolved breaks the document)
-    # is an equally acceptable safe outcome -- either way, the secret must
-    # never appear anywhere reachable.
+
+def test_an_internal_entity_in_source_content_is_expanded_and_drift_is_still_detected(tmp_path: Path):
+    # The regression this test guards against: hardening against XXE by
+    # blanket-disabling entity resolution (resolve_entities=False) also
+    # silently defeated this system's entire purpose for any legitimate
+    # document using an internal (non-external) entity -- two different
+    # documents whose only difference is an internal entity's value
+    # canonicalized to the SAME hash, since the unexpanded entity
+    # reference node dropped out of the canonical form entirely. Confirmed
+    # live in a whole-branch review before this test was written.
+    from reference_model.cite import check_leaf, cite
+
+    def _xsd(entity_value: str) -> Path:
+        path = tmp_path / f"doc-{entity_value}.xsd"
+        path.write_text(
+            f"""<?xml version="1.0"?>
+<!DOCTYPE xs:schema [
+  <!ENTITY typeval "{entity_value}">
+]>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="Foo" type="&typeval;"/>
+</xs:schema>
+""",
+            encoding="utf-8",
+        )
+        return path
+
+    subject_document = SubjectDocument(
+        family="TestFamily", version="1", retrieval_uri=str(_xsd("xs:string"))
+    )
+    selector = XPathSelector.create("/xs:schema/xs:element[@name='Foo']")
+    leaf = cite(subject_document, selector)
+
+    # The entity's real value reached the citation -- proves it was
+    # genuinely expanded, not silently dropped.
+    outcome = _resolver().resolve(selector, str(_xsd("xs:string")))
+    assert outcome.raw_content.get("type") == "xs:string"
+
+    # Now the source changes (only the entity's value differs) -- a real
+    # content change must be detected as drift, not hashed identically.
+    result = check_leaf(leaf, retrieval_uri=str(_xsd("xs:integer")))
+    assert result.hash_changed is True

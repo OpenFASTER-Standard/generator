@@ -1,17 +1,18 @@
+from lxml import etree
+import pytest
+
 from discovery.xsd_discoverer import discover_candidates
 
 
-def test_a_document_with_an_external_entity_declaration_is_still_discovered_safely(tmp_path):
+def test_a_document_with_an_external_entity_declaration_fails_to_parse_rather_than_leaking_it(tmp_path):
     # Same 2026-09-29 audit finding as xpath_selector's own XXE-hardening
-    # test. Unlike an XPath selector (which can point at element content,
-    # e.g. an <xs:documentation> node), discover_candidates()'s only
-    # output (Candidate.name) is built from `name` *attributes* -- and the
-    # XML spec itself forbids an external entity reference inside an
-    # attribute value, so there is no equivalent "name leaks a file"
-    # vector here to exercise. What this does need to guarantee is that a
-    # document declaring a SYSTEM external entity elsewhere (e.g. inside
-    # element content this module walks past) doesn't crash discovery or
-    # leak the secret into any result.
+    # tests. discover_candidates() itself has no XMLSyntaxError isolation
+    # (that happens one layer up, in list_corpus_candidates() -- see
+    # test_corpus_candidates.py's own corrupt-XML test) -- a SYSTEM
+    # external entity is blocked at parse time (SAFE_XML_PARSER's
+    # no_network/load_dtd=False), the same as any other malformed XML, so
+    # this raises rather than silently continuing with a mangled tree.
+    # Either way the secret must never leak into a result.
     secret_path = tmp_path / "secret.txt"
     secret_path.write_text("super-secret-file-content", encoding="utf-8")
     xsd_path = tmp_path / "malicious.xsd"
@@ -29,11 +30,8 @@ def test_a_document_with_an_external_entity_declaration_is_still_discovered_safe
         encoding="utf-8",
     )
 
-    result = discover_candidates(str(xsd_path))
-
-    all_names = [c.name for c in result.candidates] + [e.name for e in result.excluded]
-    assert not any("super-secret-file-content" in name for name in all_names)
-    assert any(c.name == "Real" for c in result.candidates)
+    with pytest.raises(etree.XMLSyntaxError):
+        discover_candidates(str(xsd_path))
 
 
 def test_name_containing_an_apostrophe_is_excluded_not_a_crash(tmp_path):
