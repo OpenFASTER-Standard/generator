@@ -50,6 +50,7 @@ export interface Revision {
   comment: string
   is_correction: boolean
   created_at: string
+  kind: "citation" | "review"
 }
 
 export interface PageSummary {
@@ -61,7 +62,10 @@ export type PagesResponse = Record<string, PageSummary>
 
 export interface PageDetail {
   fact_key: string
-  current: Revision
+  // Null whenever a page's history contains no citation revision (only
+  // possible for data reached some other way than this app's own write
+  // paths -- every real page here always starts with a citation).
+  current: Revision | null
   history: Revision[]
 }
 

@@ -38,15 +38,16 @@ export function PageDetailView() {
     return <LoadingSkeleton />
   }
 
-  const { family, selectorType, referenceId } = describeReference(page.current.reference)
+  // Only possible for a page with no citation revision at all -- not
+  // reachable through this app's own write paths (every real page starts
+  // with a citation) but the API type is honest that it can happen.
+  const summary = page.current ? describeReference(page.current.reference) : null
 
   return (
     <div>
       <Link to="/">&larr; Back to pages</Link>
       <h2>{page.fact_key}</h2>
-      <p>
-        {family} / {selectorType} / {referenceId}
-      </p>
+      <p>{summary ? `${summary.family} / ${summary.selectorType} / ${summary.referenceId}` : "No citation on this page."}</p>
       <h3>History</h3>
       <Table>
         <TableHeader>
@@ -63,6 +64,7 @@ export function PageDetailView() {
               <TableCell>{revision.author}</TableCell>
               <TableCell>
                 {revision.comment}
+                {revision.kind === "review" && <Badge>Review</Badge>}
                 {revision.is_correction && <Badge variant="destructive">Correction</Badge>}
               </TableCell>
             </TableRow>
