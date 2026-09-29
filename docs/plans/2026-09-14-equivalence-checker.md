@@ -1,5 +1,10 @@
 # Equivalence Checker Implementation Plan
 
+> **SUPERSEDED (2026-09-23).** Executed and merged, then wholesale
+> deleted in `7eeb248` along with the rest of the pre-reset codebase.
+> See `docs/specs/2026-09-14-equivalence-checker-design.md`'s
+> superseded-banner. Kept only as history.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build the equivalence-checking algorithm in `generator/equivalence/` that proves a graph-generated XSD is behaviorally equivalent to an official one, via bounded-exhaustive/pairwise structural testing plus exact leaf-facet checking — validated with real, hand-crafted synthetic fixtures, not real government XSDs.

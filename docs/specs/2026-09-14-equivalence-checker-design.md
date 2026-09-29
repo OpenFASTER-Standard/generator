@@ -1,5 +1,14 @@
 # Equivalence Checker — Design
 
+> **SUPERSEDED (2026-09-23).** This design's code (`equivalence/`) was
+> wholesale deleted in `7eeb248` ("Remove the old pre-reset codebase —
+> never extended, would break once mikadiv-fm/sources/ is restructured"),
+> the same commit that superseded the provenance-and-review-platform
+> design (see that spec's own banner). Nothing in the current, from-scratch
+> `reference_model`/`staleness_sweep`/etc. line of sub-projects replaces
+> this specific capability yet. Kept here only as history — do not treat
+> this as live roadmap or design authority.
+
 Sub-project 2 of `/work/openfaster-restructuring/STATUS.md`. Full context
 and decision log live there — this document covers only this
 sub-project's own architecture and scope.

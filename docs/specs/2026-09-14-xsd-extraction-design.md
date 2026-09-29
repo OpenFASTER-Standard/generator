@@ -1,5 +1,17 @@
 # XSD Extraction Logic — Design
 
+> **SUPERSEDED (2026-09-23).** This design's code (`extraction/`) was
+> wholesale deleted in `7eeb248` ("Remove the old pre-reset codebase —
+> never extended, would break once mikadiv-fm/sources/ is restructured"),
+> the same commit that superseded the provenance-and-review-platform
+> design (see that spec's own banner). `discovery/` (see
+> `docs/specs/2026-09-25-xsd-discovery-design.md`) is a much narrower,
+> from-scratch replacement for one part of what this covered (mechanically
+> discovering named XSD constructs) — it does not replace this design's
+> other extraction logic (complex/simple types, identity constraints,
+> translation plausibility, annex PDF extraction). Kept here only as
+> history — do not treat this as live roadmap or design authority.
+
 Sub-project 3a of `/work/openfaster-restructuring/STATUS.md` (split off
 from the originally-scoped "sub-project 3: mikadiv-fm" — see that
 file's roadmap and decision log for full context). This document covers

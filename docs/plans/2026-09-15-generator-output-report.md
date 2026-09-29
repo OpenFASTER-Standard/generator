@@ -1,5 +1,10 @@
 # Generator Output Report Implementation Plan
 
+> **SUPERSEDED (2026-09-23).** Executed and merged, then wholesale
+> deleted in `7eeb248` along with the rest of the pre-reset codebase.
+> See `docs/specs/2026-09-15-generator-output-report-design.md`'s
+> superseded-banner. Kept only as history.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build `generator/reporting/` — a self-contained HTML report generator that turns a real `xsdo:` graph plus its documentation/plausibility audit results into one file the operator opens in a browser to visually verify the generator's output with their own eyes.

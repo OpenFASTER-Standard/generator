@@ -17,5 +17,41 @@ migrating from any prior code in this repo's own history. See
 - `staleness_sweep/` -- batches `reference_model`'s own `check_reference()`
   across many `Reference`s at once against the real, snapshot-versioned
   `ontologies` corpus. See `docs/specs/2026-09-23-staleness-sweep-design.md`.
+- `review_surfacing/` -- classifies a sweep's results into what a human
+  reviewer needs to see first (what's flagged, and what kind of drift).
+  See `docs/specs/2026-09-23-review-surfacing-design.md`.
+- `review_recording/` -- turns a reviewer's decision into a plain, real
+  cited JSON document, through the same `reference_model` machinery
+  already built for XSDs and PDFs. See
+  `docs/specs/2026-09-23-review-recording-design.md`.
+- `review_consultation/` -- consults previously-recorded review decisions
+  to suppress drift a human has already approved, scoped to the exact
+  fingerprint they reviewed. See
+  `docs/specs/2026-09-24-review-consultation-design.md`.
+- `references_catalog/` -- reads and writes the references catalog: a
+  page (`fact_key`) has an ordered history of immutable revisions. See
+  `docs/specs/2026-09-25-catalog-revision-history-design.md`.
+- `discovery/` -- mechanically discovers citable candidates in a real
+  XSD file, and lists them across the whole corpus. See
+  `docs/specs/2026-09-25-xsd-discovery-design.md`.
+- `citation_workflow/` -- connects candidate discovery to the catalog:
+  turns a human-picked (family, xpath) pair into a fresh, verified
+  citation recorded as a new catalog revision. See
+  `docs/specs/2026-09-25-citation-workflow-design.md`.
+- `review_workflow/` -- orchestrates the review pipeline against the real
+  catalog: load current citations, sweep them for drift, filter out
+  what's already been reviewed, and record new review decisions back
+  onto the catalog. See
+  `docs/specs/2026-09-29-webapp-react-rebuild-design.md`.
+- `errors/` -- `GeneratorError`, the shared base every domain error in
+  this system derives from, so the webapp's HTTP layer can map any of
+  them to the right status code uniformly.
+- `webapp/` -- serves the catalog as browsable pages with revision
+  history, a candidate-browsing + citation-submission interaction layer,
+  and the drift-review pipeline, via a React SPA (`webapp/frontend/`)
+  backed by six JSON API endpoints. See
+  `docs/specs/2026-09-25-catalog-revision-history-design.md`,
+  `docs/specs/2026-09-25-citation-workflow-design.md`, and
+  `docs/specs/2026-09-29-webapp-react-rebuild-design.md`.
 
 Licensed MIT.

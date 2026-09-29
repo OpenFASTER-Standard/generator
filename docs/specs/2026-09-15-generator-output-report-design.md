@@ -1,5 +1,13 @@
 # Generator Output Report — Design
 
+> **SUPERSEDED (2026-09-23).** This design's code was wholesale deleted in
+> `7eeb248` ("Remove the old pre-reset codebase — never extended, would
+> break once mikadiv-fm/sources/ is restructured"), the same commit that
+> superseded the provenance-and-review-platform design (see that spec's
+> own banner). Nothing in the current, from-scratch line of sub-projects
+> replaces this specific capability yet. Kept here only as history — do
+> not treat this as live roadmap or design authority.
+
 Sub-project 3b of `/work/openfaster-restructuring/STATUS.md`, inserted
 between sub-project 3a (XSD extraction logic, complete) and 3c (`mikadiv-fm`
 concept curation, not started) per explicit operator request: a

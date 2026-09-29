@@ -1,5 +1,10 @@
 # XSD Extraction Logic Implementation Plan
 
+> **SUPERSEDED (2026-09-23).** Executed and merged, then wholesale
+> deleted in `7eeb248` along with the rest of the pre-reset codebase.
+> See `docs/specs/2026-09-14-xsd-extraction-design.md`'s
+> superseded-banner. Kept only as history.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build `generator/extraction/`'s `extract(xsd_path) -> rdflib.Graph`, which turns the real, official MiKaDiv-FM XSD family into a complete `xsdo:`-shaped RDF graph — every construct genuinely present in the real files, not a representative subset — plus a separate function that augments that graph with English documentation matched from BZSt's official Annex PDF, with thorough plausibility/coverage checks on every attached translation.
