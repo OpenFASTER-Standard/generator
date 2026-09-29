@@ -36,7 +36,27 @@ def from_json_dict(data: dict) -> Reference:
             parts = [from_json_dict(part) for part in data["parts"]]
         except (KeyError, TypeError) as exc:
             raise ReferenceDeserializationError(f"malformed Union.parts: {exc}") from exc
-        return Union(parts=tuple(parts))
+        union = Union(parts=tuple(parts))
+        # reference_id/content_hash are recomputed from `parts`, never
+        # trusted from the input -- but a stored value that disagrees with
+        # that recomputation is corruption (a hand-edit, a bug in some
+        # future writer), and this system's entire premise is detecting
+        # exactly that kind of divergence, not silently "repairing" it on
+        # read. Absent (e.g. a freshly-built dict with no reference_id
+        # yet) is fine; present-and-wrong is not.
+        if "reference_id" in data and data["reference_id"] != union.reference_id:
+            raise ReferenceDeserializationError(
+                f"Union.reference_id {data['reference_id']!r} does not match its own parts "
+                f"(recomputed: {union.reference_id!r})"
+            )
+        if "content_hash" in data:
+            stored_content_hash = ContentHash(**data["content_hash"])
+            if stored_content_hash != union.content_hash:
+                raise ReferenceDeserializationError(
+                    f"Union.content_hash {stored_content_hash!r} does not match its own parts "
+                    f"(recomputed: {union.content_hash!r})"
+                )
+        return union
 
     try:
         selector_data = dict(data["selector"])

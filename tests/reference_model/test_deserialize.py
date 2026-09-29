@@ -38,6 +38,45 @@ def test_union_round_trips_through_json_with_matching_reference_id_and_content_h
 
 
 @requires_real_corpus
+def test_a_union_whose_stored_reference_id_disagrees_with_its_own_parts_is_rejected():
+    # A Union's reference_id/content_hash are recomputed from `parts` on
+    # deserialization (the documented, correct design -- it's what makes
+    # the round-trip invariant above hold). But recomputing silently
+    # instead of verifying means a catalog entry whose stored values
+    # disagree with its own parts -- corruption, a hand-edit, a bug in
+    # some future writer -- gets silently "repaired" on read rather than
+    # reported, in a system whose entire premise is detecting exactly
+    # that kind of divergence. A Leaf gets no such treatment (its
+    # reference_id is read straight from the data, never recomputed).
+    leaf_a = _real_leaf("/xs:schema/xs:complexType[@name='Meldeart23']")
+    leaf_b = _real_leaf(
+        "/xs:schema/xs:complexType[@name='Meldeart23']/xs:complexContent/xs:extension/xs:sequence"
+        "/xs:element[@name='AbgefKapitalertragsteuer']"
+    )
+    union = cite_union([leaf_a, leaf_b])
+    data = to_json_dict(union)
+    data["reference_id"] = "corrupted-does-not-match-the-real-parts"
+
+    with pytest.raises(ReferenceDeserializationError, match="reference_id"):
+        from_json_dict(data)
+
+
+@requires_real_corpus
+def test_a_union_whose_stored_content_hash_disagrees_with_its_own_parts_is_rejected():
+    leaf_a = _real_leaf("/xs:schema/xs:complexType[@name='Meldeart23']")
+    leaf_b = _real_leaf(
+        "/xs:schema/xs:complexType[@name='Meldeart23']/xs:complexContent/xs:extension/xs:sequence"
+        "/xs:element[@name='AbgefKapitalertragsteuer']"
+    )
+    union = cite_union([leaf_a, leaf_b])
+    data = to_json_dict(union)
+    data["content_hash"] = {"algorithm": "sha256", "digest": "0" * 64}
+
+    with pytest.raises(ReferenceDeserializationError, match="content_hash"):
+        from_json_dict(data)
+
+
+@requires_real_corpus
 def test_missing_field_raises_deserialization_error():
     leaf = _real_leaf("/xs:schema/xs:complexType[@name='Meldeart23']")
     data = to_json_dict(leaf)
