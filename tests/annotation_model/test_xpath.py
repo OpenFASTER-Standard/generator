@@ -2,9 +2,9 @@ from pathlib import Path
 
 from annotation_model.outcomes import Status
 from annotation_model.selectors.xpath import canonicalize_and_hash_xml, resolve_xpath
-from tests.corpus_fixtures import requires_real_corpus
+from tests.corpus_fixtures import REAL_CORPUS_ROOT, requires_real_corpus
 
-REAL_XSD = "/work/ontologies/mikadiv-fm/sources/1.02/xsd/MiKaDiv_FM_Meldeart23_1.02.xsd"
+REAL_XSD = f"{REAL_CORPUS_ROOT}/1.02/xsd/MiKaDiv_FM_Meldeart23_1.02.xsd"
 AORDNR_XPATH = (
     "/xs:schema/xs:complexType[@name='AmtlicheOrdnungsnummerMa23ListeType']"
     "/xs:sequence/xs:element[@name='AOrdNr']"

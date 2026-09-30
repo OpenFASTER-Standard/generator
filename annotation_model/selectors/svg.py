@@ -2,11 +2,26 @@
 from __future__ import annotations
 
 import hashlib
+import re
 
 import pdfplumber
+from pdfplumber.utils.exceptions import PdfminerException
 from shapely.geometry import Point, Polygon, box
 
 from annotation_model.outcomes import ResolutionOutcome, Status
+
+_POINTS_RE = re.compile(r"points=['\"]([^'\"]+)['\"]")
+
+
+def extract_points(svg_value: str) -> str:
+    """Recovers the raw "x,y x,y ..." points string from the inline SVG
+    markup annotate_svg() stores as a selector's rdf:value -- used by
+    drift checking, which only has that stored string to re-resolve from.
+    """
+    match = _POINTS_RE.search(svg_value)
+    if not match:
+        raise ValueError(f"no parseable points= attribute in {svg_value!r}")
+    return match.group(1)
 
 
 def _parse_points(points: str) -> Polygon:
@@ -34,13 +49,28 @@ def _overlaps_any(polygon: Polygon, objects) -> bool:
 
 
 def resolve_svg_region(retrieval_uri: str, page: int, points: str) -> ResolutionOutcome:
+    """Two different failure channels, deliberately: a malformed `points`
+    selector (not enough points, unparseable coordinates, zero area)
+    raises ValueError, since that's a bug in the caller's own selector,
+    not a fact about the document. Everything about the *document*
+    (missing, corrupt, page out of range, nothing under the polygon)
+    comes back as a ResolutionOutcome instead -- resolve_xpath never
+    raises at all, so this asymmetry is specific to this function; a
+    caller resolving an unknown selector type needs to know both.
+    """
     # Validate the selector itself first -- document state (a missing
     # file, an out-of-range page) must never mask a malformed selector.
     polygon = _parse_points(points)
 
     try:
         pdf = pdfplumber.open(retrieval_uri)
-    except OSError:
+    except (OSError, PdfminerException):
+        # OSError: missing/unreadable file. PdfminerException: the file
+        # exists but isn't a valid PDF -- also nothing to resolve against,
+        # and symmetric with resolve_xpath's own etree.XMLSyntaxError ->
+        # NOT_FOUND mapping. Without this, a single truncated PDF in a
+        # store would abort an entire drift sweep instead of flagging just
+        # that one annotation.
         return ResolutionOutcome(status=Status.NOT_FOUND)
 
     with pdf:
