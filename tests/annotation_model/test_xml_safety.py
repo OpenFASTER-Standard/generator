@@ -46,3 +46,16 @@ def test_internal_entity_still_expands_and_changes_the_hash(tmp_path: Path):
     assert b"alpha" in bytes_a
     assert b"beta" in bytes_b
     assert bytes_a != bytes_b
+
+
+def test_get_safe_xml_parser_returns_a_fresh_instance_each_call():
+    # M8: a shared module-level XMLParser instance is not safe to use
+    # concurrently from multiple threads (lxml XMLParser objects carry
+    # state during a parse call) -- a factory returning a fresh instance
+    # each time is cheap (parser construction, not document parsing) and
+    # makes concurrent use safe by construction rather than by convention.
+    from annotation_model.xml_safety import get_safe_xml_parser
+
+    first = get_safe_xml_parser()
+    second = get_safe_xml_parser()
+    assert first is not second

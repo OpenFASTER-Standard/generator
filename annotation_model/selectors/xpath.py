@@ -6,14 +6,14 @@ import hashlib
 from lxml import etree
 
 from annotation_model.outcomes import ResolutionOutcome, Status
-from annotation_model.xml_safety import SAFE_XML_PARSER
+from annotation_model.xml_safety import get_safe_xml_parser
 
 _NSMAP = {"xs": "http://www.w3.org/2001/XMLSchema"}
 
 
 def resolve_xpath(retrieval_uri: str, xpath: str) -> ResolutionOutcome:
     try:
-        tree = etree.parse(retrieval_uri, parser=SAFE_XML_PARSER)
+        tree = etree.parse(retrieval_uri, parser=get_safe_xml_parser())
     except OSError:
         return ResolutionOutcome(status=Status.NOT_FOUND)
     except etree.XMLSyntaxError:

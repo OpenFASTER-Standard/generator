@@ -9,6 +9,14 @@ migrating from any prior code in this repo's own history. See
 
 ## Layout
 
+- `annotation_model/` -- the current core model: turns a citation of a
+  real source span into a W3C Web Annotation + PROV-O + SHACL property
+  shape, committed as Turtle to an explicitly-required git-backed target
+  store (never a default). Supersedes `reference_model`/
+  `references_catalog`/`staleness_sweep` below, which are listed here as
+  they exist today but are dead code pending a follow-up migration plan
+  -- do not extend them. See
+  `docs/specs/2026-09-30-core-semantic-annotation-model-design.md`.
 - `reference_model/` -- a format-agnostic `Reference` (citation) model:
   records exactly what real source span (an XSD element, a PDF page
   region) backs a fact, precise enough to re-locate later and soundly
