@@ -17,6 +17,7 @@ from references_catalog.catalog import (
     list_pages,
     load_catalog,
 )
+from tests.corpus_fixtures import requires_real_corpus
 
 REAL_XSD = "/work/ontologies/mikadiv-fm/sources/1.02/xsd/MiKaDiv_FM_Meldeart23_1.02.xsd"
 AORDNR_XPATH = (
@@ -39,6 +40,7 @@ def _empty_catalog(tmp_path) -> str:
     return str(catalog_path)
 
 
+@requires_real_corpus
 def test_add_revision_creates_a_page_with_one_revision(tmp_path):
     catalog_path = _empty_catalog(tmp_path)
     leaf = cite(_subject_document(), XPathSelector.create(AORDNR_XPATH))
@@ -54,6 +56,7 @@ def test_add_revision_creates_a_page_with_one_revision(tmp_path):
     assert history[0].is_correction is False
 
 
+@requires_real_corpus
 def test_add_revision_appends_a_second_revision_and_becomes_current(tmp_path):
     catalog_path = _empty_catalog(tmp_path)
     leaf_1 = cite(_subject_document(), XPathSelector.create(AORDNR_XPATH))
@@ -72,6 +75,7 @@ def test_add_revision_appends_a_second_revision_and_becomes_current(tmp_path):
     assert current.reference == to_json_dict(leaf_2)
 
 
+@requires_real_corpus
 def test_add_revision_preserves_other_pages(tmp_path):
     catalog_path = _empty_catalog(tmp_path)
     leaf_1 = cite(_subject_document(), XPathSelector.create(AORDNR_XPATH))
@@ -96,6 +100,7 @@ def test_get_history_returns_empty_list_for_untouched_fact_key(tmp_path):
     assert get_history(catalog_path, "never-touched") == []
 
 
+@requires_real_corpus
 def test_revision_ids_are_unique_across_calls(tmp_path):
     catalog_path = _empty_catalog(tmp_path)
     leaf = cite(_subject_document(), XPathSelector.create(AORDNR_XPATH))
@@ -106,6 +111,7 @@ def test_revision_ids_are_unique_across_calls(tmp_path):
     assert revision_1.revision_id != revision_2.revision_id
 
 
+@requires_real_corpus
 def test_add_revision_writes_pretty_printed_sorted_json_with_trailing_newline(tmp_path):
     catalog_path = Path(_empty_catalog(tmp_path))
     leaf_1 = cite(_subject_document(), XPathSelector.create(ABGEF_XPATH))
@@ -128,6 +134,7 @@ def test_add_revision_writes_pretty_printed_sorted_json_with_trailing_newline(tm
     assert raw == reformatted
 
 
+@requires_real_corpus
 def test_add_revision_raises_when_catalog_file_does_not_exist(tmp_path):
     leaf = cite(_subject_document(), XPathSelector.create(AORDNR_XPATH))
     missing_path = tmp_path / "does-not-exist.json"
@@ -138,6 +145,7 @@ def test_add_revision_raises_when_catalog_file_does_not_exist(tmp_path):
     assert not missing_path.exists()
 
 
+@requires_real_corpus
 def test_add_revision_on_malformed_catalog_raises_without_writing(tmp_path):
     catalog_path = tmp_path / "references.json"
     catalog_path.write_text("[]", encoding="utf-8")
@@ -149,6 +157,7 @@ def test_add_revision_on_malformed_catalog_raises_without_writing(tmp_path):
     assert catalog_path.read_text(encoding="utf-8") == "[]"
 
 
+@requires_real_corpus
 def test_add_revision_leaves_original_file_intact_if_write_is_interrupted(tmp_path, monkeypatch):
     catalog_path = _empty_catalog(tmp_path)
     leaf_1 = cite(_subject_document(), XPathSelector.create(AORDNR_XPATH))
@@ -169,6 +178,7 @@ def test_add_revision_leaves_original_file_intact_if_write_is_interrupted(tmp_pa
     assert list(Path(tmp_path).glob("*.tmp")) == []
 
 
+@requires_real_corpus
 def test_add_revision_leaves_no_leftover_temp_file(tmp_path):
     catalog_path = _empty_catalog(tmp_path)
     leaf = cite(_subject_document(), XPathSelector.create(AORDNR_XPATH))
@@ -195,6 +205,7 @@ def test_load_catalog_raises_catalog_load_error_on_non_object_json(tmp_path):
         load_catalog(str(catalog_path))
 
 
+@requires_real_corpus
 def test_list_pages_summarizes_every_page_with_correct_revision_count_and_current(tmp_path):
     catalog_path = _empty_catalog(tmp_path)
     leaf_1 = cite(_subject_document(), XPathSelector.create(AORDNR_XPATH))
@@ -216,6 +227,7 @@ def test_list_pages_on_empty_catalog_returns_empty_dict(tmp_path):
     assert list_pages(catalog_path) == {}
 
 
+@requires_real_corpus
 def test_add_revision_defaults_to_citation_kind(tmp_path):
     catalog_path = _empty_catalog(tmp_path)
     leaf = cite(_subject_document(), XPathSelector.create(AORDNR_XPATH))
@@ -225,6 +237,7 @@ def test_add_revision_defaults_to_citation_kind(tmp_path):
     assert revision.kind == RevisionKind.CITATION.value
 
 
+@requires_real_corpus
 def test_a_review_revision_never_becomes_the_page_current_or_list_pages_current(tmp_path):
     # The architectural bug found in the 2026-09-29 audit: submit_review()
     # appends a REVIEW-kind revision (an internal bookkeeping event, not a

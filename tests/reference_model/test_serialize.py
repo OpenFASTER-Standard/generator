@@ -4,6 +4,7 @@ from reference_model.cite import cite, cite_union
 from reference_model.model import SubjectDocument
 from reference_model.selectors.xpath_selector import XPathSelector
 from reference_model.serialize import to_json_dict
+from tests.corpus_fixtures import requires_real_corpus
 
 REAL_XSD = "/work/ontologies/mikadiv-fm/sources/1.02/xsd/MiKaDiv_FM_Meldeart23_1.02.xsd"
 AORDNR_XPATH = (
@@ -20,6 +21,7 @@ def _subject_document() -> SubjectDocument:
     return SubjectDocument(family="MiKaDiv_FM_Meldeart23", version="1.02", retrieval_uri=REAL_XSD)
 
 
+@requires_real_corpus
 def test_to_json_dict_serializes_a_real_leaf():
     leaf = cite(_subject_document(), XPathSelector.create(AORDNR_XPATH))
 
@@ -34,6 +36,7 @@ def test_to_json_dict_serializes_a_real_leaf():
     assert result["selector"]["value"] == AORDNR_XPATH
 
 
+@requires_real_corpus
 def test_to_json_dict_survives_a_real_json_round_trip():
     leaf = cite(_subject_document(), XPathSelector.create(AORDNR_XPATH))
 
@@ -43,6 +46,7 @@ def test_to_json_dict_survives_a_real_json_round_trip():
     assert round_tripped == result
 
 
+@requires_real_corpus
 def test_to_json_dict_serializes_a_union_recursively():
     leaf_1 = cite(_subject_document(), XPathSelector.create(AORDNR_XPATH))
     leaf_2 = cite(_subject_document(), XPathSelector.create(ABGEF_XPATH))
@@ -56,6 +60,7 @@ def test_to_json_dict_serializes_a_union_recursively():
     assert result["parts"][1] == to_json_dict(leaf_2)
 
 
+@requires_real_corpus
 def test_to_json_dict_union_survives_a_real_json_round_trip():
     # dataclasses.asdict() reconstructs a tuple field (Union.parts) as a
     # tuple, not a list -- json.loads(json.dumps(...)) always produces a

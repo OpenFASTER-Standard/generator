@@ -5,6 +5,7 @@ import pytest
 from reference_model.model import Status
 from reference_model.registry import get_resolver
 from reference_model.selectors.svg_selector import SvgSelector
+from tests.corpus_fixtures import requires_real_corpus
 
 REAL_PDF = "/work/ontologies/mikadiv-fm/sources/1.02/khb/khb_mikadiv_fm_de_v9.pdf"
 PAGE_12 = 12  # confirmed: real page with a text layer, out of 45 total pages
@@ -22,6 +23,7 @@ def _resolver():
     return get_resolver("SvgSelector")
 
 
+@requires_real_corpus
 def test_resolves_real_heading_and_hash_is_reproducible():
     selector = SvgSelector.create(PAGE_12, HEADING_POINTS)
     resolver = _resolver()
@@ -36,6 +38,7 @@ def test_resolves_real_heading_and_hash_is_reproducible():
     assert digest_1 == digest_2
 
 
+@requires_real_corpus
 def test_different_real_region_produces_different_hash():
     resolver = _resolver()
     heading_outcome = resolver.resolve(SvgSelector.create(PAGE_12, HEADING_POINTS), REAL_PDF)
@@ -47,6 +50,7 @@ def test_different_real_region_produces_different_hash():
     assert heading_digest != caption_digest
 
 
+@requires_real_corpus
 def test_german_umlauts_and_eszett_round_trip_through_the_hash():
     # "Dateigröße" -- real body text a few lines below the heading on this
     # same page -- contains both an umlaut (ö) and an eszett (ß).
@@ -59,12 +63,14 @@ def test_german_umlauts_and_eszett_round_trip_through_the_hash():
     assert len(digest) == 64  # did not raise a UnicodeEncodeError etc.
 
 
+@requires_real_corpus
 def test_blank_region_is_not_found():
     selector = SvgSelector.create(PAGE_12, BLANK_POINTS)
     outcome = _resolver().resolve(selector, REAL_PDF)
     assert outcome.status == Status.NOT_FOUND
 
 
+@requires_real_corpus
 def test_nonexistent_page_is_not_found():
     selector = SvgSelector.create(46, HEADING_POINTS)  # real PDF has only 45 pages
     outcome = _resolver().resolve(selector, REAL_PDF)
@@ -91,6 +97,7 @@ def test_missing_source_file_is_not_found():
     assert outcome.status == Status.NOT_FOUND
 
 
+@requires_real_corpus
 def test_image_region_on_a_page_with_text_elsewhere_is_uncitable():
     # Real page 1 has an image at x [16.2, 178.0], top [29.6, 127.6], and
     # 29 words of real text elsewhere on the same page -- so "the whole
@@ -101,12 +108,14 @@ def test_image_region_on_a_page_with_text_elsewhere_is_uncitable():
     assert outcome.status == Status.UNCITABLE
 
 
+@requires_real_corpus
 def test_malformed_points_raises_a_clear_error():
     selector = SvgSelector(type="SvgSelector", page=PAGE_12, value="<svg:polygon xmlns:svg='http://www.w3.org/2000/svg'/>")
     with pytest.raises(ValueError, match="points="):
         _resolver().resolve(selector, REAL_PDF)
 
 
+@requires_real_corpus
 def test_malformed_coordinate_raises_a_clear_error_naming_the_bad_pair():
     selector = SvgSelector(
         type="SvgSelector", page=PAGE_12,
@@ -116,12 +125,14 @@ def test_malformed_coordinate_raises_a_clear_error_naming_the_bad_pair():
         _resolver().resolve(selector, REAL_PDF)
 
 
+@requires_real_corpus
 def test_zero_area_polygon_raises_a_clear_error():
     selector = SvgSelector.create(PAGE_12, "0,0 0,0 0,0")
     with pytest.raises(ValueError, match="zero area"):
         _resolver().resolve(selector, REAL_PDF)
 
 
+@requires_real_corpus
 def test_malformed_selector_is_caught_before_the_page_bounds_check():
     # Document state (an out-of-range page) must never mask a broken
     # selector -- the selector itself is validated first.

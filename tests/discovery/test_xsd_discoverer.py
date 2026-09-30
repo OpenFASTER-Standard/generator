@@ -3,6 +3,7 @@ import glob
 from lxml import etree
 
 from discovery.xsd_discoverer import DiscoveryResult, discover_candidates
+from tests.corpus_fixtures import requires_real_corpus
 
 REAL_XSD_DIR = "/work/ontologies/mikadiv-fm/sources/1.02/xsd"
 REAL_MELDEART23_XSD = f"{REAL_XSD_DIR}/MiKaDiv_FM_Meldeart23_1.02.xsd"
@@ -18,6 +19,7 @@ ABGEF_XPATH = (
 )
 
 
+@requires_real_corpus
 def test_discovers_ground_truth_element_candidates():
     result = discover_candidates(REAL_MELDEART23_XSD)
     xpaths_by_name = {c.name: c.xpath for c in result.candidates}
@@ -25,6 +27,7 @@ def test_discovers_ground_truth_element_candidates():
     assert xpaths_by_name["AbgefKapitalertragsteuer"] == ABGEF_XPATH
 
 
+@requires_real_corpus
 def test_discovers_complextype_candidates_too():
     result = discover_candidates(REAL_MELDEART23_XSD)
     complex_type_names = {c.name for c in result.candidates if c.tag == "complexType"}
@@ -32,6 +35,7 @@ def test_discovers_complextype_candidates_too():
     assert "AmtlicheOrdnungsnummerMa23ListeType" in complex_type_names
 
 
+@requires_real_corpus
 def test_every_candidate_xpath_resolves_to_exactly_one_node():
     tree = etree.parse(REAL_MELDEART23_XSD)
     result = discover_candidates(REAL_MELDEART23_XSD)
@@ -40,12 +44,14 @@ def test_every_candidate_xpath_resolves_to_exactly_one_node():
         assert len(matches) == 1, candidate
 
 
+@requires_real_corpus
 def test_no_duplicate_xpaths_among_candidates():
     result = discover_candidates(REAL_MELDEART23_XSD)
     xpaths = [c.xpath for c in result.candidates]
     assert len(xpaths) == len(set(xpaths))
 
 
+@requires_real_corpus
 def test_candidates_and_excluded_account_for_every_named_node():
     tree = etree.parse(REAL_MELDEART23_XSD)
     # Independent count, written directly here -- not by importing any
@@ -65,6 +71,7 @@ def test_candidates_and_excluded_account_for_every_named_node():
     assert len(result.candidates) + len(result.excluded) == named_node_count
 
 
+@requires_real_corpus
 def test_discovers_candidates_across_the_full_real_corpus():
     xsd_files = sorted(glob.glob(f"{REAL_XSD_DIR}/*.xsd"))
     assert len(xsd_files) == 13
@@ -74,6 +81,7 @@ def test_discovers_candidates_across_the_full_real_corpus():
         assert len(result.candidates) >= 1, xsd_path
 
 
+@requires_real_corpus
 def test_deeply_nested_real_candidate_has_full_multilevel_xpath():
     result = discover_candidates(f"{REAL_XSD_DIR}/MiKaDiv_FM_Meldeart13_1.02.xsd")
     xpaths_by_name = {c.name: c.xpath for c in result.candidates}

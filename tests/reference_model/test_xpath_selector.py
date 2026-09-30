@@ -5,6 +5,7 @@ import pytest
 from reference_model.model import Status, SubjectDocument
 from reference_model.registry import get_resolver
 from reference_model.selectors.xpath_selector import XPathSelector
+from tests.corpus_fixtures import requires_real_corpus
 
 REAL_XSD = "/work/ontologies/mikadiv-fm/sources/1.02/xsd/MiKaDiv_FM_Meldeart23_1.02.xsd"
 AORDNR_XPATH = (
@@ -17,6 +18,7 @@ def _resolver():
     return get_resolver("XPathSelector")
 
 
+@requires_real_corpus
 def test_resolves_real_element_and_hash_is_reproducible():
     selector = XPathSelector.create(AORDNR_XPATH)
     resolver = _resolver()
@@ -32,6 +34,7 @@ def test_resolves_real_element_and_hash_is_reproducible():
     assert len(digest_1) == 64  # sha256 hex digest
 
 
+@requires_real_corpus
 def test_rename_makes_selector_not_found(tmp_path: Path):
     original = Path(REAL_XSD).read_text(encoding="utf-8")
     assert original.count('name="AOrdNr"') == 1  # confirmed unique in the real file
@@ -45,6 +48,7 @@ def test_rename_makes_selector_not_found(tmp_path: Path):
     assert outcome.status == Status.NOT_FOUND
 
 
+@requires_real_corpus
 def test_content_change_without_rename_changes_hash_but_still_resolves(tmp_path: Path):
     original = Path(REAL_XSD).read_text(encoding="utf-8")
     assert original.count('maxOccurs="3000"') == 1  # confirmed unique in the real file
@@ -66,12 +70,14 @@ def test_content_change_without_rename_changes_hash_but_still_resolves(tmp_path:
     assert mutated_digest != original_digest
 
 
+@requires_real_corpus
 def test_xpath_matching_nothing_is_not_found():
     selector = XPathSelector.create("/xs:schema/xs:complexType[@name='NoSuchType']")
     outcome = _resolver().resolve(selector, REAL_XSD)
     assert outcome.status == Status.NOT_FOUND
 
 
+@requires_real_corpus
 def test_xpath_matching_multiple_real_elements_is_ambiguous():
     # The real file has 3 xs:element nodes (AbgefKapitalertragsteuer,
     # AmtlicheOrdnungsnummerListe, AOrdNr).
@@ -80,6 +86,7 @@ def test_xpath_matching_multiple_real_elements_is_ambiguous():
     assert outcome.status == Status.AMBIGUOUS
 
 
+@requires_real_corpus
 def test_xpath_resolving_to_an_attribute_is_uncitable():
     selector = XPathSelector.create(AORDNR_XPATH + "/@name")
     outcome = _resolver().resolve(selector, REAL_XSD)
@@ -101,6 +108,7 @@ def test_malformed_xml_is_not_found(tmp_path: Path):
     assert outcome.status == Status.NOT_FOUND
 
 
+@requires_real_corpus
 def test_xpath_returning_a_string_is_uncitable_not_ambiguous():
     # tree.xpath() returns a str (not a node list) for string(...) --
     # len() on that string previously miscounted characters as matches.
@@ -109,6 +117,7 @@ def test_xpath_returning_a_string_is_uncitable_not_ambiguous():
     assert outcome.status == Status.UNCITABLE
 
 
+@requires_real_corpus
 def test_xpath_count_function_is_uncitable():
     selector = XPathSelector.create("count(//xs:element)")
     outcome = _resolver().resolve(selector, REAL_XSD)
