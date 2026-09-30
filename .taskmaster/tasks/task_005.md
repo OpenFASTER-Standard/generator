@@ -12,6 +12,25 @@
 
 **Details:**
 
+## Roadmap-reconciliation addendum (2026-09-30)
+
+Explicit ruling, made during a full-roadmap review against the project's
+original vision: this task stays `cancelled`, not resurrected, as of this
+addendum. Its own real trigger -- a `REJECTED` review verdict needing
+trackable "a correction is owed" state -- was tied entirely to the old
+stack's own `review_workflow`/`review_consultation` concept of a review
+verdict, which no longer exists anywhere in the current architecture (the
+current `annotation_model` has drift *detection*, not a review/verdict
+workflow at all). Resurrecting BPMN/state-machine process tracking before
+a real review-and-verdict workflow exists on the *current* stack would be
+premature -- there is nothing for it to hook into yet, the same premature-
+architecture trap this project has hit before. Revisit this specific
+question only once a maker-checker review workflow is rebuilt on the
+current stack (not scheduled as its own task yet) and it produces a real
+verdict state worth tracking.
+
+---
+
 ## Reversion note (2026-09-30)
 
 This task's real implementation (`process_workflow/`, wired into
