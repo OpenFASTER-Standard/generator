@@ -23,6 +23,13 @@ def institutional_ontology_path() -> Path:
 
 
 def load_institutional_ontology(path: Path | None = None) -> Graph:
+    # This path comes from an env var / an operator-controlled local
+    # checkout, so XXE isn't exploitable here today -- but note for
+    # later: rdflib's RDF/XML parser (rdflib/plugins/parsers/rdfxml.py)
+    # never sets feature_external_ges itself, so external-entity safety
+    # is inherited from CPython's ExpatParser default (off since 3.7.1),
+    # not asserted by rdflib. Don't assume rdflib is guarding this if
+    # this function's input source ever becomes less trusted.
     graph = Graph()
     graph.parse(path or institutional_ontology_path(), format="xml")
     return graph

@@ -1,9 +1,9 @@
 #curie_map:
 #  gen: https://openfaster.org/ns/generator#
-#  io: https://purl.openfaster.org/io/IO_
+#  IO: https://purl.openfaster.org/io/IO_
 #  skos: http://www.w3.org/2004/02/skos/core#
 #  semapv: https://w3id.org/semapv/vocab/
 #mapping_set_id: https://openfaster.org/alignments/mikadiv-fm-to-institutional-ontology
 #license: https://creativecommons.org/publicdomain/zero/1.0/
 subject_id	subject_label	predicate_id	object_id	object_label	mapping_justification	confidence	author_id
-gen:MiKaDiv-FM%20Personentypen/PersonentypenFields/Vorname	Vorname	skos:exactMatch	io:0000001	All given names	semapv:ManualMappingCuration	0.95	openfaster-generator-system
+gen:MiKaDiv-FM%20Personentypen/PersonentypenFields/Vorname	Vorname	skos:exactMatch	IO:0000001	All given names	semapv:ManualMappingCuration	0.95	openfaster-generator-system

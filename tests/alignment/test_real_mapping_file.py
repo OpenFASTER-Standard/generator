@@ -10,7 +10,10 @@ from annotation_model.selectors.xpath import canonicalize_and_hash_xml, resolve_
 from tests.alignment.fixtures import requires_real_institutional_ontology
 from tests.corpus_fixtures import REAL_CORPUS_ROOT, requires_real_corpus
 
-REAL_MAPPING_FILE = Path("alignments/mikadiv-fm-to-institutional-ontology.sssom.tsv")
+# Derived from this test file's own location, not cwd -- a cwd-relative
+# path broke when pytest was invoked from a directory other than the
+# repo root (Important #7).
+REAL_MAPPING_FILE = Path(__file__).resolve().parents[2] / "alignments" / "mikadiv-fm-to-institutional-ontology.sssom.tsv"
 REAL_XSD = f"{REAL_CORPUS_ROOT}/1.02/xsd/MiKaDiv_FM_Personentypen_1.02.xsd"
 VORNAME_XPATH = (
     "/xs:schema/xs:complexType[@name='PersonNatDatenType']"

@@ -66,5 +66,12 @@ migrating from any prior code in this repo's own history. See
   `docs/specs/2026-09-25-catalog-revision-history-design.md`,
   `docs/specs/2026-09-25-citation-workflow-design.md`, and
   `docs/specs/2026-09-29-webapp-react-rebuild-design.md`.
+- `alignment/` -- connects a real `annotation_model` property shape to a
+  real concept in the separately-governed `institutional-ontology` repo
+  via a hand-rolled SSSOM (Simple Standard for Sharing Ontology
+  Mappings) reader/validator, so one stored fact can back multiple
+  outputs instead of being duplicated per standard. Real mapping data
+  lives in `alignments/`. See
+  `docs/specs/2026-09-30-alignment-layer-design.md`.
 
 Licensed MIT.

@@ -34,3 +34,22 @@ def test_loads_real_ontology_with_the_real_given_name_concept():
     assert (IO_0000001, RDF.type, OWL.Class) in graph
     labels = list(graph.objects(IO_0000001, RDFS.label))
     assert labels == [Literal("All given names", lang="en")]
+
+
+def test_requires_real_institutional_ontology_skips_a_zero_byte_file(monkeypatch, tmp_path):
+    # Minor #15: is_file() is True for a 0-byte file (e.g. an
+    # interrupted checkout), so the skip marker previously let this
+    # through to a raw SAXParseException instead of a clean skip.
+    empty = tmp_path / "empty.owl"
+    empty.touch()
+    monkeypatch.setenv("INSTITUTIONAL_ONTOLOGY_PATH", str(empty))
+
+    import importlib
+
+    import tests.alignment.fixtures as fixtures_module
+    importlib.reload(fixtures_module)
+    try:
+        assert fixtures_module.requires_real_institutional_ontology.args[0] is True
+    finally:
+        monkeypatch.delenv("INSTITUTIONAL_ONTOLOGY_PATH", raising=False)
+        importlib.reload(fixtures_module)

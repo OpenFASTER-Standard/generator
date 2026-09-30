@@ -3,12 +3,15 @@ from pathlib import Path
 from openpyxl import Workbook
 from rdflib import Graph
 
-from alignment.sssom import load_sssom_mappings, mappings_to_graph
+from alignment.institutional_ontology import load_institutional_ontology
+from alignment.sssom import mappings_to_graph
+from alignment.validate import load_and_validate_mappings
 from annotation_model.rdf import annotate_xpath
 from annotation_model.selectors.xpath import canonicalize_and_hash_xml, resolve_xpath
 from annotation_model.transform.apply import apply_transformation
 from annotation_model.transform.jinja import jinja_text_renderer
 from annotation_model.transform.registry import Transformation, register, unregister
+from tests.alignment.fixtures import requires_real_institutional_ontology
 from tests.corpus_fixtures import REAL_CORPUS_ROOT, requires_real_corpus
 
 REAL_XSD = f"{REAL_CORPUS_ROOT}/1.02/xsd/MiKaDiv_FM_Personentypen_1.02.xsd"
@@ -16,7 +19,10 @@ VORNAME_XPATH = (
     "/xs:schema/xs:complexType[@name='PersonNatDatenType']"
     "/xs:complexContent/xs:extension/xs:attribute[@name='Vorname']"
 )
-REAL_MAPPING_FILE = Path("alignments/mikadiv-fm-to-institutional-ontology.sssom.tsv")
+# Derived from this test file's own location, not cwd -- a cwd-relative
+# path broke when pytest was invoked from a directory other than the
+# repo root (Important #7).
+REAL_MAPPING_FILE = Path(__file__).resolve().parents[2] / "alignments" / "mikadiv-fm-to-institutional-ontology.sssom.tsv"
 
 ALIGNED_QUERY = """
 PREFIX sh: <http://www.w3.org/ns/shacl#>
@@ -40,6 +46,7 @@ def _workbook_renderer(rows: list[dict]) -> Workbook:
 
 
 @requires_real_corpus
+@requires_real_institutional_ontology
 def test_two_different_renderers_resolve_the_same_fact_through_the_alignment():
     outcome = resolve_xpath(REAL_XSD, VORNAME_XPATH)
     content_hash = "sha256:" + canonicalize_and_hash_xml(outcome.raw_content)
@@ -50,7 +57,12 @@ def test_two_different_renderers_resolve_the_same_fact_through_the_alignment():
         content_hash=content_hash,
     )
 
-    alignment_graph = mappings_to_graph(load_sssom_mappings(REAL_MAPPING_FILE))
+    # load -> validate -> graph, matching the real designed pipeline
+    # (Important #6) rather than skipping validation entirely.
+    mappings = load_and_validate_mappings(
+        REAL_MAPPING_FILE, generator_graph=data_graph, institutional_graph=load_institutional_ontology(),
+    )
+    alignment_graph = mappings_to_graph(mappings)
     combined_graph = data_graph + alignment_graph
 
     try:
