@@ -17,6 +17,11 @@ migrating from any prior code in this repo's own history. See
   they exist today but are dead code pending a follow-up migration plan
   -- do not extend them. See
   `docs/specs/2026-09-30-core-semantic-annotation-model-design.md`.
+  `annotation_model/transform/` turns a registered `(SPARQL query,
+  renderer, min_rows)` transformation into rendered output (Jinja2 text
+  or an `openpyxl` workbook) by querying a graph built from the shapes
+  above. See
+  `docs/specs/2026-09-30-declarative-transformation-design.md`.
 - `reference_model/` -- a format-agnostic `Reference` (citation) model:
   records exactly what real source span (an XSD element, a PDF page
   region) backs a fact, precise enough to re-locate later and soundly

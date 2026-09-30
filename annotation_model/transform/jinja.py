@@ -32,6 +32,11 @@ _ENV = SandboxedEnvironment(undefined=StrictUndefined)
 
 
 def jinja_text_renderer(template_source: str) -> Callable[[list[dict]], str]:
+    # Compiles eagerly, at call time -- a malformed template raises
+    # jinja2.TemplateSyntaxError here, immediately, rather than the first
+    # time the returned renderer actually runs. Deliberate: failing at
+    # the module that defines the transformation is more useful than
+    # failing deep inside a later apply_transformation() call.
     template = _ENV.from_string(template_source)
 
     def render(rows: list[dict[str, Any]]) -> str:
