@@ -152,11 +152,17 @@ applied to a second sibling repo:
 ### `alignments/mikadiv-fm-to-institutional-ontology.sssom.tsv` (new, real, committed data)
 
 One real mapping, hand-curated the same way `institutional-ontology`'s
-own editor notes are: `MiKaDiv_FM/Personentypen/Vorname` (this task's
-`subject_id`, resolved via `annotation_model`'s existing deterministic
-IRI scheme —
-`https://openfaster.org/ns/generator#MiKaDiv_FM/Personentypen/Vorname`)
-`skos:exactMatch` `IO:0000001` (`https://purl.openfaster.org/io/IO_0000001`),
+own editor notes are: the real MiKaDiv-FM Personentypen `Vorname`
+attribute, cited exactly the way
+`tests/annotation_model/transform/conftest.py`'s existing
+`two_field_graph` fixture already cites its own fields (`standard`=the
+family name, `shape_name`="{Family}Fields", `property_name`=the field
+name) — `standard="MiKaDiv-FM Personentypen"`,
+`shape_name="PersonentypenFields"`, `property_name="Vorname"`. This
+task's `subject_id`, resolved via `annotation_model`'s existing
+deterministic IRI scheme and verified live —
+`https://openfaster.org/ns/generator#MiKaDiv-FM%20Personentypen/PersonentypenFields/Vorname`
+— `skos:exactMatch` `IO:0000001` (`https://purl.openfaster.org/io/IO_0000001`),
 justified `semapv:ManualMappingCuration`, confidence `0.95` (matching
 the confidence `institutional-ontology`'s own editor note already
 assigns the equivalent MiKaDiv-VIB/KaFE mappings, for the same
@@ -166,8 +172,11 @@ real-world-scope reasoning).
 
 1. A real property shape is cited in `generator`'s own graph via task
    1's existing `annotate_xpath()` against the real
-   `MiKaDiv_FM_Personentypen_1.02.xsd` (exactly as this project's other
-   tests already do — no new citation capability needed).
+   `MiKaDiv_FM_Personentypen_1.02.xsd` (`standard="MiKaDiv-FM
+   Personentypen"`, `shape_name="PersonentypenFields"`,
+   `property_name="Vorname"`, matching
+   `tests/annotation_model/transform/conftest.py`'s own established
+   citation pattern exactly — no new citation capability needed).
 2. `load_sssom_mappings()` reads the real, committed TSV.
 3. `validate_mappings()` confirms both sides of the one real mapping
    resolve against the real generator graph and the real, separately
@@ -182,8 +191,8 @@ real-world-scope reasoning).
    call-scoped — nothing is ever a standing pre-registered instance).
    Each runs its own SPARQL query, unmodified from task 2's engine,
    against `data_graph + alignment_graph`, traversing through
-   `IO:0000001` rather than `GEN:MiKaDiv_FM/Personentypen/Vorname`
-   directly, and each correctly produces the real cited given-name
+   `IO:0000001` rather than the generator-specific `Vorname` property
+   shape directly, and each correctly produces the real cited given-name
    value in its own output shape — proving "many outputs" with the real
    constraint that only one standard is annotated so far.
 
@@ -209,7 +218,7 @@ real-world-scope reasoning).
 ## Testing Strategy
 
 - **Real shapes, not synthetic ones**: the validation and integration
-  tests cite `MiKaDiv_FM/Personentypen/Vorname` via the real
+  tests cite the real Personentypen `Vorname` attribute via the real
   `annotate_xpath()` against the real XSD, matching this project's
   established discipline (task 1/3's own test suites).
 - **Real target ontology, not a mocked graph**: tests load the real,
