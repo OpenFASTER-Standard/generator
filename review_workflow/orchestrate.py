@@ -8,6 +8,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from process_workflow.orchestration import start_pending_correction
+from process_workflow.store import CorrectionIdentity
 from reference_model.deserialize import ReferenceDeserializationError, from_json_dict
 from references_catalog.catalog import Revision, RevisionKind, add_revision, list_pages
 from review_consultation.consult import apply_reviews, load_reviews
@@ -54,8 +56,18 @@ def submit_review(
     reasoning: str,
 ) -> Revision:
     leaf = record_review(reviews_dir, fact_key, flagged, reviewer, verdict, reasoning)
-    return add_revision(
+    revision = add_revision(
         catalog_path, fact_key, leaf, reviewer,
         f"Review ({verdict.value}): {reasoning}", is_correction=False,
         kind=RevisionKind.REVIEW,
     )
+
+    identity = CorrectionIdentity(
+        fact_key=fact_key,
+        leaf_reference_id=flagged.leaf.reference_id,
+        drift_kind=flagged.drift_kind.value,
+        fingerprint=flagged.fingerprint,
+    )
+    start_pending_correction(identity, verdict=verdict.value)
+
+    return revision

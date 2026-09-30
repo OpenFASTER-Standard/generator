@@ -107,3 +107,49 @@ def test_submitting_a_review_does_not_stop_the_fact_key_from_being_swept_again(t
     # not via exclusion from the sweep entirely -- the distinction Finding 1
     # is about.
     assert "some-key" not in result.summary.flagged
+
+
+def test_submit_review_starts_a_pending_correction_on_rejected(tmp_path, monkeypatch):
+    monkeypatch.setenv("MIKADIV_PROCESS_INSTANCES_DIR", str(tmp_path / "instances"))
+    catalog_path = tmp_path / "references.json"
+    catalog_path.write_text("{}")
+    leaf = _real_leaf("MiKaDiv_FM_Meldeart23", "/xs:schema/xs:complexType[@name='Meldeart23']")
+    add_revision(str(catalog_path), "rejected-key", leaf, "author", "comment", False)
+
+    flagged = FlaggedLeaf(
+        leaf=leaf, outcome=ResolutionOutcome(status=Status.RESOLVED),
+        drift_kind=DriftKind.CONTENT, fingerprint="fp-rejected",
+    )
+
+    submit_review(
+        str(catalog_path), str(tmp_path / "reviews"), "rejected-key", flagged,
+        "reviewer-1", Verdict.REJECTED, "not fixed yet",
+    )
+
+    from process_workflow.store import CorrectionIdentity, load_instance
+    identity = CorrectionIdentity(
+        fact_key="rejected-key", leaf_reference_id=leaf.reference_id,
+        drift_kind="CONTENT", fingerprint="fp-rejected",
+    )
+    assert load_instance(identity) is not None
+
+
+def test_submit_review_does_not_persist_a_process_instance_on_approved(tmp_path, monkeypatch):
+    instances_dir = tmp_path / "instances"
+    monkeypatch.setenv("MIKADIV_PROCESS_INSTANCES_DIR", str(instances_dir))
+    catalog_path = tmp_path / "references.json"
+    catalog_path.write_text("{}")
+    leaf = _real_leaf("MiKaDiv_FM_Meldeart23", "/xs:schema/xs:complexType[@name='Meldeart23']")
+    add_revision(str(catalog_path), "approved-key", leaf, "author", "comment", False)
+
+    flagged = FlaggedLeaf(
+        leaf=leaf, outcome=ResolutionOutcome(status=Status.RESOLVED),
+        drift_kind=DriftKind.CONTENT, fingerprint="fp-approved",
+    )
+
+    submit_review(
+        str(catalog_path), str(tmp_path / "reviews"), "approved-key", flagged,
+        "reviewer-1", Verdict.APPROVED, "looks fine",
+    )
+
+    assert not instances_dir.exists()
