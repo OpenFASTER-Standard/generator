@@ -309,18 +309,18 @@
       },
       {
         "id": "13",
-        "title": "Write client and annotation-editing UI",
-        "description": "Spend the GitHub token task 6's admin-login primitive hands out: a client that actually commits an edit via GitHub's Content API, wired to task 3's shape-driven form generation -- the piece that turns \"an admin can log in\" into \"an admin can actually edit an annotation,\" the literal Wikipedia-editing half of the collaborative platform.",
-        "details": "## Why this is the most urgent remaining piece\n\nTask 6 (done) proved an admin can authenticate to a workspace with zero\nserver and zero database -- but explicitly, by its own stated Non-Goals,\nspends no part of the resulting token: \"This task proves an admin can\nobtain a valid, scoped GitHub token client-side. It does not spend that\ntoken on any GitHub API call.\" Nothing built so far lets anyone actually\nwrite an annotation through the collaborative platform this whole\nproject is building toward -- \"I want it to become very similar to how\nWikipedia works,\" and Wikipedia's entire value is that people can edit\nit. Until this exists, every other piece (login, shape-driven forms,\nvisibility scopes) is real but inert.\n\n## Real building blocks already proven\n\n- Task 6's login primitive hands out a real, scoped GitHub token in\n  browser memory on successful authentication.\n- GitHub's Content API genuinely supports CORS for direct browser calls\n  (`PUT /repos/{owner}/{repo}/contents/{path}`, verified live during task\n  6's own research) -- no backend proxy needed.\n- Task 3's shape-driven UI generation already renders a form from a real\n  SHACL property shape; this task's job is wiring that form's submission\n  to a real commit via the Content API, using the token task 6 already\n  provides.\n\n## Scope\n\nBrainstorm from scratch: how a rendered task-3 form's submitted values\nbecome a real Turtle/RDF update to the target workspace's own git\nrepository via the Content API, using the exact token-handoff task 6\nalready built and tested. Real end-to-end proof: an admin logs in via the\nlive `workspace-auth` page, edits a real annotation through a real\nshape-driven form, and the resulting commit is verifiable in the target\nrepository's own git history -- the literal \"someone edited a Wikipedia\npage\" moment for this platform.",
+        "title": "Resolve and display the real cited value in ShapeField",
+        "description": "Fix ShapeField/ShapeTable (task 3) to resolve and display the actual cited content (e.g. the real German field description) by re-evaluating the citation's selector against its live source, instead of showing a raw gen:contentHash -- the read-only display gap task 3's own spec explicitly deferred, and the real prerequisite for any editing UI.",
+        "details": "## Why this exists as its own task, and why it's narrower than originally scoped\n\nInvestigating this task's original framing (\"write client and annotation-editing UI\")\nsurfaced two things that change its real scope:\n\n1. **`ShapeField`/`ShapeTable` (task 3, `/work/ui`) are read-only today by\n   explicit, documented design** -- that spec's own Non-Goals: \"Data-entry\n   (write-back) forms -- today's shapes are read-only citation records...\n   The Wikipedia-like collaborative annotation platform's own UI (roadmap\n   task 6) -- a separate, later concern.\" This is a deliberate, correctly\n   sequenced deferral, not a bug -- and this task is exactly the one meant\n   to close it.\n2. **But even *reading* is currently broken for a real end user**:\n   `ShapeField` shows `gen:contentHash` (a hex digest used only for drift\n   detection, per `annotation_model/drift.py`) as if it were the field's\n   real value -- verified live in `packages/shapes/src/ShapeField.tsx`\n   and its own test file, which asserts `toHaveValue(\"sha256:abc123\")`.\n   A non-technical bank employee -- the project's own explicitly named\n   real end user -- would see a hex hash, not \"Meldung nach \u00a7 45c Absatz\n   2 Satz 3 EStG.\" This is the actual, more urgent, more foundational gap:\n   editing a value nobody can even read yet is premature.\n\nAlso discovered live: **`annotation_model` never stores a decoded literal\nvalue at all** -- only a citation (source URI + XPath/SVG selector +\ncontent hash), per `annotation_model/rdf.py`'s `_annotate()`. The real\nvalue only ever exists by re-resolving the selector against the live\nsource document. This means \"editing an annotation\" in this architecture\ndoes not mean filling in a text box -- it means re-citing a different\nsource span. That's real, larger, separate work (see task 15).\n\n## Real, live-verified feasibility for this task's actual scope\n\nBrowser-native `document.evaluate()` (DOM Level 3 XPath, no library\nneeded) was verified live against a real corpus XSD\n(`MiKaDiv_FM_Meldeart23_1.02.xsd`) with the exact namespace mapping\nPython's `lxml`-based `resolve_xpath` uses, and produced a byte-identical\nresult including a non-ASCII character (\u00a7): `\"Meldung nach \u00a7 45c Absatz 2\nSatz 3 EStG.\"` -- confirmed equivalent to Python's own resolver, not\nassumed.\n\n## Scope\n\nXPath-sourced citations only (the MiKaDiv-FM/XSD case, today's only real\ndata) -- resolve client-side via `fetch()` + `DOMParser` +\n`document.evaluate()`, matching Python's `_NSMAP` (`xs` ->\n`http://www.w3.org/2001/XMLSchema`). SVG/PDF-sourced citation resolution\n(needs a PDF-rendering capability client-side) is real future work, not\nthis task -- see Non-Goals.\n\n## Non-Goals\n\n- SVG/PDF-sourced citation value resolution (a materially different,\n  harder client-side problem -- needs PDF rendering, not just XML\n  parsing).\n- Any editing/re-citation capability (task 15).\n- Any write client / GitHub commit (task 16).\n- Any real consuming application (task 17) -- this task's own\n  deliverable is testable entirely within `/work/ui`'s existing\n  Storybook/Vitest setup, against a mocked `fetch`.",
         "testStrategy": "Defined during this task's own brainstorm/spec, per this project's established per-task cycle -- not prescribed here.",
         "status": "pending",
         "dependencies": [
-          "3",
-          "6"
+          "1",
+          "3"
         ],
         "priority": "medium",
         "subtasks": [],
-        "updatedAt": "2026-09-30T19:15:00.000Z"
+        "updatedAt": "2026-09-30T19:30:00.000Z"
       },
       {
         "id": "14",
@@ -336,12 +336,72 @@
         "priority": "low",
         "subtasks": [],
         "updatedAt": "2026-09-30T19:15:00.000Z"
+      },
+      {
+        "id": "15",
+        "title": "Re-citation editing UI",
+        "description": "Once ShapeField resolves and displays the real cited value (task 13), let an admin pick a different source span to correct a citation -- the real meaning of \"editing an annotation\" in a system that stores citations, not literal values -- producing a structured pending-edit object, with no write mechanism of its own yet.",
+        "details": "## Why this exists as its own task\n\nDiscovered during task 13's own investigation: `annotation_model` stores\nonly citations (source + selector), never a decoded literal value (see\ntask 13's own details for the live-verified evidence). \"Editing\" here\ntherefore means re-pointing a property shape's citation at a different\nsource span -- e.g. correcting `/xs:schema/.../xs:documentation` to a\ndifferent, actually-correct element -- not editing free text.\n\n## Real building block\n\nTask 3's own click-dummy exploration (predating the current stack, but\nthe underlying interaction idea survives): \"sources on the left, output\non the right... click the source to see what it produced\" -- the natural\nUI for re-citation is showing the live source document alongside the\ncurrent citation and letting an admin click a different span.\n\n## Scope\n\nPure UI-library work (`/work/ui`), zero git/GitHub dependency -- produces\na structured \"pending edit\" (property shape IRI + new selector) via a\ncallback prop, exactly mirroring how a controlled React form emits\n`onChange`/`onSubmit` without owning persistence itself. What consumes\nthat pending edit is task 16 (the write client) and task 17 (the real\napp), not this task.",
+        "testStrategy": "Defined during this task's own brainstorm/spec, per this project's established per-task cycle -- not prescribed here.",
+        "status": "pending",
+        "dependencies": [
+          "13"
+        ],
+        "priority": "medium",
+        "subtasks": [],
+        "updatedAt": "2026-09-30T19:30:00.000Z"
+      },
+      {
+        "id": "16",
+        "title": "Write client: commit a re-citation via GitHub's Content API",
+        "description": "A framework-agnostic module that takes a pending edit (task 15's output shape) and a scoped GitHub token (task 6's login primitive) and commits the resulting Turtle change via GitHub's real Content API -- the mechanism that finally spends the token task 6 has produced since it shipped.",
+        "details": "## Why this exists as its own task\n\nTask 6's own stated Non-Goal, verbatim: \"This task proves an admin can\nobtain a valid, scoped GitHub token client-side. It does not spend that\ntoken on any GitHub API call.\" Nothing in the roadmap has closed this\nuntil now.\n\n## Real, already-verified building blocks\n\n- GitHub's Content API supports CORS for direct browser calls\n  (`PUT /repos/{owner}/{repo}/contents/{path}`, base64-encoded content,\n  verified live during task 6's own research) -- no backend proxy needed.\n- `annotation_model.rdf`'s real `annotate_xpath`/`annotate_svg` functions\n  (task 1) define the exact Turtle shape a re-citation must produce --\n  this task's job is producing an equivalent update client-side (in\n  TypeScript, since there is no server to run Python), not inventing a\n  new format.\n- Task 6's login page already holds a real, live, scoped\n  (`contents:write`, single-repo) token in `window._workspaceAuthToken`.\n\n## Scope\n\nPure mechanism, no UI of its own -- consumes task 15's pending-edit shape\nand task 6's token, produces a real commit. Needs the existing blob's SHA\nfor an update (GitHub Content API requirement) and the upsert semantics\ntask 1's own `clear_property_shape`/`write_shape` already established\n(clear the old property shape's triples before adding the new ones) --\nreimplemented here in TypeScript against the same Turtle target, not\nassumed identical without verification.",
+        "testStrategy": "Defined during this task's own brainstorm/spec, per this project's established per-task cycle -- not prescribed here.",
+        "status": "pending",
+        "dependencies": [
+          "15",
+          "6"
+        ],
+        "priority": "medium",
+        "subtasks": [],
+        "updatedAt": "2026-09-30T19:30:00.000Z"
+      },
+      {
+        "id": "17",
+        "title": "First real workspace viewer/editor application",
+        "description": "The actual integration: log in via workspace-auth (task 6), fetch a real workspace's annotation Turtle, render it with the real resolved values (task 13), edit via re-citation (task 15), and commit via the write client (task 16) -- the first moment anyone can open a page and actually use this platform, not just read about its pieces.",
+        "details": "## Why this exists as its own task\n\nEvery piece built so far is a library or a single-purpose page: `generator`\n(Python library), `@openfaster-standard/ui` (component library),\n`workspace-auth` (login only). Nothing wires them together into something\na person opens and uses. This is that integration -- the literal \"someone\nedited a Wikipedia page\" moment for this platform, and the honest measure\nof whether \"is it live and presentable\" can ever be answered yes for the\nreal thing, not a login-only proof of concept.\n\n## Scope\n\nDepends on every piece below being real and complete: task 6 (login/\ntoken), task 13 (real value display), task 15 (re-citation UI), task 16\n(write client). Where this actually lives (a new page inside\n`workspace-auth`, or its own new small app) is this task's own brainstorm\ndecision, grounded in whatever the real shape of tasks 13/15/16 turns out\nto be by the time this task starts -- not decided here in advance of that\nreal information existing.",
+        "testStrategy": "Defined during this task's own brainstorm/spec, per this project's established per-task cycle -- not prescribed here.",
+        "status": "pending",
+        "dependencies": [
+          "6",
+          "13",
+          "15",
+          "16"
+        ],
+        "priority": "medium",
+        "subtasks": [],
+        "updatedAt": "2026-09-30T19:30:00.000Z"
+      },
+      {
+        "id": "18",
+        "title": "Self-asserted corrections as a first-class source kind",
+        "description": "Introduce the third source kind named in this project's original vision -- a correction not grounded in any existing official document (e.g. fixing a typo, adding a missing English translation) -- treated identically to an XSD or PDF citation, per the project's own standing rule that structure and content, and every source kind, get the same real treatment.",
+        "details": "## Why this exists as its own task, sequenced after re-citation editing\n\nStated explicitly, early in this project's history: \"I want full\nprovenance for every piece of data... we'll have at least three sources\nfurther down the line: the XSDs, the PDFs and then also my own\ncorrections, e.g. correcting typos in descriptions, adding missing\nenglish versions etc.\" And later, sharpened further: \"all the 'review\nresults' should just become yet another source, which is then treated\nidentically (using References) like any other source\" -- correction\nprovenance is not a special case bolted onto the citation model, it's a\nthird real source kind alongside XSD/XPath and PDF/SVG.\n\nThis is real, named, and not yet designed at all -- deliberately\nsequenced after task 15 (re-citation editing) proves out the *simpler*\ncase (re-pointing to a different span of an *existing* document) before\ntackling the harder one (a value with no source document to point to at\nall).\n\n## Scope\n\nA new selector/source kind in `annotation_model` (task 1's own package) --\nwhat a \"correction\" cites when there is nothing to cite, and how it\nremains provably attributable (who asserted it, when) with the same rigor\n`annotate_xpath`/`annotate_svg` already give real document citations.\nReal design question, not yet explored -- this task's own brainstorm\nstarts from a genuinely open question, not a pre-decided mechanism.",
+        "testStrategy": "Defined during this task's own brainstorm/spec, per this project's established per-task cycle -- not prescribed here.",
+        "status": "pending",
+        "dependencies": [
+          "13"
+        ],
+        "priority": "low",
+        "subtasks": [],
+        "updatedAt": "2026-09-30T19:30:00.000Z"
       }
     ],
     "metadata": {
       "version": "1.0.0",
-      "lastModified": "2026-09-30T19:15:00.000Z",
-      "taskCount": 14,
+      "lastModified": "2026-09-30T19:30:00.000Z",
+      "taskCount": 18,
       "completedCount": 5,
       "tags": [
         "master"
