@@ -1,0 +1,28 @@
+name: Validate task-master status tree
+
+# Deliberately no `paths:` filter, even though this check only cares about
+# .taskmaster/tasks/tasks.json: this workflow provides main's one *required*
+# status check ("validate"). A path-filtered required check never runs (and
+# never reports) for a PR that doesn't touch those paths, which leaves
+# GitHub's merge gate stuck at "Expected — waiting for status" forever
+# instead of passing. The script itself is a few seconds with no
+# dependencies, so running it unconditionally costs nothing.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history, not the default shallow clone: the evidence-ancestry
+          # check below needs `git merge-base --is-ancestor` against real history.
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: scripts/validate-tasks
