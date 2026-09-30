@@ -16,6 +16,10 @@ class Transformation:
     renderer: Callable[[list[dict]], Any]
     min_rows: int = 1
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.min_rows, int) or isinstance(self.min_rows, bool) or self.min_rows < 0:
+            raise ValueError(f"min_rows must be a non-negative int, got {self.min_rows!r}")
+
 
 _REGISTRY: dict[str, Transformation] = {}
 
@@ -27,6 +31,10 @@ def register(transformation: Transformation, *, replace: bool = False) -> None:
             "pass replace=True to intentionally override it"
         )
     _REGISTRY[transformation.name] = transformation
+
+
+def unregister(name: str) -> None:
+    _REGISTRY.pop(name, None)
 
 
 def get(name: str) -> Transformation:
