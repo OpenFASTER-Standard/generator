@@ -2,7 +2,7 @@
 
 **Title:** Design and implement collaborative annotation platform with public/private visibility scopes
 
-**Status:** pending
+**Status:** done
 
 **Dependencies:** 1 ✓, 2 ✓, 3 ✓
 
@@ -12,6 +12,118 @@
 
 **Details:**
 
+## Reconciliation note (2026-09-30)
+
+This task's `description`/`details`/`testStrategy` originally came from
+task-master's own AI auto-elaboration at task-creation time, before the
+real design spec existed -- the same situation tasks 3, 4, and 5 were in
+before their own reconciliation (see those tasks' own Reconciliation
+notes). The auto-elaboration proposed a full multi-tenant SaaS platform
+(a SQLite `workspaces`/`workspace_members` schema, session-cookie auth, a
+FastAPI backend with a dozen new routes, a React frontend with five new
+views) built almost entirely on top of the old citation/webapp stack this
+same effort had *just* removed outright in this same session
+(`45ca560`). None of that was built, and per this project's own
+final-review process this would give a future reader a materially false
+picture of what exists. The section below replaces it with what the
+approved spec
+(`docs/specs/2026-09-30-workspace-admin-authentication-design.md`)
+actually scoped and what was actually shipped.
+
+## The real scoping decision: narrow to the hard, novel piece
+
+Brainstorming this task from scratch (per this project's own standing
+rule -- no existing codebase, only real sources and real prior art)
+surfaced that the current system has no server, no database, and no
+users anywhere: `annotation_model`/`alignment` (tasks 1-4, the only
+stacks left after the old-stack removal) are libraries. Reintroducing a
+FastAPI server + SQLite database, as the auto-elaboration proposed, would
+have reintroduced exactly the server this project had just removed, to
+solve a problem GitHub's own repo-visibility model already solves for
+free. This task was narrowed to its genuinely hard, genuinely novel
+piece -- proving an admin can authenticate to a workspace with **zero
+server and zero database** -- and everything downstream (a client that
+actually spends the resulting token to write an annotation, and the
+annotation-editing UI itself) was deliberately deferred to its own future
+roadmap tasks, not built here.
+
+## What this task actually built
+
+Two repositories, one new package, one new sibling repo.
+
+### `generator/workspace_auth/roster.py`
+
+`create_roster()`/`read_roster()` -- encrypts/decrypts a small JSON
+payload (`{"workspace_repo": ..., "github_token": ...}`) via `pyrage`'s
+real passphrase-based (`scrypt`) `age` encryption, live-verified this
+session to be genuinely cross-implementation-compatible with the real
+`age-encryption` npm package (`FiloSottile/typage`) in both Node and a
+real headless Chromium browser -- not assumed from documentation.
+`RosterAuthenticationError`/`RosterFormatError` distinguish a wrong
+passphrase/corrupted file from a successfully-decrypted-but-wrong-shape
+payload, the latter added during final review after a fresh reviewer
+found a roster missing `github_token` would otherwise pass through
+silently as if it were valid.
+
+### `OpenFASTER-Standard/workspace-auth` (new repo)
+
+A static, serverless login page (`index.html`/`login.js`, bundled
+`age.js` from the real `age-encryption` npm package via `esbuild`),
+deployed to GitHub Pages at
+`https://openfaster-standard.github.io/workspace-auth/`. An admin opens
+it with `?workspace=<id>`, types a shared passphrase, and the page
+decrypts that workspace's own committed, always-public `rosters/<id>.age`
+file entirely client-side -- a genuine chicken-and-egg problem (a
+*private* workspace's own repo can't host the very roster file needed to
+obtain a token to read it) was found and designed around during
+brainstorming by keeping every roster in this one separate, always-public
+repo, regardless of the workspace's own visibility.
+
+Commits (this sibling repo, not `generator`, so not in this task's own
+`evidence.commits` -- `generator`'s own `scripts/validate-tasks` can only
+verify ancestry within this repository):
+`522ad92` (login page), `12c90e3` (Playwright test suite), `f66f964`
+(final-review fix pass).
+
+### The end-to-end proof
+
+A live spike, run before any code was written, proved the core
+cross-implementation claim for real: a file encrypted with `pyrage`
+(Python) decrypts correctly with `age-encryption` (JS) both in Node and
+inside a real headless Chromium browser. That proof became a permanent
+regression test (`workspace-auth/tests/login.spec.mjs`, run via a real
+local HTTP server after discovering live that `file://` pages cannot use
+`fetch()` at all -- Chromium rejects it before Playwright's own network
+interception ever applies, a real defect in the original plan's test
+design, found and fixed during execution). A fresh whole-branch review
+(Opus) found 0 Critical, 7 Important, 9 Minor findings across both
+repositories -- all fixed in the same pass per this project's standing
+rule (never defer Minors), including a real gap the reviewer found live
+(a roster missing `github_token` rendered a false "Logged in" state) and
+independently re-verified every fix, including against the live deployed
+GitHub Pages URL.
+
+## Non-Goals (unchanged from the approved spec, still true of what shipped)
+
+- No write client that spends the obtained token against GitHub's API.
+- No per-admin individual credentials, rotation, or login audit trail --
+  Phase 1 is one shared passphrase per workspace admin group.
+- No GitHub App, bot identity, or automated/unattended writer -- nothing
+  in this codebase writes without a human running it.
+- No branch protection, required reviewers, or PR-based write flow.
+- No defense beyond "small (5-10 person), trusted admin group" -- this
+  design is explicitly not safe to scale to an adversarial or public
+  admin pool without a fresh design pass.
+
+## What remains for a future roadmap task
+
+The actual "collaborative annotation platform" this task's original name
+promised needs two more pieces, neither built here: a GitHub Content-API
+write client (JS) that spends the token this task hands out, and the
+annotation-editing UI itself wired to task 3's shape-driven form
+generation (`@openfaster-standard/ui`). Both are real, concrete, and
+correctly out of scope for a task whose own title says "starting
+deliberately narrow."
 ## Overview
 
 This task implements the product/governance layer that transforms the existing single-user annotation tool into a multi-tenant collaborative platform. The key architectural insight: **public vs private is a visibility scope on the same underlying data model, not a fork of the codebase**. A bank mapping its internal CSV format and the public annotating MiKaDiv-FM XSD both use identical Task 1 SHACL shapes, Task 2 transformations, and Task 3 UI generation — only who can see and edit differs.
