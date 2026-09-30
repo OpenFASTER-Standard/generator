@@ -4,7 +4,7 @@
 
 **Status:** deferred
 
-**Dependencies:** 1 ✓, 2, 3, 4
+**Dependencies:** 1 ✓, 2 ✓, 3, 4
 
 **Priority:** low
 

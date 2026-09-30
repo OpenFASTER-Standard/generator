@@ -2,7 +2,7 @@
 
 **Title:** Design and implement declarative transformation layer (RML/SPARQL CONSTRUCT/XSLT-inspired)
 
-**Status:** pending
+**Status:** done
 
 **Dependencies:** 1 ✓
 
