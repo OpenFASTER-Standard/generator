@@ -73,5 +73,12 @@ migrating from any prior code in this repo's own history. See
   outputs instead of being duplicated per standard. Real mapping data
   lives in `alignments/`. See
   `docs/specs/2026-09-30-alignment-layer-design.md`.
+- `process_workflow/` -- tracks "a correction is owed" as real,
+  resumable BPMN 2.0 process state (executed by SpiffWorkflow), created
+  the moment a review verdict is rejected and completed the moment a
+  correction is actually provided -- proven to survive a real process
+  restart, not just an in-memory object. The committed diagram is
+  `process_workflow/citation_correction.bpmn`. See
+  `docs/specs/2026-09-30-stateful-process-layer-design.md`.
 
 Licensed MIT.

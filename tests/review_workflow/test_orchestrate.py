@@ -153,3 +153,30 @@ def test_submit_review_does_not_persist_a_process_instance_on_approved(tmp_path,
     )
 
     assert not instances_dir.exists()
+
+
+def test_submit_review_accepts_an_explicit_instances_dir_independent_of_the_env_var(tmp_path, monkeypatch):
+    # I6: a caller who already has explicit paths in hand (catalog_path,
+    # reviews_dir) shouldn't be forced through the process-global env
+    # var to also isolate where the process instance lands -- the real
+    # risk this closes: a future REJECTED-verdict test elsewhere in this
+    # suite that forgets to set MIKADIV_PROCESS_INSTANCES_DIR would
+    # otherwise write into the real, git-tracked ontologies checkout.
+    monkeypatch.delenv("MIKADIV_PROCESS_INSTANCES_DIR", raising=False)
+    explicit_dir = tmp_path / "explicit-instances"
+    catalog_path = tmp_path / "references.json"
+    catalog_path.write_text("{}")
+    leaf = _real_leaf("MiKaDiv_FM_Meldeart23", "/xs:schema/xs:complexType[@name='Meldeart23']")
+    add_revision(str(catalog_path), "explicit-key", leaf, "author", "comment", False)
+
+    flagged = FlaggedLeaf(
+        leaf=leaf, outcome=ResolutionOutcome(status=Status.RESOLVED),
+        drift_kind=DriftKind.CONTENT, fingerprint="fp-explicit",
+    )
+
+    submit_review(
+        str(catalog_path), str(tmp_path / "reviews"), "explicit-key", flagged,
+        "reviewer-1", Verdict.REJECTED, "needs a fix", instances_dir=explicit_dir,
+    )
+
+    assert explicit_dir.exists() and any(explicit_dir.iterdir())

@@ -27,3 +27,10 @@ testpaths = ["tests"]
 
 [tool.setuptools.packages.find]
 exclude = ["tests*", "docs*", "webapp.frontend*"]
+
+[tool.setuptools.package-data]
+# A non-editable `pip install .` otherwise ships a process_workflow
+# package whose engine.py fails at import time (it parses this file at
+# module load) -- latent only because CI/local dev use `pip install -e`
+# and the webapp deploys from a bare clone with an editable install too.
+process_workflow = ["*.bpmn"]
