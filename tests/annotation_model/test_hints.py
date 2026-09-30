@@ -1,3 +1,4 @@
+import pytest
 from rdflib import Graph, Literal, RDF, URIRef
 from rdflib.namespace import PROV, SH
 
@@ -78,5 +79,43 @@ def test_all_three_hints_together():
         property_name="value", label="AOrdNr", order=1, editor=DASH.TextFieldEditor,
     )
     assert list(graph.objects(property_shape_iri, SH.name)) == [Literal("AOrdNr")]
+    assert list(graph.objects(property_shape_iri, SH.order)) == [Literal(1)]
+    assert list(graph.objects(property_shape_iri, DASH.editor)) == [DASH.TextFieldEditor]
+
+
+@requires_real_corpus
+def test_hint_on_a_nonexistent_property_shape_raises_instead_of_creating_an_orphan():
+    # I3: the spec says this function only adds to an EXISTING property
+    # shape and never creates one -- a typo'd (standard, shape_name,
+    # property_name) must not silently create a hint-only subject with
+    # no sh:path/prov:wasDerivedFrom, which would look like a real
+    # citation gained a label but never actually render anywhere.
+    from annotation_model.hints import PropertyShapeNotFoundError
+
+    graph, _ = _annotated_graph()
+    with pytest.raises(PropertyShapeNotFoundError):
+        annotate_display_hint(
+            graph, standard="MiKaDiv-FM Meldeart23", shape_name="NoSuchShape",
+            property_name="value", label="Oops",
+        )
+
+
+@requires_real_corpus
+def test_omitting_a_hint_on_a_later_call_leaves_the_earlier_one_alone():
+    # I4: annotate_display_hint's three graph.remove() calls were
+    # unconditional, so a later call supplying only `label` silently
+    # deleted a previously-set `order`/`editor` it was never asked to
+    # touch -- directly contradicting this module's own reason for
+    # existing (never destroy hint data the caller didn't ask to change).
+    graph, property_shape_iri = _annotated_graph()
+    annotate_display_hint(
+        graph, standard="MiKaDiv-FM Meldeart23", shape_name="AOrdNrShape",
+        property_name="value", label="A", order=1, editor=DASH.TextFieldEditor,
+    )
+    annotate_display_hint(
+        graph, standard="MiKaDiv-FM Meldeart23", shape_name="AOrdNrShape",
+        property_name="value", label="B",
+    )
+    assert list(graph.objects(property_shape_iri, SH.name)) == [Literal("B")]
     assert list(graph.objects(property_shape_iri, SH.order)) == [Literal(1)]
     assert list(graph.objects(property_shape_iri, DASH.editor)) == [DASH.TextFieldEditor]
