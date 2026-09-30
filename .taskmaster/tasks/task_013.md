@@ -2,7 +2,7 @@
 
 **Title:** Resolve and display the real cited value in ShapeField
 
-**Status:** pending
+**Status:** done
 
 **Dependencies:** 1 ✓, 3 ✓
 
@@ -11,6 +11,38 @@
 **Description:** Fix ShapeField/ShapeTable (task 3) to resolve and display the actual cited content (e.g. the real German field description) by re-evaluating the citation's selector against its live source, instead of showing a raw gen:contentHash -- the read-only display gap task 3's own spec explicitly deferred, and the real prerequisite for any editing UI.
 
 **Details:**
+
+## What actually shipped (2026-09-30)
+
+The real implementation lives entirely in the separate
+`OpenFASTER-Standard/ui` repo (`/work/ui`, package `packages/shapes`) --
+`generator`'s own `scripts/validate-tasks` can only verify commit
+ancestry within this repository, so this task's `evidence.commits` points
+to the task-master rescoping commit made here, not the implementation
+itself. The real commits, in `ui`, in order:
+
+- `6320865` -- `resolveCitedValue`, the pure client-side resolution
+  function (`packages/shapes/src/resolve.ts`), mirroring
+  `generator/annotation_model/selectors/xpath.py`'s `resolve_xpath()`.
+- `befcee0` -- wired into `ShapeField`, replacing the old
+  `gen:contentHash` display with the real resolved value.
+- `3edf092` -- threaded through `ShapeForm`/`ShapeTable`, public export.
+- `6a1d9dc` -- final-review fix pass: 2 Critical, 7 Important, 9 Minor,
+  all fixed in the same pass per this project's standing rule (a real
+  unguarded-throw bug found live, a stale-value bug in `ShapeTable`, a
+  re-fetch-on-every-render footgun, a new `malformed-citation` status,
+  and more -- see that repo's own commit message and this plan's ledger,
+  `docs/plans/2026-09-30-resolve-real-cited-value.md`, for the full list).
+
+Design spec: `ui`'s own
+`docs/specs/2026-09-30-resolve-real-cited-value-design.md`. Every
+technical claim in it (browser-native XPath evaluation matching Python's
+`lxml`-based resolver byte-for-byte including a non-ASCII character; the
+real `file://`-to-`raw.githubusercontent.com` mapping; jsdom's real
+`document.evaluate()`/`DOMParser` behavior for both real `uncitable`
+triggers) was verified live before any code was written, not assumed.
+
+---
 
 ## Why this exists as its own task, and why it's narrower than originally scoped
 
