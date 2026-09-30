@@ -2,7 +2,7 @@
 
 **Title:** Shape-driven UI generation: render user interfaces as projections of SHACL shapes
 
-**Status:** pending
+**Status:** done
 
 **Dependencies:** 1 ✓, 2 ✓
 
