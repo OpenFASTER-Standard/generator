@@ -1,5 +1,3 @@
-import json
-
 import pytest
 
 from workspace_auth.roster import create_roster, read_roster
@@ -54,3 +52,52 @@ def test_correct_passphrase_but_non_json_plaintext_raises_roster_format_error():
 def test_create_roster_output_is_real_age_binary_format():
     ciphertext = create_roster(workspace_repo="owner/repo", github_token="tok", passphrase="p")
     assert ciphertext.startswith(b"age-encryption.org/v1")
+
+
+@pytest.mark.parametrize(
+    "plaintext",
+    [
+        b'"just a string"',
+        b"[]",
+        b"123",
+        b"null",
+        b'{"workspace_repo": "owner/repo"}',
+        b'{"github_token": "tok"}',
+        b'{"workspace_repo": 1, "github_token": "tok"}',
+    ],
+)
+def test_correct_passphrase_but_wrong_payload_shape_raises_roster_format_error(plaintext):
+    from pyrage import passphrase as age_passphrase
+    from workspace_auth.roster import RosterFormatError
+
+    ciphertext = age_passphrase.encrypt(plaintext, "p")
+
+    with pytest.raises(RosterFormatError):
+        read_roster(ciphertext, passphrase="p")
+
+
+@pytest.mark.parametrize(
+    "plaintext",
+    [
+        b'"\xff\xfe"',
+        b'{"a":"\xff"}',
+        b'\xff\xfe{"a":1}',
+    ],
+)
+def test_correct_passphrase_but_non_utf8_plaintext_raises_roster_format_error(plaintext):
+    from pyrage import passphrase as age_passphrase
+    from workspace_auth.roster import RosterFormatError
+
+    ciphertext = age_passphrase.encrypt(plaintext, "p")
+
+    with pytest.raises(RosterFormatError):
+        read_roster(ciphertext, passphrase="p")
+
+
+def test_non_ascii_passphrase_roundtrips_byte_for_byte():
+    passphrase = "pässwörd-ÜÖ-日本語-🔐"
+    ciphertext = create_roster(workspace_repo="owner/repo", github_token="tok", passphrase=passphrase)
+
+    payload = read_roster(ciphertext, passphrase=passphrase)
+
+    assert payload == {"workspace_repo": "owner/repo", "github_token": "tok"}

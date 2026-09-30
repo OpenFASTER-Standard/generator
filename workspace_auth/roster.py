@@ -24,11 +24,24 @@ def create_roster(*, workspace_repo: str, github_token: str, passphrase: str) ->
 
 def read_roster(ciphertext: bytes, *, passphrase: str) -> dict:
     try:
-        plaintext = age_passphrase.decrypt(ciphertext, passphrase)
+        raw_plaintext = age_passphrase.decrypt(ciphertext, passphrase)
     except DecryptError as exc:
         raise RosterAuthenticationError(str(exc)) from exc
 
     try:
-        return json.loads(plaintext)
-    except json.JSONDecodeError as exc:
+        plaintext = raw_plaintext.decode("utf-8")
+        payload = json.loads(plaintext)
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise RosterFormatError(f"roster plaintext is not valid JSON: {exc}") from exc
+
+    if (
+        not isinstance(payload, dict)
+        or not isinstance(payload.get("workspace_repo"), str)
+        or not isinstance(payload.get("github_token"), str)
+    ):
+        raise RosterFormatError(
+            "roster plaintext must be a JSON object with string "
+            "'workspace_repo' and 'github_token' fields"
+        )
+
+    return payload
