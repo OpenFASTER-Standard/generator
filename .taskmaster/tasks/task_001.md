@@ -2,7 +2,7 @@
 
 **Title:** Design and implement core RDF+SHACL semantic annotation model
 
-**Status:** pending
+**Status:** done
 
 **Dependencies:** None
 
