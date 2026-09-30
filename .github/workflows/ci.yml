@@ -20,25 +20,3 @@ jobs:
         # genuinely depending on the real corpus skips cleanly via
         # tests/corpus_fixtures.py's requires_real_corpus marker instead
         # of failing opaquely on missing/empty data.
-
-  frontend:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: webapp/frontend
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 24
-      - run: npm ci
-      - run: npm run lint
-      - run: npm run build
-      - run: npm test
-      - name: Verify committed frontend_dist/ matches this build
-        # frontend_dist/ *is* the deployed artifact (this webapp runs from
-        # a bare clone via nohup+uvicorn, no CI/deploy build step -- see
-        # vite.config.ts's own comment) -- fail loudly if a contributor
-        # edited src/ and forgot to rebuild-and-commit, rather than
-        # silently serving a stale bundle forever.
-        run: git diff --exit-code -- ../frontend_dist || (echo "::error::webapp/frontend_dist/ is out of date -- run 'npm run build' in webapp/frontend and commit the result" && exit 1)

@@ -2,7 +2,7 @@
 
 **Title:** Design and implement stateful process layer (BPMN 2.0-based workflow engine)
 
-**Status:** done
+**Status:** cancelled
 
 **Dependencies:** 1 ✓, 2 ✓, 3 ✓
 
@@ -11,6 +11,40 @@
 **Description:** Formalize a real gap in this project's own review cycle -- a REJECTED review verdict left a flagged item sitting unresolved forever, with no trackable 'a correction is owed' state -- using a small, real BPMN 2.0 process (SpiffWorkflow, a real pure-Python engine) that starts on rejection, persists as a real resumable file, and completes when the correction is actually provided. Proven to survive a real process restart via a genuinely separate subprocess, not just an in-memory object.
 
 **Details:**
+
+## Reversion note (2026-09-30)
+
+This task's real implementation (`process_workflow/`, wired into
+`review_workflow.orchestrate.submit_review()`) was removed in its
+entirety as part of a deliberate cleanup of an entire parallel,
+never-unified citation stack (`reference_model`, `references_catalog`,
+`review_recording`, `review_consultation`, `review_surfacing`,
+`review_workflow`, `citation_workflow`, `staleness_sweep`, `discovery`,
+`generator_errors`, `webapp`) that predated `annotation_model` (task 1)
+and had already been marked "dead code pending a follow-up migration
+plan" in this repo's own README before that migration ever happened.
+
+`process_workflow`'s own code was real, tested, and correct at the time
+it shipped (see its final review, 0 Critical/6 Important/11 Minor
+findings, all fixed) -- but its *only* production integration point was
+`submit_review()`, itself part of the removed stack. Once that stack was
+gone, `process_workflow` had no caller anywhere in this codebase, so it
+was removed alongside it rather than left as tested-but-permanently-
+disconnected code.
+
+Status changed from `done` to `cancelled` rather than `pending`: the
+real work happened, was verified, and is preserved in git history (see
+`evidence.commits` below) -- `pending` would erase that; `cancelled`
+records that a real, complete implementation was later superseded by an
+architectural decision, not that it was never attempted. If BPMN-based
+process tracking is wanted again in the future, it needs to be
+redesigned against whatever stack (`annotation_model`, or a future
+successor) is live at that time -- this task's own design (a
+`CitationCorrection` process reacting to a rejected review verdict) was
+specific to the removed stack's own review-verdict concept, which has
+no direct equivalent in `annotation_model` today.
+
+---
 
 ## Reconciliation note (2026-09-30)
 

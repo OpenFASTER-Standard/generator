@@ -5,32 +5,22 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "openfaster-generator"
 version = "0.1.0"
-description = "Source reference model and staleness-sweep tooling for OpenFASTER's MiKaDiv-FM regulatory schema"
+description = "RDF+SHACL semantic annotation model for OpenFASTER's MiKaDiv-FM regulatory schema"
 requires-python = ">=3.11"
 dependencies = [
     "lxml>=5.0",
     "pdfplumber>=0.11",
     "shapely>=2.0",
-    "fastapi>=0.100",
-    "uvicorn>=0.23",
     "rdflib>=7.6",
     "jinja2>=3.1",
     "openpyxl>=3.1",
-    "SpiffWorkflow>=3.2.0",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0", "reportlab>=4.0", "httpx>=0.24", "pyshacl>=0.40"]
+dev = ["pytest>=8.0", "pyshacl>=0.40"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
 [tool.setuptools.packages.find]
-exclude = ["tests*", "docs*", "webapp.frontend*"]
-
-[tool.setuptools.package-data]
-# A non-editable `pip install .` otherwise ships a process_workflow
-# package whose engine.py fails at import time (it parses this file at
-# module load) -- latent only because CI/local dev use `pip install -e`
-# and the webapp deploys from a bare clone with an editable install too.
-process_workflow = ["*.bpmn"]
+exclude = ["tests*", "docs*"]
