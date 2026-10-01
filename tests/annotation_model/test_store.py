@@ -62,6 +62,28 @@ def test_write_then_read_round_trips(tmp_path):
     assert (GEN["TestStandard/TestShape"], RDF.type, SH.NodeShape) in read_back
 
 
+def test_write_shape_uses_readable_prefixes_not_rdflib_auto_generated_ones(tmp_path):
+    # write_shape's own internal `merged = Graph()` starts with zero
+    # namespace bindings, and copying triples via `merged.add(triple)`
+    # does not copy the caller's own bindings either -- confirmed live
+    # that every file this produced used rdflib's auto-generated ns1/ns2
+    # instead of sh/gen/prov/oa/rdf, for every write this library has ever
+    # made (every existing test only checks round-trip structure via
+    # re-parsing, never the literal prefix strings, which is why this
+    # went uncaught through this project's own first real committed
+    # artifact).
+    store = TargetStore(str(tmp_path / "store"))
+    store.open()
+    store.write_shape(_shape_graph(), standard="TestStandard", shape_name="TestShape")
+
+    written_path = tmp_path / "store" / "shapes" / _slugify("TestStandard") / f"{_slugify('TestShape')}.ttl"
+    text = written_path.read_text(encoding="utf-8")
+    assert "ns1:" not in text
+    assert "ns2:" not in text
+    assert "@prefix gen:" in text
+    assert "@prefix oa:" in text
+
+
 def test_read_missing_shape_raises_file_not_found(tmp_path):
     store = TargetStore(str(tmp_path / "store"))
     store.open()

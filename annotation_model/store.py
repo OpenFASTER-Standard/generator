@@ -10,9 +10,17 @@ import subprocess
 from pathlib import Path
 
 from rdflib import RDF, Graph
-from rdflib.namespace import SH
+from rdflib.namespace import PROV, SH
 
+from annotation_model.namespaces import DASH, GEN, OA
 from annotation_model.rdf import clear_property_shape
+
+# Bound explicitly on every write -- `merged = Graph()` below starts with
+# zero namespace bindings, and copying triples via `merged.add(triple)`
+# does not copy the caller's own bindings either, so without this every
+# written file would use rdflib's auto-generated ns1/ns2/... instead of
+# the readable prefixes every real citation in this project already uses.
+_SHAPE_PREFIXES = {"sh": SH, "gen": GEN, "prov": PROV, "oa": OA, "rdf": RDF, "dash": DASH}
 
 
 class TargetStoreError(RuntimeError):
@@ -63,6 +71,8 @@ class TargetStore:
         shape_path.parent.mkdir(parents=True, exist_ok=True)
 
         merged = Graph()
+        for prefix, namespace in _SHAPE_PREFIXES.items():
+            merged.bind(prefix, namespace)
         if shape_path.is_file():
             merged.parse(str(shape_path), format="turtle")
 
