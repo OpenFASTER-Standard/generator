@@ -2,15 +2,27 @@
 
 **Title:** Re-citation editing UI
 
-**Status:** pending
+**Status:** done
 
-**Dependencies:** 13
+**Dependencies:** 13 ✓
 
 **Priority:** medium
 
 **Description:** Once ShapeField resolves and displays the real cited value (task 13), let an admin pick a different source span to correct a citation -- the real meaning of "editing an annotation" in a system that stores citations, not literal values -- producing a structured pending-edit object, with no write mechanism of its own yet.
 
 **Details:**
+
+## What actually shipped (2026-10-01)
+
+The real implementation lives entirely in the separate `OpenFASTER-Standard/ui` repo (`/work/ui`, package `packages/shapes`) -- `generator`'s own `scripts/validate-tasks` can only verify commit ancestry within this repository, so this task's `evidence.commits` points to the task-master rescoping commit made here (the only generator-repo commit substantively about this task), not the implementation itself. The real commits, in `ui`, in order:
+
+- `ab93486` -- refactored `resolve.ts` into three composable, independently-exported, independently-tested pieces (`findCitation`, `fetchSourceDocument`, `evaluateXPathAgainstDocument`), verified behavior-preserving by running task 13's own full pre-existing test suite unchanged.
+- `cc63f16` -- `computeXPathForElement`, the click-to-XPath algorithm (walks an element to the document root, preferring a unique `name` attribute, falling back to 1-indexed sibling position), verified live to round-trip through `document.evaluate()`.
+- `957a841` -- `SourceDocumentTree`, a presentational, clickable element-tree browser for a fetched source document.
+- `9ec6848` -- `ReCitationPicker`, composing the three pieces above: browse the current citation's real source document, click a span, see its live-resolved preview, and confirm to emit a structured pending-edit object (`{ propertyShapeIri, newXPath, previewValue }`) via a callback prop -- no write mechanism of its own, exactly as scoped (task 16).
+- `95281a9` -- final-review fix pass: 1 Critical, 6 Important, 6 Minor, all fixed in the same pass per this project's standing rule. The Critical finding was real and genuinely dangerous: `computeXPathForElement` grouped siblings by a tagName/prefix string instead of namespace URI + local name, so two different prefixes legally bound to the same namespace could compute a unique-but-WRONG XPath -- confirmed live in real Chromium. The review also found that jsdom's own XPath engine is not namespace-aware at all (it matches by literal qualified-name string, and ignores the namespace resolver's return value entirely), meaning the task's existing jsdom-based test suite could not have caught either this bug or the related hardcoded-namespace-map bug in `evaluateXPathAgainstDocument` (Important) -- both fixes were verified live in real Chromium before being written, and their regression tests assert on computed values/strings directly rather than round-tripping through jsdom's own non-namespace-aware `evaluate()`. See that repo's own commit messages and `.changeset/fix-re-citation-picker-final-review.md` for the full list.
+
+---
 
 ## Why this exists as its own task
 

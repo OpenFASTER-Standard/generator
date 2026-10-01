@@ -347,15 +347,21 @@
         "id": "15",
         "title": "Re-citation editing UI",
         "description": "Once ShapeField resolves and displays the real cited value (task 13), let an admin pick a different source span to correct a citation -- the real meaning of \"editing an annotation\" in a system that stores citations, not literal values -- producing a structured pending-edit object, with no write mechanism of its own yet.",
-        "details": "## Why this exists as its own task\n\nDiscovered during task 13's own investigation: `annotation_model` stores\nonly citations (source + selector), never a decoded literal value (see\ntask 13's own details for the live-verified evidence). \"Editing\" here\ntherefore means re-pointing a property shape's citation at a different\nsource span -- e.g. correcting `/xs:schema/.../xs:documentation` to a\ndifferent, actually-correct element -- not editing free text.\n\n## Real building block\n\nTask 3's own click-dummy exploration (predating the current stack, but\nthe underlying interaction idea survives): \"sources on the left, output\non the right... click the source to see what it produced\" -- the natural\nUI for re-citation is showing the live source document alongside the\ncurrent citation and letting an admin click a different span.\n\n## Scope\n\nPure UI-library work (`/work/ui`), zero git/GitHub dependency -- produces\na structured \"pending edit\" (property shape IRI + new selector) via a\ncallback prop, exactly mirroring how a controlled React form emits\n`onChange`/`onSubmit` without owning persistence itself. What consumes\nthat pending edit is task 16 (the write client) and task 17 (the real\napp), not this task.",
+        "details": "## What actually shipped (2026-10-01)\n\nThe real implementation lives entirely in the separate `OpenFASTER-Standard/ui` repo (`/work/ui`, package `packages/shapes`) -- `generator`'s own `scripts/validate-tasks` can only verify commit ancestry within this repository, so this task's `evidence.commits` points to the task-master rescoping commit made here (the only generator-repo commit substantively about this task), not the implementation itself. The real commits, in `ui`, in order:\n\n- `ab93486` -- refactored `resolve.ts` into three composable, independently-exported, independently-tested pieces (`findCitation`, `fetchSourceDocument`, `evaluateXPathAgainstDocument`), verified behavior-preserving by running task 13's own full pre-existing test suite unchanged.\n- `cc63f16` -- `computeXPathForElement`, the click-to-XPath algorithm (walks an element to the document root, preferring a unique `name` attribute, falling back to 1-indexed sibling position), verified live to round-trip through `document.evaluate()`.\n- `957a841` -- `SourceDocumentTree`, a presentational, clickable element-tree browser for a fetched source document.\n- `9ec6848` -- `ReCitationPicker`, composing the three pieces above: browse the current citation's real source document, click a span, see its live-resolved preview, and confirm to emit a structured pending-edit object (`{ propertyShapeIri, newXPath, previewValue }`) via a callback prop -- no write mechanism of its own, exactly as scoped (task 16).\n- `95281a9` -- final-review fix pass: 1 Critical, 6 Important, 6 Minor, all fixed in the same pass per this project's standing rule. The Critical finding was real and genuinely dangerous: `computeXPathForElement` grouped siblings by a tagName/prefix string instead of namespace URI + local name, so two different prefixes legally bound to the same namespace could compute a unique-but-WRONG XPath -- confirmed live in real Chromium. The review also found that jsdom's own XPath engine is not namespace-aware at all (it matches by literal qualified-name string, and ignores the namespace resolver's return value entirely), meaning the task's existing jsdom-based test suite could not have caught either this bug or the related hardcoded-namespace-map bug in `evaluateXPathAgainstDocument` (Important) -- both fixes were verified live in real Chromium before being written, and their regression tests assert on computed values/strings directly rather than round-tripping through jsdom's own non-namespace-aware `evaluate()`. See that repo's own commit messages and `.changeset/fix-re-citation-picker-final-review.md` for the full list.\n\n---\n\n## Why this exists as its own task\n\nDiscovered during task 13's own investigation: `annotation_model` stores\nonly citations (source + selector), never a decoded literal value (see\ntask 13's own details for the live-verified evidence). \"Editing\" here\ntherefore means re-pointing a property shape's citation at a different\nsource span -- e.g. correcting `/xs:schema/.../xs:documentation` to a\ndifferent, actually-correct element -- not editing free text.\n\n## Real building block\n\nTask 3's own click-dummy exploration (predating the current stack, but\nthe underlying interaction idea survives): \"sources on the left, output\non the right... click the source to see what it produced\" -- the natural\nUI for re-citation is showing the live source document alongside the\ncurrent citation and letting an admin click a different span.\n\n## Scope\n\nPure UI-library work (`/work/ui`), zero git/GitHub dependency -- produces\na structured \"pending edit\" (property shape IRI + new selector) via a\ncallback prop, exactly mirroring how a controlled React form emits\n`onChange`/`onSubmit` without owning persistence itself. What consumes\nthat pending edit is task 16 (the write client) and task 17 (the real\napp), not this task.",
         "testStrategy": "Defined during this task's own brainstorm/spec, per this project's established per-task cycle -- not prescribed here.",
-        "status": "pending",
+        "status": "done",
         "dependencies": [
           "13"
         ],
         "priority": "medium",
         "subtasks": [],
-        "updatedAt": "2026-09-30T19:30:00.000Z"
+        "updatedAt": "2026-10-01T10:50:00.000Z",
+        "evidence": {
+          "commits": [
+            "361394e4f09b47c9c634d4e8291b0cef4ef3e7e3"
+          ],
+          "prs": []
+        }
       },
       {
         "id": "16",
@@ -406,9 +412,9 @@
     ],
     "metadata": {
       "version": "1.0.0",
-      "lastModified": "2026-09-30T19:58:00.000Z",
+      "lastModified": "2026-10-01T10:50:00.000Z",
       "taskCount": 18,
-      "completedCount": 6,
+      "completedCount": 7,
       "tags": [
         "master"
       ]
