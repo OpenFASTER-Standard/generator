@@ -388,9 +388,7 @@
         "id": "17",
         "title": "First real workspace viewer/editor application",
         "description": "The actual integration: log in via workspace-auth (task 6), fetch a real workspace's annotation Turtle, render it with the real resolved values (task 13), edit via re-citation (task 15), and commit via the write client (task 16) -- the first moment anyone can open a page and actually use this platform, not just read about its pieces.",
-        "details": "## Why this exists as its own task\n\nEvery piece built so far is a library or a single-purpose page: `generator`\n(Python library), `@openfaster-standard/ui` (component library),\n`workspace-auth` (login only). Nothing wires them together into something\na person opens and uses. This is that integration -- the literal \"someone\nedited a Wikipedia page\" moment for this platform, and the honest measure\nof whether \"is it live and presentable\" can ever be answered yes for the\nreal thing, not a login-only proof of concept.\n\n## Scope\n\nDepends on every piece below being real and complete: task 6 (login/\ntoken), task 13 (real value display), task 15 (re-citation UI), task 16\n(write client). Where this actually lives (a new page inside\n`workspace-auth`, or its own new small app) is this task's own brainstorm\ndecision, grounded in whatever the real shape of tasks 13/15/16 turns out\nto be by the time this task starts -- not decided here in advance of that\nreal information existing.",
-        "testStrategy": "Defined during this task's own brainstorm/spec, per this project's established per-task cycle -- not prescribed here.",
-        "status": "pending",
+        "status": "done",
         "dependencies": [
           "6",
           "13",
@@ -398,8 +396,16 @@
           "16"
         ],
         "priority": "medium",
+        "details": "## Implementation Summary\n\nImplemented as an extension to workspace-auth (not a new repository), preserving the zero-server/zero-database design. A bundled React app mounts into the authenticated page via `window.__mountWorkspaceApp`, building on the login infrastructure from task 6.\n\n## Pre-implementation Data Gaps Found and Resolved\n\nTwo critical gaps discovered during brainstorming:\n\n1. **No citation data existed in the corpus**: Seeded three real citations on MiKaDiv_FM/Meldeart23 (Doc, AbgefKapitalertragsteuer, AmtlicheOrdnungsnummerListe) into OpenFASTER-Standard/ontologies using the already-built `annotate_xpath`/`TargetStore` primitives. This was a one-time, human-supervised data operation, not new software.\n\n2. **ReCitationPicker/commitReCitation limitation**: Task 15's implementation only supports editing existing citations (explicit Non-Goal). First-citation-creation explicitly deferred as separate future work.\n\n## Bug Fixed During Implementation\n\n**TargetStore.write_shape namespace prefix bug** (generator commit 284fa28): The `merged = Graph()` instance had zero namespace bindings, causing every file written by this pipeline to use rdflib's auto-generated `ns1:`/`ns2:` prefixes instead of readable `sh:`/`gen:`/`prov:`/`oa:`/`rdf:` ones. Fixed during the data seeding operation.\n\n## Architecture Decision\n\nExtended workspace-auth itself rather than creating a new repository:\n- Preserves the zero-server/zero-database design established in task 6\n- Bundles a React app that mounts via `window.__mountWorkspaceApp`\n- Maintains authentication context from login.js\n- No new deployment infrastructure needed\n\n## npm Package Extensions\n\nTwo small additions shipped to already-published packages:\n\n1. **@openfaster-standard/shapes**: Added `getNodeShapes` function\n2. **@openfaster-standard/write-client**: Added `listShapeFiles`, `getDefaultBranch`, `parseNodeShapeIri`\n\nBoth packages published to real npm registry for the first time using the existing webauthn-relay/openfaster-standard-bot Trusted Publishing bootstrap.\n\n## Cross-Repository Commits\n\n### ontologies\n- `d91a634`: Seed MiKaDiv_FM/Meldeart23 citations\n- `572602e`: Remove dead references.json\n\n### generator\n- `284fa28`: TargetStore.write_shape readable-prefix fix\n\n### ui (@openfaster-standard/ui)\n- `ecd2ae6..81b5354`: getNodeShapes, listShapeFiles/getDefaultBranch/parseNodeShapeIri, npm publish+republish fix\n\n### workspace-auth\n- `f84ceae`: Design spec\n- `ee42ccb`: Implementation plan\n- `343a0eb`/`9ad2051`/`cce32a9`/`1e9cfeb`: App scaffold, NodeShapeView component, deploy workflow, login.spec.mjs update\n- `d1f8485`: Final review fix pass (5 Critical/5 Important/10 Minor findings, all resolved)\n\n## Final Review Fixes (d1f8485)\n\nAll findings from final review were fixed:\n- **Node version mismatch**: Both CI workflows were red since creation due to version mismatch\n- **vite `base` configuration gap**: Would have broken the real deployed login page\n- **Stale-graph bug**: A successful commit displayed its own pre-edit value instead of the updated value\n\n## Verification\n\nLive-verified end-to-end against real OpenFASTER-Standard/ontologies repository:\n- Real node shape listed correctly\n- Real resolved values displayed\n- ReCitationPicker opened against real source document\n- **Stopped short of real commit** per plan's security reasoning (no live write token committed to fixtures)\n- Both CI workflows confirmed green in real GitHub Actions (not just locally)\n\n## Outstanding Manual Step (Outside Task Scope)\n\nOne manual operator action remains: switching workspace-auth's GitHub Pages `build_type` from \"legacy\" to \"workflow\" via Settings UI. Confirmed still \"legacy\" as of task completion.",
+        "testStrategy": "## End-to-End Verification Strategy\n\n### Real Repository Integration\n- Tested against real OpenFASTER-Standard/ontologies repository\n- Real node shapes listed and displayed\n- Real resolved values shown from task 13's implementation\n- ReCitationPicker integration verified with real source documents\n\n### CI/CD Verification\n- Both GitHub Actions workflows confirmed green\n- Verified in real GitHub Actions environment (not just local)\n- Node version compatibility resolved across workflows\n\n### Security-Conscious Testing\n- Write operations tested without committing live write tokens to fixtures\n- Authentication flow verified through task 6's workspace-auth integration\n\n### Regression Testing via Final Review\n- 5 Critical findings: all fixed\n- 5 Important findings: all fixed\n- 10 Minor findings: all fixed\n- Includes fixes for:\n  - Node version mismatches breaking CI\n  - Vite base path configuration that would break deployment\n  - Stale-graph bug causing incorrect post-commit display\n\n### Known Limitations Verified\n- First-citation-creation explicitly deferred (task 15 Non-Goal)\n- Only editing of existing citations supported\n- Seeded citation data required for meaningful testing",
         "subtasks": [],
-        "updatedAt": "2026-09-30T19:30:00.000Z"
+        "updatedAt": "2026-10-01T14:20:43.962Z",
+        "evidence": {
+          "commits": [
+            "284fa281a63a46203070b2e7663932d791dc19d7"
+          ],
+          "prs": []
+        }
       },
       {
         "id": "18",
@@ -418,9 +424,9 @@
     ],
     "metadata": {
       "version": "1.0.0",
-      "lastModified": "2026-10-01T12:25:00.000Z",
+      "lastModified": "2026-10-01T14:20:43.962Z",
       "taskCount": 18,
-      "completedCount": 8,
+      "completedCount": 9,
       "tags": [
         "master"
       ]
